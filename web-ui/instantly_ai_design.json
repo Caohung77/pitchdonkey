@@ -1,0 +1,270 @@
+{
+  "website": {
+    "domain": "instantly.ai",
+    "title": "Instantly.ai - Sales Engagement & Lead Intelligence",
+    "description": "Instantly turns leads into clients with Automated Outreach, Deliverability Network, Sales Engagement, B2B Lead Database & AI-Powered CRM",
+    "layout": {
+      "header": {
+        "type": "navigation_bar",
+        "components": {
+          "logo": {
+            "type": "brand_logo",
+            "text": "Instantly",
+            "position": "left"
+          },
+          "navigation_menu": {
+            "type": "horizontal_menu",
+            "items": [
+              "Features",
+              "Pricing",
+              "Resources",
+              "Blog",
+              "Contact"
+            ]
+          },
+          "cta_buttons": {
+            "type": "button_group",
+            "position": "right",
+            "buttons": [
+              {
+                "text": "Login",
+                "style": "outline"
+              },
+              {
+                "text": "Start for Free",
+                "style": "primary"
+              }
+            ]
+          }
+        }
+      },
+      "hero_section": {
+        "type": "hero_banner",
+        "layout": "centered",
+        "components": {
+          "headline": {
+            "type": "heading",
+            "level": "h1",
+            "text": "Scale Your Email Outreach with AI-Powered Sales Engagement"
+          },
+          "subheadline": {
+            "type": "paragraph",
+            "text": "Instantly helps you find warm leads, scale email campaigns, reach primary inboxes, engage smarter and win more with AI."
+          },
+          "cta_button": {
+            "type": "button",
+            "text": "START FOR FREE",
+            "style": "primary_large"
+          },
+          "hero_image": {
+            "type": "dashboard_preview",
+            "style": "floating_interface"
+          }
+        }
+      },
+      "features_section": {
+        "type": "feature_grid",
+        "layout": "multi_column",
+        "components": {
+          "section_title": {
+            "type": "heading",
+            "level": "h2",
+            "text": "Everything You Need for Email Outreach Success"
+          },
+          "feature_cards": [
+            {
+              "type": "feature_card",
+              "icon": "email_accounts",
+              "title": "Unlimited Email Accounts",
+              "description": "Connect unlimited email addresses to Instantly and automatically rotate sending across them. The more accounts you add, the more emails you can send, and the more new customers you can win–in less time."
+            },
+            {
+              "type": "feature_card",
+              "icon": "deliverability",
+              "title": "Email Deliverability Network",
+              "description": "Continuously boost email deliverability and sender reputation with Instantly's enterprise-grade email deliverability tools. Customize automated deliverability interactions, verify every email address, and optimize email copy with AI Spintax and Spam Word Checker."
+            },
+            {
+              "type": "feature_card",
+              "icon": "lead_database",
+              "title": "B2B Lead Database",
+              "description": "From technologies to headcount and revenue - target only the people you know will resonate with your message."
+            },
+            {
+              "type": "feature_card",
+              "icon": "ai_powered",
+              "title": "AI-Powered Personalization",
+              "description": "Prompt AI inside Instantly to craft personalization variables and entire sequences for each prospect. Automate followup on Out-Of-Office responders and common replies based on keywords."
+            }
+          ]
+        }
+      },
+      "testimonials_section": {
+        "type": "testimonial_carousel",
+        "layout": "grid_layout",
+        "components": {
+          "section_title": {
+            "type": "heading",
+            "level": "h2",
+            "text": "Trusted by Industry Leaders"
+          },
+          "testimonials": [
+            {
+              "type": "testimonial_card",
+              "author": "SAM WILSON",
+              "title": "Managing Director @ Canbury Partners",
+              "content": "Email outreach is one of the most effective ways to expand your business and gain new business. Instantly does this well; you can add unlimited email accounts and just does all the basics in the right way!"
+            },
+            {
+              "type": "testimonial_card",
+              "author": "Sanjay John Eapen",
+              "title": "CEO @ Thincture",
+              "content": "I've specialised in cold email marketing since 2018 and in this time I've used almost every popular cold-emailing tool available on the market today - Instantly is hands down my favourite of them all."
+            },
+            {
+              "type": "testimonial_card",
+              "author": "Tony Liu",
+              "title": "CEO @ Omnichannel",
+              "content": "Instantly is the exact email outreach solution that I always wish existed. We've tried almost every product that people in the outbound space talks about and none of them even comes close to this."
+            }
+          ]
+        }
+      },
+      "cta_section": {
+        "type": "call_to_action",
+        "layout": "centered",
+        "components": {
+          "headline": {
+            "type": "heading",
+            "level": "h2",
+            "text": "Ready to Scale Your Email Outreach?"
+          },
+          "description": {
+            "type": "paragraph",
+            "text": "Join thousands of sales professionals who trust Instantly to grow their business with AI-powered email campaigns."
+          },
+          "cta_button": {
+            "type": "button",
+            "text": "START FOR FREE",
+            "style": "primary_large"
+          }
+        }
+      },
+      "footer": {
+        "type": "footer_section",
+        "layout": "multi_column",
+        "components": {
+          "brand_section": {
+            "type": "brand_column",
+            "logo": "Instantly",
+            "description": "AI-Powered Sales Engagement Platform"
+          },
+          "link_columns": [
+            {
+              "title": "Product",
+              "links": [
+                "Features",
+                "Pricing",
+                "Integrations",
+                "API"
+              ]
+            },
+            {
+              "title": "Resources",
+              "links": [
+                "Blog",
+                "Help Center",
+                "Templates",
+                "Case Studies"
+              ]
+            },
+            {
+              "title": "Company",
+              "links": [
+                "About",
+                "Careers",
+                "Contact",
+                "Privacy Policy"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "design_system": {
+      "colors": {
+        "primary": "#6366F1",
+        "secondary": "#8B5CF6",
+        "background": "#FFFFFF",
+        "text_primary": "#1F2937",
+        "text_secondary": "#6B7280",
+        "accent": "#10B981"
+      },
+      "typography": {
+        "font_family": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+        "heading_weights": "600-700",
+        "body_weight": "400-500"
+      },
+      "spacing": {
+        "section_padding": "80px-120px",
+        "element_margin": "16px-32px",
+        "container_max_width": "1200px"
+      },
+      "components": {
+        "buttons": {
+          "primary": {
+            "background": "#6366F1",
+            "text_color": "#FFFFFF",
+            "border_radius": "8px",
+            "padding": "12px 24px"
+          },
+          "outline": {
+            "background": "transparent",
+            "border": "1px solid #6366F1",
+            "text_color": "#6366F1",
+            "border_radius": "8px"
+          }
+        },
+        "cards": {
+          "feature_card": {
+            "background": "#FFFFFF",
+            "border": "1px solid #E5E7EB",
+            "border_radius": "12px",
+            "padding": "24px",
+            "shadow": "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+          },
+          "testimonial_card": {
+            "background": "#F9FAFB",
+            "border_radius": "12px",
+            "padding": "24px"
+          }
+        }
+      }
+    },
+    "responsive_design": {
+      "breakpoints": {
+        "mobile": "< 768px",
+        "tablet": "768px - 1024px",
+        "desktop": "> 1024px"
+      },
+      "mobile_adaptations": {
+        "navigation": "hamburger_menu",
+        "hero_layout": "stacked_vertical",
+        "feature_grid": "single_column",
+        "testimonials": "carousel_slider"
+      }
+    },
+    "interactions": {
+      "hover_effects": {
+        "buttons": "color_transition",
+        "cards": "subtle_lift_shadow",
+        "links": "underline_animation"
+      },
+      "animations": {
+        "page_load": "fade_in_up",
+        "scroll_triggered": "reveal_on_scroll",
+        "testimonial_carousel": "auto_rotate"
+      }
+    }
+  }
+}

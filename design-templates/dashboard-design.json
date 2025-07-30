@@ -1,0 +1,342 @@
+{
+  "dashboardDesign": {
+    "layout": "sidebar-main-content",
+    "colorScheme": {
+      "primary": "#3B82F6",
+      "secondary": "#1E293B",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444",
+      "background": "#F8FAFC",
+      "cardBackground": "#FFFFFF",
+      "text": "#1F2937",
+      "textMuted": "#6B7280",
+      "border": "#E5E7EB"
+    },
+    "typography": {
+      "fontFamily": "Inter",
+      "sizes": {
+        "heading1": "24px",
+        "heading2": "20px",
+        "heading3": "18px",
+        "body": "14px",
+        "small": "12px"
+      }
+    },
+    "components": [
+      {
+        "name": "topNavigation",
+        "type": "header",
+        "layout": "horizontal-flex",
+        "elements": [
+          {
+            "type": "logo",
+            "position": "left",
+            "content": "ColdReach Pro"
+          },
+          {
+            "type": "search-bar",
+            "position": "center",
+            "placeholder": "Search campaigns, contacts..."
+          },
+          {
+            "type": "user-menu",
+            "position": "right",
+            "elements": [
+              "notifications-bell",
+              "user-avatar-dropdown"
+            ]
+          }
+        ],
+        "styling": {
+          "height": "64px",
+          "background": "white",
+          "borderBottom": "light",
+          "shadow": "subtle"
+        }
+      },
+      {
+        "name": "sidebar",
+        "type": "navigation-sidebar",
+        "layout": "vertical",
+        "width": "256px",
+        "elements": [
+          {
+            "type": "nav-section",
+            "title": "Main",
+            "items": [
+              {
+                "icon": "home",
+                "label": "Dashboard",
+                "active": true
+              },
+              {
+                "icon": "mail",
+                "label": "Campaigns",
+                "badge": "3"
+              },
+              {
+                "icon": "users",
+                "label": "Contacts",
+                "count": "1,247"
+              },
+              {
+                "icon": "bar-chart",
+                "label": "Analytics"
+              }
+            ]
+          },
+          {
+            "type": "nav-section",
+            "title": "Tools",
+            "items": [
+              {
+                "icon": "zap",
+                "label": "AI Templates"
+              },
+              {
+                "icon": "settings",
+                "label": "Email Accounts"
+              },
+              {
+                "icon": "shield",
+                "label": "Warmup Status"
+              }
+            ]
+          },
+          {
+            "type": "nav-section",
+            "title": "Account",
+            "items": [
+              {
+                "icon": "user",
+                "label": "Profile"
+              },
+              {
+                "icon": "credit-card",
+                "label": "Billing"
+              },
+              {
+                "icon": "help-circle",
+                "label": "Support"
+              }
+            ]
+          }
+        ],
+        "styling": {
+          "background": "white",
+          "borderRight": "light",
+          "padding": "16px"
+        }
+      },
+      {
+        "name": "mainContent",
+        "type": "main-dashboard",
+        "layout": "grid-layout",
+        "elements": [
+          {
+            "type": "page-header",
+            "layout": "horizontal-flex",
+            "elements": [
+              {
+                "type": "breadcrumb",
+                "items": ["Dashboard"]
+              },
+              {
+                "type": "action-buttons",
+                "buttons": [
+                  {
+                    "text": "New Campaign",
+                    "type": "primary",
+                    "icon": "plus"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "stats-cards-row",
+            "layout": "4-column-grid",
+            "cards": [
+              {
+                "title": "Total Campaigns",
+                "value": "12",
+                "change": "+2 this month",
+                "changeType": "positive",
+                "icon": "mail"
+              },
+              {
+                "title": "Emails Sent",
+                "value": "8,547",
+                "change": "+12% vs last month",
+                "changeType": "positive",
+                "icon": "send"
+              },
+              {
+                "title": "Open Rate",
+                "value": "34.2%",
+                "change": "+2.1% vs last month",
+                "changeType": "positive",
+                "icon": "eye"
+              },
+              {
+                "title": "Reply Rate",
+                "value": "8.7%",
+                "change": "-0.3% vs last month",
+                "changeType": "negative",
+                "icon": "message-circle"
+              }
+            ]
+          },
+          {
+            "type": "charts-row",
+            "layout": "2-column-grid",
+            "elements": [
+              {
+                "type": "chart-card",
+                "title": "Email Performance",
+                "chartType": "line-chart",
+                "timeframe": "Last 30 days",
+                "metrics": ["Sent", "Delivered", "Opened", "Clicked"]
+              },
+              {
+                "type": "chart-card",
+                "title": "Campaign Status",
+                "chartType": "donut-chart",
+                "data": [
+                  {"label": "Active", "value": 5, "color": "success"},
+                  {"label": "Paused", "value": 3, "color": "warning"},
+                  {"label": "Completed", "value": 4, "color": "muted"}
+                ]
+              }
+            ]
+          },
+          {
+            "type": "content-row",
+            "layout": "2-column-grid",
+            "elements": [
+              {
+                "type": "recent-campaigns-table",
+                "title": "Recent Campaigns",
+                "columns": ["Name", "Status", "Sent", "Open Rate", "Actions"],
+                "showPagination": false,
+                "maxRows": 5,
+                "actions": ["view", "edit", "pause"]
+              },
+              {
+                "type": "activity-feed",
+                "title": "Recent Activity",
+                "items": [
+                  {
+                    "type": "campaign-started",
+                    "message": "Campaign 'Q4 Outreach' started",
+                    "time": "2 hours ago",
+                    "icon": "play"
+                  },
+                  {
+                    "type": "email-sent",
+                    "message": "1,247 emails sent successfully",
+                    "time": "4 hours ago",
+                    "icon": "send"
+                  },
+                  {
+                    "type": "reply-received",
+                    "message": "New reply from john@techcorp.com",
+                    "time": "6 hours ago",
+                    "icon": "message-circle"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "bottom-row",
+            "layout": "3-column-grid",
+            "elements": [
+              {
+                "type": "warmup-status-card",
+                "title": "Email Warmup Status",
+                "accounts": [
+                  {
+                    "email": "sales@company.com",
+                    "status": "warming",
+                    "progress": 75,
+                    "dailyLimit": 45
+                  },
+                  {
+                    "email": "outreach@company.com",
+                    "status": "ready",
+                    "progress": 100,
+                    "dailyLimit": 50
+                  }
+                ]
+              },
+              {
+                "type": "quick-actions-card",
+                "title": "Quick Actions",
+                "actions": [
+                  {
+                    "icon": "plus",
+                    "label": "Create Campaign",
+                    "description": "Start a new email sequence"
+                  },
+                  {
+                    "icon": "upload",
+                    "label": "Import Contacts",
+                    "description": "Upload CSV contact list"
+                  },
+                  {
+                    "icon": "zap",
+                    "label": "AI Templates",
+                    "description": "Generate email templates"
+                  }
+                ]
+              },
+              {
+                "type": "account-usage-card",
+                "title": "Account Usage",
+                "plan": "Professional",
+                "usage": [
+                  {
+                    "metric": "Emails Sent",
+                    "current": 8547,
+                    "limit": 10000,
+                    "percentage": 85
+                  },
+                  {
+                    "metric": "Contacts",
+                    "current": 1247,
+                    "limit": 5000,
+                    "percentage": 25
+                  },
+                  {
+                    "metric": "Email Accounts",
+                    "current": 2,
+                    "limit": 3,
+                    "percentage": 67
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "styling": {
+          "padding": "24px",
+          "gap": "24px",
+          "background": "light-gray"
+        }
+      }
+    ],
+    "responsiveBreakpoints": {
+      "mobile": "768px",
+      "tablet": "1024px",
+      "desktop": "1280px"
+    },
+    "interactions": {
+      "sidebarCollapse": true,
+      "cardHover": "subtle-shadow",
+      "buttonHover": "color-transition",
+      "tableRowHover": "background-highlight"
+    }
+  }
+}

@@ -1,0 +1,492 @@
+{
+  "landingPageContent": {
+    "productName": "ColdReach Pro",
+    "tagline": "Automate Your Cold Email Outreach",
+    "valueProposition": {
+      "primary": "Scale your sales with AI-powered personalization, smart scheduling, and deliverability protection",
+      "secondary": "Send thousands of personalized emails that actually reach the inbox and convert prospects into customers"
+    },
+    "problemStatement": {
+      "title": "The Cold Email Challenge",
+      "problems": [
+        "Manual personalization takes hours for each prospect",
+        "Poor deliverability means emails end up in spam folders",
+        "Managing multiple email accounts and sequences is complex",
+        "No visibility into what's working and what's not",
+        "New email accounts get flagged without proper warmup",
+        "Time-consuming follow-up sequences reduce efficiency"
+      ]
+    },
+    "solution": {
+      "title": "The Complete Cold Email Automation Solution",
+      "description": "ColdReach Pro eliminates the manual work of cold email outreach while maintaining the personal touch that converts. Our AI-powered platform handles everything from personalization to deliverability, so you can focus on closing deals."
+    },
+    "coreFeatures": [
+      {
+        "name": "AI-Powered Personalization",
+        "icon": "zap",
+        "shortDescription": "Generate personalized emails for thousands of prospects in minutes",
+        "detailedDescription": "Our advanced AI analyzes prospect data including company information, recent news, social media activity, and industry trends to create highly personalized opening lines and email content. Scale personalization to thousands of prospects without sacrificing quality.",
+        "benefits": [
+          "10x faster than manual personalization",
+          "Higher open and reply rates with relevant content",
+          "Multiple AI templates for different industries",
+          "Custom prompt creation for specific use cases",
+          "Bulk processing with quality control"
+        ],
+        "useCases": [
+          "Sales prospecting for B2B companies",
+          "Recruitment outreach to candidates",
+          "Partnership and collaboration requests",
+          "Customer outreach and re-engagement"
+        ]
+      },
+      {
+        "name": "Smart Scheduling & Timing",
+        "icon": "clock",
+        "shortDescription": "Optimize send times based on recipient time zones and engagement patterns",
+        "detailedDescription": "Maximize open rates by sending emails when recipients are most likely to engage. Our smart scheduling considers time zones, business hours, industry patterns, and individual engagement history to determine optimal send times.",
+        "benefits": [
+          "25% higher open rates with optimal timing",
+          "Automatic time zone detection and respect",
+          "Business hours and weekend avoidance",
+          "Gradual ramp-up for new email accounts",
+          "Rate limiting to protect sender reputation"
+        ],
+        "useCases": [
+          "Global outreach across multiple time zones",
+          "Industry-specific timing optimization",
+          "Follow-up sequence timing",
+          "Account-based marketing campaigns"
+        ]
+      },
+      {
+        "name": "Email Warmup & Deliverability",
+        "icon": "shield",
+        "shortDescription": "Automatically warm up email accounts and protect sender reputation",
+        "detailedDescription": "Ensure your emails reach the inbox with our comprehensive warmup and deliverability protection. We gradually increase sending volume, monitor reputation metrics, and provide real-time deliverability insights.",
+        "benefits": [
+          "95%+ inbox delivery rate",
+          "Automated 2-4 week warmup process",
+          "Real-time reputation monitoring",
+          "Spam score checking before sending",
+          "Domain authentication verification"
+        ],
+        "useCases": [
+          "New email account setup",
+          "Domain reputation recovery",
+          "High-volume campaign preparation",
+          "Multi-account management"
+        ]
+      },
+      {
+        "name": "Multi-Step Email Sequences",
+        "icon": "mail",
+        "shortDescription": "Create automated follow-up sequences with conditional logic",
+        "detailedDescription": "Build sophisticated email sequences that adapt based on recipient behavior. Set up conditional logic to stop sequences when prospects reply, skip steps based on engagement, and create different paths for different response types.",
+        "benefits": [
+          "Up to 7-step automated sequences",
+          "Conditional logic based on engagement",
+          "Automatic sequence stopping on replies",
+          "Template library with proven sequences",
+          "A/B testing for optimization"
+        ],
+        "useCases": [
+          "Lead nurturing campaigns",
+          "Sales follow-up sequences",
+          "Event invitation campaigns",
+          "Product launch announcements"
+        ]
+      },
+      {
+        "name": "Advanced Analytics & Tracking",
+        "icon": "bar-chart",
+        "shortDescription": "Track performance with detailed analytics and reporting",
+        "detailedDescription": "Get comprehensive insights into your email campaign performance with real-time tracking, detailed analytics, and actionable reporting. Monitor opens, clicks, replies, and conversions to optimize your outreach strategy.",
+        "benefits": [
+          "Real-time campaign performance tracking",
+          "Individual email and sequence analytics",
+          "Reply sentiment analysis and categorization",
+          "A/B test results and recommendations",
+          "Export capabilities for reporting"
+        ],
+        "useCases": [
+          "Campaign performance optimization",
+          "ROI reporting to stakeholders",
+          "Team performance tracking",
+          "Strategy refinement and testing"
+        ]
+      },
+      {
+        "name": "Team Collaboration & Management",
+        "icon": "users",
+        "shortDescription": "Manage multiple accounts and collaborate with team members",
+        "detailedDescription": "Scale your outreach efforts with team collaboration features. Manage multiple email accounts, assign campaigns to team members, share templates and sequences, and maintain consistent messaging across your organization.",
+        "benefits": [
+          "Multi-user account management",
+          "Role-based permissions and access",
+          "Shared template and sequence library",
+          "Team performance dashboards",
+          "Centralized contact management"
+        ],
+        "useCases": [
+          "Sales team coordination",
+          "Agency client management",
+          "Multi-brand outreach campaigns",
+          "Scalable prospecting operations"
+        ]
+      }
+    ],
+    "targetAudience": {
+      "primary": [
+        {
+          "segment": "Sales Professionals",
+          "description": "Individual sales reps and account executives looking to scale their prospecting efforts",
+          "painPoints": ["Time-consuming manual outreach", "Low response rates", "Difficulty tracking prospects"],
+          "benefits": ["10x more prospects reached", "Higher conversion rates", "Automated follow-ups"]
+        },
+        {
+          "segment": "Sales Teams",
+          "description": "Growing sales organizations needing to standardize and scale outreach processes",
+          "painPoints": ["Inconsistent messaging", "Manual coordination", "Limited visibility"],
+          "benefits": ["Unified outreach strategy", "Team collaboration", "Performance tracking"]
+        },
+        {
+          "segment": "Marketing Agencies",
+          "description": "Agencies managing outreach campaigns for multiple clients",
+          "painPoints": ["Client account management", "Scalability challenges", "Reporting requirements"],
+          "benefits": ["Multi-client management", "White-label options", "Comprehensive reporting"]
+        }
+      ],
+      "secondary": [
+        "Recruiters and HR professionals",
+        "Business development representatives",
+        "Startup founders and entrepreneurs",
+        "Marketing professionals running ABM campaigns"
+      ]
+    },
+    "competitiveAdvantages": [
+      {
+        "advantage": "AI-First Approach",
+        "description": "Unlike competitors who added AI as an afterthought, ColdReach Pro is built from the ground up with AI personalization at its core"
+      },
+      {
+        "advantage": "Deliverability Focus",
+        "description": "Comprehensive warmup and reputation protection ensures your emails actually reach prospects, not just get sent"
+      },
+      {
+        "advantage": "All-in-One Platform",
+        "description": "Complete solution from contact management to analytics, eliminating the need for multiple tools"
+      },
+      {
+        "advantage": "Ease of Use",
+        "description": "Intuitive interface that doesn't require technical expertise, allowing sales teams to get started immediately"
+      }
+    ],
+    "socialProof": {
+      "customerCount": "5,000+",
+      "emailsSent": "10M+",
+      "averageOpenRate": "34.2%",
+      "averageReplyRate": "8.7%",
+      "testimonials": [
+        {
+          "quote": "ColdReach Pro increased our reply rate by 300%. The AI personalization is incredible and saves us hours every day.",
+          "author": "John Smith",
+          "title": "Sales Director",
+          "company": "TechCorp",
+          "results": "300% increase in reply rate"
+        },
+        {
+          "quote": "The email warmup feature saved us months of manual work. Our deliverability went from 60% to 95%+ in just 3 weeks.",
+          "author": "Maria Johnson",
+          "title": "Marketing Manager",
+          "company": "StartupXYZ",
+          "results": "95%+ deliverability rate"
+        },
+        {
+          "quote": "Best cold email tool we've used. The analytics help us optimize every campaign and the ROI is incredible.",
+          "author": "David Brown",
+          "title": "CEO",
+          "company": "GrowthAgency",
+          "results": "5x ROI improvement"
+        }
+      ]
+    },
+    "pricingStrategy": {
+      "model": "Tiered SaaS subscription",
+      "freeTrialDays": 14,
+      "plans": [
+        {
+          "name": "Starter",
+          "price": 29,
+          "targetUser": "Individual sales professionals",
+          "keyLimitations": ["1 email account", "1,000 contacts", "2,000 emails/month"],
+          "idealFor": "Solo entrepreneurs and individual contributors"
+        },
+        {
+          "name": "Professional",
+          "price": 79,
+          "targetUser": "Growing sales teams",
+          "keyFeatures": ["3 email accounts", "5,000 contacts", "10,000 emails/month", "A/B testing"],
+          "idealFor": "Small to medium sales teams",
+          "mostPopular": true
+        },
+        {
+          "name": "Agency",
+          "price": 199,
+          "targetUser": "Agencies and large teams",
+          "keyFeatures": ["10 email accounts", "25,000 contacts", "50,000 emails/month", "White-label"],
+          "idealFor": "Agencies and enterprise teams"
+        }
+      ]
+    }
+  },
+  "dashboardFunctionality": {
+    "overview": {
+      "purpose": "Central command center for managing all cold email outreach activities",
+      "userTypes": ["Sales representatives", "Sales managers", "Marketing professionals", "Agency account managers"],
+      "primaryGoals": [
+        "Monitor campaign performance in real-time",
+        "Manage multiple email accounts and sequences",
+        "Track prospect engagement and responses",
+        "Optimize outreach strategy based on data"
+      ]
+    },
+    "coreModules": [
+      {
+        "name": "Dashboard Overview",
+        "description": "Main landing page providing high-level insights and quick access to key functions",
+        "components": [
+          {
+            "component": "Key Metrics Cards",
+            "functionality": "Display critical KPIs including total campaigns, emails sent, open rates, and reply rates with trend indicators",
+            "userValue": "Quick performance assessment at a glance"
+          },
+          {
+            "component": "Performance Charts",
+            "functionality": "Visual representation of email performance over time with line charts for trends and donut charts for status distribution",
+            "userValue": "Identify patterns and trends in campaign performance"
+          },
+          {
+            "component": "Recent Campaigns Table",
+            "functionality": "List of latest campaigns with status, performance metrics, and quick action buttons",
+            "userValue": "Quick access to manage active campaigns"
+          },
+          {
+            "component": "Activity Feed",
+            "functionality": "Real-time stream of important events like campaign starts, email sends, and replies received",
+            "userValue": "Stay updated on all outreach activities"
+          },
+          {
+            "component": "Warmup Status Monitor",
+            "functionality": "Track email account warmup progress with visual indicators and daily limits",
+            "userValue": "Ensure optimal deliverability for all email accounts"
+          },
+          {
+            "component": "Quick Actions Panel",
+            "functionality": "One-click access to common tasks like creating campaigns, importing contacts, and generating AI templates",
+            "userValue": "Streamlined workflow for frequent tasks"
+          },
+          {
+            "component": "Account Usage Tracker",
+            "functionality": "Monitor plan limits for emails sent, contacts stored, and email accounts connected",
+            "userValue": "Avoid hitting plan limits and plan upgrades"
+          }
+        ]
+      },
+      {
+        "name": "Campaign Management",
+        "description": "Comprehensive campaign creation, management, and optimization tools",
+        "components": [
+          {
+            "component": "Campaign Builder",
+            "functionality": "Step-by-step wizard for creating email sequences with drag-and-drop interface, AI personalization setup, and scheduling configuration",
+            "userValue": "Create sophisticated campaigns without technical expertise"
+          },
+          {
+            "component": "Sequence Editor",
+            "functionality": "Visual editor for multi-step email sequences with conditional logic, delays, and A/B testing setup",
+            "userValue": "Build complex nurturing sequences that adapt to prospect behavior"
+          },
+          {
+            "component": "Campaign Analytics",
+            "functionality": "Detailed performance metrics for each campaign including step-by-step analysis, engagement tracking, and conversion attribution",
+            "userValue": "Optimize campaigns based on detailed performance data"
+          },
+          {
+            "component": "A/B Testing Dashboard",
+            "functionality": "Set up, monitor, and analyze A/B tests for subject lines, content, and send times with statistical significance indicators",
+            "userValue": "Continuously improve campaign performance through testing"
+          }
+        ]
+      },
+      {
+        "name": "Contact Management",
+        "description": "Centralized contact database with segmentation and engagement tracking",
+        "components": [
+          {
+            "component": "Contact Database",
+            "functionality": "Searchable and filterable contact list with custom fields, tags, and engagement history",
+            "userValue": "Organize and access prospect information efficiently"
+          },
+          {
+            "component": "Import/Export Tools",
+            "functionality": "CSV upload with field mapping, duplicate detection, and email validation plus export capabilities",
+            "userValue": "Easily manage large contact lists and integrate with other tools"
+          },
+          {
+            "component": "Segmentation Engine",
+            "functionality": "Create dynamic contact segments based on demographics, behavior, and engagement patterns",
+            "userValue": "Target specific groups with tailored messaging"
+          },
+          {
+            "component": "Engagement Tracking",
+            "functionality": "Track all interactions with each contact including emails sent, opens, clicks, and replies",
+            "userValue": "Understand prospect engagement and tailor follow-up approach"
+          }
+        ]
+      },
+      {
+        "name": "Email Account Management",
+        "description": "Multi-account setup, monitoring, and optimization tools",
+        "components": [
+          {
+            "component": "Account Connection Hub",
+            "functionality": "Connect Gmail, Outlook, and custom SMTP accounts with OAuth and manual configuration options",
+            "userValue": "Centrally manage all sending accounts"
+          },
+          {
+            "component": "Warmup Automation",
+            "functionality": "Automated warmup sequences with progress tracking, reputation monitoring, and strategy adjustment",
+            "userValue": "Ensure optimal deliverability without manual intervention"
+          },
+          {
+            "component": "Deliverability Monitor",
+            "functionality": "Real-time tracking of sender reputation, spam scores, and deliverability metrics with alerts",
+            "userValue": "Maintain high inbox placement rates"
+          },
+          {
+            "component": "Account Rotation Logic",
+            "functionality": "Intelligent distribution of emails across multiple accounts based on limits, reputation, and performance",
+            "userValue": "Maximize sending capacity while protecting account health"
+          }
+        ]
+      },
+      {
+        "name": "AI & Personalization Tools",
+        "description": "AI-powered content generation and personalization management",
+        "components": [
+          {
+            "component": "AI Template Library",
+            "functionality": "Pre-built and custom AI prompts for different industries, use cases, and personalization styles",
+            "userValue": "Quick access to proven personalization strategies"
+          },
+          {
+            "component": "Bulk Personalization Engine",
+            "functionality": "Process thousands of contacts through AI personalization with progress tracking and quality control",
+            "userValue": "Scale personalization without sacrificing quality"
+          },
+          {
+            "component": "Content Preview & Editing",
+            "functionality": "Review and edit AI-generated content before sending with batch editing capabilities",
+            "userValue": "Maintain control over message quality and brand voice"
+          },
+          {
+            "component": "Personalization Analytics",
+            "functionality": "Track performance of different AI templates and personalization strategies",
+            "userValue": "Optimize AI prompts based on performance data"
+          }
+        ]
+      },
+      {
+        "name": "Analytics & Reporting",
+        "description": "Comprehensive performance tracking and business intelligence",
+        "components": [
+          {
+            "component": "Performance Dashboard",
+            "functionality": "Real-time metrics with customizable date ranges, filters, and comparison tools",
+            "userValue": "Monitor performance and identify trends"
+          },
+          {
+            "component": "Campaign Comparison",
+            "functionality": "Side-by-side analysis of multiple campaigns with performance benchmarking",
+            "userValue": "Identify best-performing strategies and replicate success"
+          },
+          {
+            "component": "Reply Management",
+            "functionality": "Centralized inbox for all campaign replies with sentiment analysis and categorization",
+            "userValue": "Efficiently manage prospect responses and follow-ups"
+          },
+          {
+            "component": "Export & Reporting",
+            "functionality": "Generate detailed reports in multiple formats with scheduled delivery options",
+            "userValue": "Share performance data with stakeholders and track ROI"
+          }
+        ]
+      }
+    ],
+    "userWorkflows": [
+      {
+        "workflow": "New Campaign Creation",
+        "steps": [
+          "Access campaign builder from dashboard quick actions",
+          "Select contact segment or upload new list",
+          "Choose AI personalization template and customize",
+          "Build email sequence with conditional logic",
+          "Configure scheduling and sending limits",
+          "Review and launch campaign with warmup consideration"
+        ],
+        "timeToComplete": "15-30 minutes",
+        "userBenefit": "Create sophisticated campaigns quickly without technical expertise"
+      },
+      {
+        "workflow": "Daily Performance Review",
+        "steps": [
+          "Review key metrics on dashboard overview",
+          "Check activity feed for important updates",
+          "Analyze campaign performance charts",
+          "Review and respond to new replies",
+          "Monitor email account warmup status",
+          "Adjust campaigns based on performance data"
+        ],
+        "timeToComplete": "10-15 minutes",
+        "userBenefit": "Stay on top of all outreach activities with minimal time investment"
+      },
+      {
+        "workflow": "Account Setup & Optimization",
+        "steps": [
+          "Connect email accounts through integration hub",
+          "Configure domain authentication settings",
+          "Set up automated warmup sequences",
+          "Import and segment contact lists",
+          "Create AI personalization templates",
+          "Launch first campaign with monitoring"
+        ],
+        "timeToComplete": "45-60 minutes",
+        "userBenefit": "Complete platform setup with optimal configuration for success"
+      }
+    ],
+    "keyBenefits": [
+      {
+        "benefit": "Centralized Control",
+        "description": "Manage all outreach activities from a single, intuitive interface"
+      },
+      {
+        "benefit": "Real-time Insights",
+        "description": "Monitor performance and make data-driven decisions instantly"
+      },
+      {
+        "benefit": "Automated Optimization",
+        "description": "AI and automation handle routine tasks while you focus on strategy"
+      },
+      {
+        "benefit": "Scalable Operations",
+        "description": "Handle thousands of prospects and multiple campaigns simultaneously"
+      },
+      {
+        "benefit": "Team Collaboration",
+        "description": "Coordinate team efforts with shared resources and unified reporting"
+      }
+    ]
+  }
+}

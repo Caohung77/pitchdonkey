@@ -1,0 +1,300 @@
+{
+  "landingPageDesign": {
+    "layout": "single-page-scroll",
+    "colorScheme": {
+      "primary": "#3B82F6",
+      "secondary": "#1E293B",
+      "accent": "#10B981",
+      "background": "#FFFFFF",
+      "text": "#1F2937",
+      "muted": "#6B7280"
+    },
+    "typography": {
+      "fontFamily": "Inter",
+      "headingWeights": ["600", "700"],
+      "bodyWeight": "400"
+    },
+    "sections": [
+      {
+        "name": "navigation",
+        "type": "header",
+        "layout": "horizontal",
+        "elements": [
+          {
+            "type": "logo",
+            "position": "left",
+            "content": "ColdReach Pro with mail icon"
+          },
+          {
+            "type": "menu",
+            "position": "right",
+            "items": ["Features", "Pricing", "Reviews", "Login", "Get Started"]
+          }
+        ],
+        "styling": {
+          "background": "white",
+          "border": "bottom-light",
+          "padding": "16px",
+          "sticky": true
+        }
+      },
+      {
+        "name": "hero",
+        "type": "hero-section",
+        "layout": "centered",
+        "elements": [
+          {
+            "type": "badge",
+            "content": "🚀 New: AI-Powered Email Sequences",
+            "styling": "rounded-pill, secondary-bg"
+          },
+          {
+            "type": "headline",
+            "content": "Automate Your Cold Email Outreach",
+            "styling": "text-5xl, font-bold, gradient-text"
+          },
+          {
+            "type": "subtitle",
+            "content": "Scale your sales with AI-powered personalization, smart scheduling, and deliverability protection.",
+            "styling": "text-xl, muted-color, max-width-3xl"
+          },
+          {
+            "type": "cta-buttons",
+            "layout": "horizontal-flex",
+            "buttons": [
+              {
+                "text": "Start Free Trial",
+                "type": "primary",
+                "icon": "arrow-right"
+              },
+              {
+                "text": "Watch Demo",
+                "type": "outline"
+              }
+            ]
+          },
+          {
+            "type": "trust-indicators",
+            "content": "No credit card required • 14-day free trial • Cancel anytime"
+          }
+        ],
+        "styling": {
+          "padding": "80px-0",
+          "textAlign": "center"
+        }
+      },
+      {
+        "name": "features",
+        "type": "features-grid",
+        "layout": "3-column-grid",
+        "elements": [
+          {
+            "type": "feature-card",
+            "icon": "zap",
+            "iconColor": "blue",
+            "title": "AI Personalization",
+            "description": "Generate personalized emails for thousands of prospects in minutes using advanced AI technology."
+          },
+          {
+            "type": "feature-card",
+            "icon": "target",
+            "iconColor": "green",
+            "title": "Smart Scheduling",
+            "description": "Optimize send times based on recipient time zones and engagement patterns for maximum open rates."
+          },
+          {
+            "type": "feature-card",
+            "icon": "shield",
+            "iconColor": "purple",
+            "title": "Email Warmup",
+            "description": "Automatically warm up new email accounts to build sender reputation and improve deliverability."
+          },
+          {
+            "type": "feature-card",
+            "icon": "mail",
+            "iconColor": "orange",
+            "title": "Multi-Step Sequences",
+            "description": "Create automated follow-up sequences with conditional logic based on recipient engagement."
+          },
+          {
+            "type": "feature-card",
+            "icon": "bar-chart",
+            "iconColor": "red",
+            "title": "Analytics & Tracking",
+            "description": "Track opens, clicks, replies, and conversions with detailed analytics and reporting."
+          },
+          {
+            "type": "feature-card",
+            "icon": "users",
+            "iconColor": "indigo",
+            "title": "Team Collaboration",
+            "description": "Manage multiple email accounts and collaborate with team members on campaigns."
+          }
+        ],
+        "styling": {
+          "background": "light-gray",
+          "padding": "80px-0",
+          "cardShadow": "subtle",
+          "cardPadding": "32px"
+        }
+      },
+      {
+        "name": "pricing",
+        "type": "pricing-table",
+        "layout": "3-column-cards",
+        "elements": [
+          {
+            "type": "pricing-card",
+            "plan": "Starter",
+            "price": "$29",
+            "period": "/month",
+            "description": "Perfect for individuals getting started",
+            "features": [
+              "1 email account",
+              "1,000 contacts",
+              "2,000 emails/month",
+              "Basic AI personalization",
+              "Email warmup included"
+            ],
+            "cta": "Get Started",
+            "ctaType": "outline"
+          },
+          {
+            "type": "pricing-card",
+            "plan": "Professional",
+            "price": "$79",
+            "period": "/month",
+            "description": "For growing sales teams",
+            "badge": "Most Popular",
+            "features": [
+              "3 email accounts",
+              "5,000 contacts",
+              "10,000 emails/month",
+              "Advanced AI features",
+              "A/B testing",
+              "Priority support"
+            ],
+            "cta": "Get Started",
+            "ctaType": "primary",
+            "highlighted": true
+          },
+          {
+            "type": "pricing-card",
+            "plan": "Agency",
+            "price": "$199",
+            "period": "/month",
+            "description": "For agencies and large teams",
+            "features": [
+              "10 email accounts",
+              "25,000 contacts",
+              "50,000 emails/month",
+              "White-label options",
+              "Team collaboration",
+              "Dedicated support"
+            ],
+            "cta": "Get Started",
+            "ctaType": "outline"
+          }
+        ],
+        "styling": {
+          "padding": "80px-0",
+          "cardBorder": "light",
+          "cardShadow": "medium"
+        }
+      },
+      {
+        "name": "testimonials",
+        "type": "testimonial-grid",
+        "layout": "3-column-cards",
+        "elements": [
+          {
+            "type": "testimonial-card",
+            "rating": 5,
+            "quote": "ColdReach Pro increased our reply rate by 300%. The AI personalization is incredible!",
+            "author": "John Smith",
+            "title": "Sales Director, TechCorp",
+            "avatar": "JS"
+          },
+          {
+            "type": "testimonial-card",
+            "rating": 5,
+            "quote": "The email warmup feature saved us months of manual work. Our deliverability is now 95%+",
+            "author": "Maria Johnson",
+            "title": "Marketing Manager, StartupXYZ",
+            "avatar": "MJ"
+          },
+          {
+            "type": "testimonial-card",
+            "rating": 5,
+            "quote": "Best cold email tool we've used. The analytics help us optimize every campaign.",
+            "author": "David Brown",
+            "title": "CEO, GrowthAgency",
+            "avatar": "DB"
+          }
+        ],
+        "styling": {
+          "background": "light-gray",
+          "padding": "80px-0"
+        }
+      },
+      {
+        "name": "cta-final",
+        "type": "call-to-action",
+        "layout": "centered",
+        "elements": [
+          {
+            "type": "headline",
+            "content": "Ready to scale your outreach?"
+          },
+          {
+            "type": "subtitle",
+            "content": "Join thousands of sales professionals who trust ColdReach Pro"
+          },
+          {
+            "type": "cta-button",
+            "text": "Start Your Free Trial",
+            "type": "secondary",
+            "icon": "arrow-right"
+          }
+        ],
+        "styling": {
+          "background": "primary-gradient",
+          "textColor": "white",
+          "padding": "80px-0"
+        }
+      },
+      {
+        "name": "footer",
+        "type": "footer",
+        "layout": "4-column-grid",
+        "elements": [
+          {
+            "type": "brand-column",
+            "logo": "ColdReach Pro",
+            "description": "The most powerful cold email outreach platform for modern sales teams."
+          },
+          {
+            "type": "link-column",
+            "title": "Product",
+            "links": ["Features", "Pricing", "API"]
+          },
+          {
+            "type": "link-column",
+            "title": "Company",
+            "links": ["About", "Blog", "Careers"]
+          },
+          {
+            "type": "link-column",
+            "title": "Support",
+            "links": ["Help Center", "Contact", "Privacy"]
+          }
+        ],
+        "styling": {
+          "background": "dark-gray",
+          "textColor": "light-gray",
+          "padding": "48px-0"
+        }
+      }
+    ]
+  }
+}
