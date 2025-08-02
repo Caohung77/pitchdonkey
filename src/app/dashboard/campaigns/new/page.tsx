@@ -15,7 +15,9 @@ import {
   Play,
   AlertCircle,
   Info,
-  Plus
+  Plus,
+  Filter,
+  List
 } from 'lucide-react'
 import { SequenceBuilder } from '@/components/campaigns/SequenceBuilder'
 import { CreateSegmentModal } from '@/components/contacts/CreateSegmentModal'
@@ -94,12 +96,22 @@ export default function NewCampaignPage() {
     }
   })
   const [contactSegments, setContactSegments] = useState<ContactSegment[]>([])
+  const [contactLists, setContactLists] = useState<ContactList[]>([])
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showCreateSegmentModal, setShowCreateSegmentModal] = useState(false)
 
+  interface ContactList {
+    id: string
+    name: string
+    description: string
+    contactCount: number
+    type: 'list'
+  }
+
   useEffect(() => {
     fetchContactSegments()
+    fetchContactLists()
   }, [])
 
   const fetchContactSegments = async () => {
@@ -122,6 +134,29 @@ export default function NewCampaignPage() {
     } catch (error) {
       console.error('Error fetching contact segments:', error)
       setContactSegments([]) // Set empty array on error
+    }
+  }
+
+  const fetchContactLists = async () => {
+    try {
+      const response = await fetch('/api/contacts/lists')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const lists = await response.json()
+      
+      // Ensure lists is an array
+      if (Array.isArray(lists)) {
+        setContactLists(lists)
+      } else {
+        console.error('API returned non-array data:', lists)
+        setContactLists([]) // Set empty array as fallback
+      }
+    } catch (error) {
+      console.error('Error fetching contact lists:', error)
+      setContactLists([]) // Set empty array on error
     }
   }
 
@@ -289,60 +324,130 @@ export default function NewCampaignPage() {
                 </div>
               )}
               
-              <div className="grid gap-4">
-                {(Array.isArray(contactSegments) ? contactSegments : []).map((segment) => (
-                  <div
-                    key={segment.id}
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                      campaignData.contactSegments.includes(segment.id)
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                    onClick={() => {
-                      setCampaignData(prev => ({
-                        ...prev,
-                        contactSegments: prev.contactSegments.includes(segment.id)
-                          ? prev.contactSegments.filter(id => id !== segment.id)
-                          : [...prev.contactSegments, segment.id]
-                      }))
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+              <div className="space-y-6">
+                {/* Segments Section */}
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Contact Segments (Dynamic Filters)
+                  </h4>
+                  <div className="grid gap-3">
+                    {(Array.isArray(contactSegments) ? contactSegments : []).map((segment) => (
+                      <div
+                        key={segment.id}
+                        className={`border rounded-lg p-3 cursor-pointer transition-colors ${
                           campaignData.contactSegments.includes(segment.id)
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-gray-300'
-                        }`}>
-                          {campaignData.contactSegments.includes(segment.id) && (
-                            <Check className="h-3 w-3 text-white" />
-                          )}
-                        </div>
-                        <div>
-                          <h4 className="font-medium">{segment.name}</h4>
-                          <p className="text-sm text-gray-600">{segment.description}</p>
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => {
+                          setCampaignData(prev => ({
+                            ...prev,
+                            contactSegments: prev.contactSegments.includes(segment.id)
+                              ? prev.contactSegments.filter(id => id !== segment.id)
+                              : [...prev.contactSegments, segment.id]
+                          }))
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                              campaignData.contactSegments.includes(segment.id)
+                                ? 'border-blue-500 bg-blue-500'
+                                : 'border-gray-300'
+                            }`}>
+                              {campaignData.contactSegments.includes(segment.id) && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div>
+                              <h5 className="font-medium">{segment.name}</h5>
+                              <p className="text-sm text-gray-600">{segment.description}</p>
+                            </div>
+                          </div>
+                          <Badge variant="secondary">
+                            {segment.contactCount} contacts
+                          </Badge>
                         </div>
                       </div>
-                      <Badge variant="secondary">
-                        {segment.contactCount} contacts
-                      </Badge>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                {/* Lists Section */}
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center">
+                    <List className="h-4 w-4 mr-2" />
+                    Contact Lists (Static Collections)
+                  </h4>
+                  <div className="grid gap-3">
+                    {(Array.isArray(contactLists) ? contactLists : []).map((list) => (
+                      <div
+                        key={list.id}
+                        className={`border rounded-lg p-3 cursor-pointer transition-colors ${
+                          campaignData.contactSegments.includes(list.id)
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => {
+                          setCampaignData(prev => ({
+                            ...prev,
+                            contactSegments: prev.contactSegments.includes(list.id)
+                              ? prev.contactSegments.filter(id => id !== list.id)
+                              : [...prev.contactSegments, list.id]
+                          }))
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                              campaignData.contactSegments.includes(list.id)
+                                ? 'border-green-500 bg-green-500'
+                                : 'border-gray-300'
+                            }`}>
+                              {campaignData.contactSegments.includes(list.id) && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div>
+                              <h5 className="font-medium">{list.name}</h5>
+                              <p className="text-sm text-gray-600">{list.description}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="border-green-500 text-green-700">
+                            {list.contactCount} contacts
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              {(!Array.isArray(contactSegments) || contactSegments.length === 0) && (
-                <div className="text-center py-8 text-gray-500">
-                  <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No contact segments found</p>
-                  <Button 
-                    variant="outline" 
-                    className="mt-2"
-                    onClick={() => setShowCreateSegmentModal(true)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Contact Segment
-                  </Button>
+              {(!Array.isArray(contactSegments) || contactSegments.length === 0) && 
+               (!Array.isArray(contactLists) || contactLists.length === 0) && (
+                <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+                  <Users className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No contacts to select</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Create contact segments or lists to target specific audiences
+                  </p>
+                  <div className="mt-4 space-x-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowCreateSegmentModal(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Segment
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => window.open('/dashboard/contacts?tab=lists', '_blank')}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create List
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -561,14 +666,38 @@ export default function NewCampaignPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {campaignData.contactSegments.map(segmentId => {
-                      const segment = (Array.isArray(contactSegments) ? contactSegments : []).find(s => s.id === segmentId)
-                      return segment ? (
-                        <div key={segmentId} className="flex items-center justify-between">
-                          <span className="text-sm">{segment.name}</span>
-                          <Badge variant="secondary">{segment.contactCount} contacts</Badge>
-                        </div>
-                      ) : null
+                    {campaignData.contactSegments.map(itemId => {
+                      // Check if it's a segment
+                      const segment = (Array.isArray(contactSegments) ? contactSegments : []).find(s => s.id === itemId)
+                      if (segment) {
+                        return (
+                          <div key={itemId} className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <Filter className="h-4 w-4 mr-2 text-blue-500" />
+                              <span className="text-sm">{segment.name}</span>
+                            </div>
+                            <Badge variant="secondary">{segment.contactCount} contacts</Badge>
+                          </div>
+                        )
+                      }
+                      
+                      // Check if it's a list
+                      const list = (Array.isArray(contactLists) ? contactLists : []).find(l => l.id === itemId)
+                      if (list) {
+                        return (
+                          <div key={itemId} className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <List className="h-4 w-4 mr-2 text-green-500" />
+                              <span className="text-sm">{list.name}</span>
+                            </div>
+                            <Badge variant="outline" className="border-green-500 text-green-700">
+                              {list.contactCount} contacts
+                            </Badge>
+                          </div>
+                        )
+                      }
+                      
+                      return null
                     })}
                   </div>
                 </CardContent>

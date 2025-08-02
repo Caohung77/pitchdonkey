@@ -12,6 +12,7 @@ import { ContactsFilters } from '@/components/contacts/ContactsFilters'
 import { AddContactModal } from '@/components/contacts/AddContactModal'
 import { ImportContactsModal } from '@/components/contacts/ImportContactsModal'
 import { SegmentManager } from '@/components/contacts/SegmentManager'
+import { ContactListManager } from '@/components/contacts/ContactListManager'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface User {
@@ -222,6 +223,7 @@ function ContactsPageContent() {
           <TabsList>
             <TabsTrigger value="contacts">Contacts</TabsTrigger>
             <TabsTrigger value="segments">Segments</TabsTrigger>
+            <TabsTrigger value="lists">Lists</TabsTrigger>
           </TabsList>
 
           <TabsContent value="contacts" className="space-y-6">
@@ -247,6 +249,10 @@ function ContactsPageContent() {
 
           <TabsContent value="segments">
             <SegmentManager userId={state.user.id} />
+          </TabsContent>
+
+          <TabsContent value="lists">
+            <ContactListManager userId={state.user.id} />
           </TabsContent>
         </Tabs>
       </div>

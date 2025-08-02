@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Lists Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+        .success { border-color: #10b981; background: #f0fdf4; }
+        .error { border-color: #ef4444; background: #fef2f2; }
+        .warning { border-color: #f59e0b; background: #fffbeb; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 4px;
+        }
+        button:hover { background: #2563eb; }
+        .log {
+            background: #f1f5f9;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+        .feature-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 16px;
+        }
+        .feature-card h3 {
+            margin: 0 0 8px 0;
+            color: #1e293b;
+        }
+        .feature-card p {
+            margin: 0;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Contact Lists Functionality Test</h1>
+        <p>This page tests the contact lists feature that allows you to create static collections of contacts for campaigns.</p>
+
+        <div class="feature-list">
+            <div class="feature-card">
+                <h3>📋 Contact Lists</h3>
+                <p>Create static collections of handpicked contacts. Perfect for VIP customers, specific prospects, or special groups.</p>
+            </div>
+            <div class="feature-card">
+                <h3>🎯 Campaign Integration</h3>
+                <p>Use both segments (dynamic filters) and lists (static collections) as campaign destinations.</p>
+            </div>
+            <div class="feature-card">
+                <h3>🔍 Visual Distinction</h3>
+                <p>Segments appear in blue, lists appear in green to help you distinguish between dynamic and static targeting.</p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🧪 API Tests</h2>
+            <button onclick="runAPITests()">Run API Tests</button>
+            <button onclick="testCreateList()">Test List Creation</button>
+            <button onclick="clearLog()">Clear Log</button>
+            <div id="log" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Manual Testing Steps</h2>
+            <ol>
+                <li><strong>Go to Contacts Page:</strong> Navigate to <code>/dashboard/contacts</code></li>
+                <li><strong>Click Lists Tab:</strong> You should see "Contacts", "Segments", and "Lists" tabs</li>
+                <li><strong>Create a List:</strong> Click "Create List" and select specific contacts</li>
+                <li><strong>Go to Campaign Creation:</strong> Navigate to <code>/dashboard/campaigns/new</code></li>
+                <li><strong>Select Contacts:</strong> In step 2, you should see both segments (blue) and lists (green)</li>
+                <li><strong>Choose Your List:</strong> Select your created list as a campaign destination</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>🎨 UI Features</h2>
+            <ul>
+                <li><strong>Segments (Blue):</strong> Dynamic filters that auto-update based on criteria</li>
+                <li><strong>Lists (Green):</strong> Static collections of specific contacts</li>
+                <li><strong>Contact Selection:</strong> Search and bulk select contacts when creating lists</li>
+                <li><strong>Campaign Review:</strong> See both segments and lists in campaign review with icons</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let logElement = document.getElementById('log');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            logElement.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            logElement.textContent = '';
+        }
+
+        async function runAPITests() {
+            log('Starting API tests...');
+            
+            // Test contact lists API
+            try {
+                log('Testing contact lists API...');
+                const listsResponse = await fetch('/api/contacts/lists');
+                const listsData = await listsResponse.json();
+                
+                if (listsResponse.ok) {
+                    log(`Contact lists API working: ${listsData.length} lists found`, 'success');
+                } else {
+                    log(`Contact lists API error: ${listsData.error}`, 'error');
+                }
+            } catch (error) {
+                log(`Contact lists API failed: ${error.message}`, 'error');
+            }
+
+            // Test contacts API
+            try {
+                log('Testing contacts API...');
+                const contactsResponse = await fetch('/api/contacts');
+                const contactsData = await contactsResponse.json();
+                
+                if (contactsResponse.ok) {
+                    log(`Contacts API working: ${contactsData.length} contacts found`, 'success');
+                } else {
+                    log(`Contacts API error: ${contactsData.error}`, 'error');
+                }
+            } catch (error) {
+                log(`Contacts API failed: ${error.message}`, 'error');
+            }
+
+            // Test segments API for comparison
+            try {
+                log('Testing segments API...');
+                const segmentsResponse = await fetch('/api/contacts/segments');
+                const segmentsData = await segmentsResponse.json();
+                
+                if (segmentsResponse.ok) {
+                    log(`Segments API working: ${segmentsData.length} segments found`, 'success');
+                } else {
+                    log(`Segments API error: ${segmentsData.error}`, 'error');
+                }
+            } catch (error) {
+                log(`Segments API failed: ${error.message}`, 'error');
+            }
+
+            log('API tests completed!');
+        }
+
+        async function testCreateList() {
+            log('Testing list creation...');
+            
+            try {
+                // First get some contacts
+                const contactsResponse = await fetch('/api/contacts');
+                const contacts = await contactsResponse.json();
+                
+                if (!contactsResponse.ok || !Array.isArray(contacts) || contacts.length === 0) {
+                    log('No contacts available for list creation test', 'warning');
+                    return;
+                }
+
+                // Create a test list with first 3 contacts
+                const selectedContactIds = contacts.slice(0, Math.min(3, contacts.length)).map(c => c.id);
+                
+                const createResponse = await fetch('/api/contacts/lists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: `Test List ${Date.now()}`,
+                        description: 'Automated test list',
+                        contactIds: selectedContactIds,
+                        tags: ['test', 'automated']
+                    })
+                });
+
+                const result = await createResponse.json();
+
+                if (createResponse.ok) {
+                    log(`List created successfully: "${result.name}" with ${result.contactCount} contacts`, 'success');
+                    log(`List ID: ${result.id}`, 'info');
+                } else {
+                    log(`List creation failed: ${result.error}`, 'error');
+                }
+
+            } catch (error) {
+                log(`List creation test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run basic tests on page load
+        window.addEventListener('load', () => {
+            log('Contact Lists Test Page Loaded');
+            log('Click "Run API Tests" to verify functionality');
+        });
+    </script>
+</body>
+</html>
