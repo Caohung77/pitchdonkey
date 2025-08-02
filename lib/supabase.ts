@@ -1,230 +1,203 @@
-// Demo Supabase client for development
-// In a real implementation, this would use actual Supabase
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
+import type { Database } from './database.types'
 
-interface User {
-  id: string
-  email: string
-  name: string
-  plan: string
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables')
 }
 
-class MockSupabaseClient {
-  auth = {
-    getUser: async () => {
-      // Check for session cookie
-      if (typeof window !== 'undefined') {
-        const userInfo = document.cookie
-          .split('; ')
-          .find(row => row.startsWith('user-info='))
-          ?.split('=')[1]
+// Server-side Supabase client for API routes
+export function createServerSupabaseClient() {
+  const cookieStore = cookies()
 
-        if (userInfo) {
+  return createServerClient<Database>(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
           try {
-            const user = JSON.parse(decodeURIComponent(userInfo))
-            return { data: { user }, error: null }
+            cookieStore.set({ name, value, ...options })
           } catch (error) {
-            return { data: { user: null }, error: null }
-          }
-        }
-      }
-
-      // For server-side, we'll assume authenticated for demo
-      return {
-        data: {
-          user: {
-            id: 'demo-user-1',
-            email: 'demo@coldreachpro.com'
+            // The `set` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
           }
         },
-        error: null
-      }
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: '', ...options })
+          } catch (error) {
+            // The `delete` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
+          }
+        },
+      },
     }
-  }
-
-  from(table: string) {
-    return new MockTable(table)
-  }
+  )
 }
 
-class MockTable {
-  private table: string
-  private selectFields: string = '*'
-  private filters: any[] = []
-  private orderBy: any = null
-  private limitCount: number | null = null
+// Middleware Supabase client
+export function createMiddlewareSupabaseClient(
+  request: NextRequest,
+  response: NextResponse
+) {
+  return createServerClient<Database>(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+          response.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+        },
+      },
+    }
+  )
+}
 
-  constructor(table: string) {
-    this.table = table
-  }
-
-  select(fields: string = '*') {
-    this.selectFields = fields
-    return this
-  }
-
-  eq(column: string, value: any) {
-    this.filters.push({ type: 'eq', column, value })
-    return this
-  }
-
-  order(column: string, options?: { ascending?: boolean }) {
-    this.orderBy = { column, ascending: options?.ascending ?? true }
-    return this
-  }
-
-  limit(count: number) {
-    this.limitCount = count
-    return this
-  }
-
-  async single() {
-    const result = await this.execute()
-    return {
-      data: result.data?.[0] || null,
-      error: result.error
+// Service role client for admin operations
+export const supabaseAdmin = createSupabaseClient<Database>(
+  supabaseUrl,
+  supabaseServiceKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
     }
   }
+)
 
-  private async execute() {
-    // Mock data for different tables
-    const mockData = this.getMockData()
+// Helper function to get user from server
+export async function getUser() {
+  const supabase = createServerSupabaseClient()
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser()
     
-    return {
-      data: mockData,
-      error: null
+    if (error) {
+      console.error('Error getting user:', error)
+      return null
     }
-  }
-
-  private getMockData() {
-    switch (this.table) {
-      case 'users':
-        return [{
-          id: 'demo-user-1',
-          email: 'demo@coldreachpro.com',
-          name: 'Demo User',
-          plan: 'professional',
-          subscription_status: 'active',
-          stripe_customer_id: 'cus_demo123'
-        }]
-
-      case 'subscription_plans':
-        return [
-          {
-            id: 'starter',
-            name: 'Starter',
-            price: 4900,
-            currency: 'usd',
-            interval: 'month',
-            is_active: true,
-            limits: {
-              emailsPerMonth: 2000,
-              contactsLimit: 1000,
-              campaignsLimit: 3
-            }
-          },
-          {
-            id: 'professional', 
-            name: 'Professional',
-            price: 14900,
-            currency: 'usd',
-            interval: 'month',
-            is_active: true,
-            limits: {
-              emailsPerMonth: 10000,
-              contactsLimit: 10000,
-              campaignsLimit: 25
-            }
-          }
-        ]
-
-      case 'user_subscriptions':
-        return [{
-          id: 'sub-demo-1',
-          user_id: 'demo-user-1',
-          plan_id: 'professional',
-          stripe_subscription_id: 'sub_demo123',
-          status: 'active',
-          current_period_start: new Date().toISOString(),
-          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        }]
-
-      case 'usage_metrics':
-        return [{
-          user_id: 'demo-user-1',
-          plan_id: 'professional',
-          period: new Date().toISOString().slice(0, 7),
-          emails_sent: 1250,
-          contacts_count: 3500,
-          campaigns_count: 8,
-          templates_count: 12,
-          automations_count: 5,
-          team_members_count: 2,
-          api_calls_count: 450,
-          custom_domains_count: 1
-        }]
-
-      case 'campaigns':
-        return [
-          {
-            id: 'camp-1',
-            name: 'Q1 Sales Outreach',
-            description: 'Targeting enterprise prospects for Q1',
-            status: 'active',
-            created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-            launched_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-          },
-          {
-            id: 'camp-2', 
-            name: 'Product Launch Campaign',
-            description: 'Announcing our new features',
-            status: 'draft',
-            created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
-          }
-        ]
-
-      case 'email_accounts':
-        return [
-          {
-            id: 'email-1',
-            user_id: 'demo-user-1',
-            email: 'sales@company.com',
-            provider: 'gmail',
-            is_active: true,
-            warmup_status: 'completed',
-            daily_limit: 50,
-            connection_status: 'connected'
-          },
-          {
-            id: 'email-2',
-            user_id: 'demo-user-1', 
-            email: 'outreach@company.com',
-            provider: 'outlook',
-            is_active: true,
-            warmup_status: 'in_progress',
-            daily_limit: 30,
-            connection_status: 'connected'
-          }
-        ]
-
-      case 'usage_notifications':
-        return [
-          {
-            id: 'notif-1',
-            user_id: 'demo-user-1',
-            type: 'usage_warning',
-            title: 'Approaching Email Limit',
-            message: 'You have used 80% of your monthly email limit',
-            is_read: false,
-            created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-          }
-        ]
-
-      default:
-        return []
-    }
+    
+    return user
+  } catch (error) {
+    console.error('Error in getUser:', error)
+    return null
   }
 }
 
+// Helper function to get session from server
+export async function getSession() {
+  const supabase = createServerSupabaseClient()
+  
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.error('Error getting session:', error)
+      return null
+    }
+    
+    return session
+  } catch (error) {
+    console.error('Error in getSession:', error)
+    return null
+  }
+}
+
+// Helper function to require authentication
+export async function requireAuth() {
+  const user = await getUser()
+  
+  if (!user) {
+    throw new Error('Authentication required')
+  }
+  
+  return user
+}
+
+// Helper function to get user profile
+export async function getUserProfile(userId: string) {
+  const supabase = createServerSupabaseClient()
+  
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', userId)
+    .single()
+  
+  if (error) {
+    console.error('Error getting user profile:', error)
+    return null
+  }
+  
+  return data
+}
+
+// Helper function to create or update user profile
+export async function upsertUserProfile(user: {
+  id: string
+  email: string
+  full_name?: string
+  avatar_url?: string
+}) {
+  const supabase = createServerSupabaseClient()
+  
+  const { data, error } = await supabase
+    .from('users')
+    .upsert({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name || user.email.split('@')[0],
+      avatar_url: user.avatar_url,
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single()
+  
+  if (error) {
+    console.error('Error upserting user profile:', error)
+    throw error
+  }
+  
+  return data
+}
+
+// Export the main client for backward compatibility
 export function createClient() {
-  return new MockSupabaseClient()
+  return createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey)
 }

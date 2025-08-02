@@ -27,10 +27,9 @@ export class CSVParser {
     email: { required: true, label: 'Email Address' },
     first_name: { required: true, label: 'First Name' },
     last_name: { required: true, label: 'Last Name' },
-    company_name: { required: false, label: 'Company Name' },
-    job_title: { required: false, label: 'Job Title' },
+    company: { required: false, label: 'Company Name' },
+    position: { required: false, label: 'Position' },
     website: { required: false, label: 'Website' },
-    industry: { required: false, label: 'Industry' },
     phone: { required: false, label: 'Phone Number' },
     linkedin_url: { required: false, label: 'LinkedIn URL' }
   }
@@ -39,10 +38,9 @@ export class CSVParser {
     email: ['email', 'email_address', 'e-mail', 'mail', 'contact_email'],
     first_name: ['first_name', 'firstname', 'first', 'fname', 'given_name'],
     last_name: ['last_name', 'lastname', 'last', 'lname', 'surname', 'family_name'],
-    company_name: ['company_name', 'company', 'organization', 'org', 'business'],
-    job_title: ['job_title', 'title', 'position', 'role', 'job'],
+    company: ['company', 'company_name', 'organization', 'org', 'business'],
+    position: ['position', 'job_title', 'title', 'role', 'job'],
     website: ['website', 'url', 'web', 'site', 'homepage'],
-    industry: ['industry', 'sector', 'field', 'business_type'],
     phone: ['phone', 'phone_number', 'tel', 'telephone', 'mobile', 'cell'],
     linkedin_url: ['linkedin_url', 'linkedin', 'linkedin_profile', 'li_url']
   }

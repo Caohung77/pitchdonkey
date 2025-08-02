@@ -161,6 +161,48 @@ export const SMTP_PROVIDERS: SMTPProvider[] = [
   },
 ]
 
+// Export alias for backward compatibility
+export const SMTP_PROVIDER_TEMPLATES = SMTP_PROVIDERS
+
+// Helper function to get recommended settings for a provider
+export function getRecommendedSettings(providerId: string): {
+  smtp: SMTPConfig | null
+  imap: IMAPConfig | null
+  instructions: string[]
+} {
+  const provider = SMTP_PROVIDERS.find(p => p.id === providerId)
+  
+  if (!provider) {
+    return {
+      smtp: null,
+      imap: null,
+      instructions: []
+    }
+  }
+
+  const smtp: SMTPConfig = {
+    host: provider.smtp.host,
+    port: provider.smtp.port,
+    secure: provider.smtp.secure,
+    username: '', // To be filled by user
+    password: '', // To be filled by user
+  }
+
+  const imap: IMAPConfig | null = provider.imap ? {
+    host: provider.imap.host,
+    port: provider.imap.port,
+    secure: provider.imap.secure,
+    username: '', // To be filled by user
+    password: '', // To be filled by user
+  } : null
+
+  return {
+    smtp,
+    imap,
+    instructions: provider.setupInstructions
+  }
+}
+
 export class SMTPService {
   static async testConnection(config: SMTPConfig): Promise<{
     success: boolean
@@ -175,7 +217,7 @@ export class SMTPService {
       }
 
       // Create transporter
-      const transporter = nodemailer.createTransporter({
+      const transporter = nodemailer.createTransport({
         host: config.host,
         port: config.port,
         secure: config.secure,
@@ -266,7 +308,7 @@ export class SMTPService {
     messageId?: string
   }> {
     try {
-      const transporter = nodemailer.createTransporter({
+      const transporter = nodemailer.createTransport({
         host: config.host,
         port: config.port,
         secure: config.secure,

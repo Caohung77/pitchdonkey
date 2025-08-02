@@ -1,278 +1,451 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Loader2, Shield, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
-
-interface DomainAuthRecord {
-  type: 'SPF' | 'DKIM' | 'DMARC'
-  status: 'valid' | 'warning' | 'missing' | 'unknown'
-  record: string | null
-  issues: string[]
-  recommendations: string[]
-}
-
-interface DomainAuthResult {
-  domain: string
-  spf: DomainAuthRecord
-  dkim: DomainAuthRecord
-  dmarc: DomainAuthRecord
-  overall_score: number
-  overall_status: 'excellent' | 'good' | 'warning' | 'critical'
-  recommendations: string[]
-  last_checked: string
-}
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Shield, CheckCircle, XCircle, AlertCircle, Copy, RefreshCw, ExternalLink } from 'lucide-react'
 
 interface DomainAuthDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  emailAccountId: string
-  email: string
+  domain: string
 }
 
-export function DomainAuthDialog({ 
-  isOpen, 
-  onClose, 
-  emailAccountId, 
-  email 
-}: DomainAuthDialogProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [authResult, setAuthResult] = useState<DomainAuthResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
+interface DNSRecord {
+  type: string
+  name: string
+  value: string
+  status: 'verified' | 'pending' | 'missing' | 'error'
+}
 
-  const checkDomainAuth = async () => {
+interface DomainAuthStatus {
+  domain: string
+  spf: {
+    verified: boolean
+    record?: string
+    error?: string
+  }
+  dkim: {
+    verified: boolean
+    record?: string
+    selector?: string
+    error?: string
+  }
+  dmarc: {
+    verified: boolean
+    record?: string
+    error?: string
+  }
+  overallStatus: 'verified' | 'partial' | 'unverified' | 'error'
+  lastChecked?: string
+}
+
+export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
+  const [open, setOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [status, setStatus] = useState<DomainAuthStatus | null>(null)
+  const [generatedRecords, setGeneratedRecords] = useState<DNSRecord[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      fetchDomainStatus()
+      generateDNSRecords()
+    }
+  }, [open, domain])
+
+  const fetchDomainStatus = async () => {
     setIsLoading(true)
-    setError(null)
+    setError('')
 
     try {
-      const response = await fetch(`/api/email-accounts/${emailAccountId}/verify-domain`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to check domain authentication')
+      const response = await fetch(`/api/domains/${encodeURIComponent(domain)}/status`)
+      if (response.ok) {
+        const data = await response.json()
+        setStatus(data.status)
+      } else {
+        throw new Error('Failed to fetch domain status')
       }
-
-      setAuthResult(data.data.domain_auth)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+    } catch (error) {
+      console.error('Error fetching domain status:', error)
+      setError('Failed to load domain authentication status')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const loadExistingData = async () => {
+  const generateDNSRecords = async () => {
     try {
-      const response = await fetch(`/api/email-accounts/${emailAccountId}/verify-domain`)
-      const data = await response.json()
-
-      if (response.ok && data.data.domain_auth) {
-        setAuthResult(data.data.domain_auth)
+      const response = await fetch(`/api/domains/${encodeURIComponent(domain)}/records`)
+      if (response.ok) {
+        const data = await response.json()
+        setGeneratedRecords(data.records)
       }
-    } catch (err) {
-      // Ignore errors when loading existing data
+    } catch (error) {
+      console.error('Error generating DNS records:', error)
     }
   }
 
-  // Load existing data when dialog opens
-  React.useEffect(() => {
-    if (isOpen && !authResult) {
-      loadExistingData()
-    }
-  }, [isOpen])
+  const handleVerify = async () => {
+    setIsVerifying(true)
+    setError('')
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'valid':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'warning':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />
-      case 'missing':
-        return <XCircle className="h-4 w-4 text-red-500" />
-      default:
-        return <Shield className="h-4 w-4 text-gray-500" />
-    }
-  }
+    try {
+      const response = await fetch(`/api/domains/${encodeURIComponent(domain)}/verify`, {
+        method: 'POST'
+      })
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      valid: 'bg-green-100 text-green-800',
-      warning: 'bg-yellow-100 text-yellow-800',
-      missing: 'bg-red-100 text-red-800',
-      unknown: 'bg-gray-100 text-gray-800'
-    }
-
-    return (
-      <Badge className={variants[status as keyof typeof variants] || variants.unknown}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
-    )
-  }
-
-  const getOverallStatusColor = (status: string) => {
-    switch (status) {
-      case 'excellent':
-        return 'text-green-600'
-      case 'good':
-        return 'text-blue-600'
-      case 'warning':
-        return 'text-yellow-600'
-      case 'critical':
-        return 'text-red-600'
-      default:
-        return 'text-gray-600'
+      if (response.ok) {
+        const data = await response.json()
+        setStatus(data.status)
+      } else {
+        throw new Error('Verification failed')
+      }
+    } catch (error) {
+      console.error('Error verifying domain:', error)
+      setError('Failed to verify domain authentication')
+    } finally {
+      setIsVerifying(false)
     }
   }
 
-  const domain = email.split('@')[1]
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    // You could add a toast notification here
+  }
+
+  const getStatusIcon = (verified: boolean, hasError: boolean = false) => {
+    if (hasError) return <XCircle className="h-4 w-4 text-red-500" />
+    if (verified) return <CheckCircle className="h-4 w-4 text-green-500" />
+    return <AlertCircle className="h-4 w-4 text-yellow-500" />
+  }
+
+  const getStatusBadge = (verified: boolean, hasError: boolean = false) => {
+    if (hasError) return <Badge variant="destructive">Error</Badge>
+    if (verified) return <Badge variant="default" className="bg-green-500">Verified</Badge>
+    return <Badge variant="secondary">Pending</Badge>
+  }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Shield className="h-4 w-4 mr-1" />
+          Domain Auth
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Domain Authentication Status
+            Domain Authentication - {domain}
           </DialogTitle>
-          <p className="text-sm text-gray-600">
-            Checking authentication records for <strong>{domain}</strong>
-          </p>
+          <DialogDescription>
+            Set up SPF, DKIM, and DMARC records to improve email deliverability and security
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Check Button */}
-          <div className="flex justify-between items-center">
-            <Button
-              onClick={checkDomainAuth}
-              disabled={isLoading}
-              className="flex items-center gap-2"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              {isLoading ? 'Checking...' : 'Check Domain Authentication'}
-            </Button>
-
-            {authResult && (
-              <div className="text-sm text-gray-500">
-                Last checked: {new Date(authResult.last_checked).toLocaleString()}
-              </div>
-            )}
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-800">{error}</p>
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center">
+              <XCircle className="h-4 w-4 text-red-600 mr-2" />
+              <span className="text-red-800 text-sm">{error}</span>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Results */}
-          {authResult && (
-            <div className="space-y-6">
-              {/* Overall Score */}
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold">Overall Authentication Score</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl font-bold">{authResult.overall_score}</span>
-                    <span className="text-gray-500">/100</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${
-                        authResult.overall_score >= 90 ? 'bg-green-500' :
-                        authResult.overall_score >= 70 ? 'bg-blue-500' :
-                        authResult.overall_score >= 40 ? 'bg-yellow-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${authResult.overall_score}%` }}
-                    />
-                  </div>
-                  <span className={`font-medium ${getOverallStatusColor(authResult.overall_status)}`}>
-                    {authResult.overall_status.charAt(0).toUpperCase() + authResult.overall_status.slice(1)}
-                  </span>
-                </div>
+        <div className="space-y-4">
+          {/* Status Overview */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Authentication Status</CardTitle>
+                <Button 
+                  size="sm" 
+                  onClick={handleVerify} 
+                  disabled={isVerifying}
+                  variant="outline"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isVerifying ? 'animate-spin' : ''}`} />
+                  {isVerifying ? 'Verifying...' : 'Verify Now'}
+                </Button>
               </div>
-
-              {/* Individual Records */}
-              <div className="space-y-4">
-                {[authResult.spf, authResult.dkim, authResult.dmarc].map((record) => (
-                  <div key={record.type} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(record.status)}
-                        <h4 className="font-semibold">{record.type}</h4>
+              {status?.lastChecked && (
+                <CardDescription>
+                  Last checked: {new Date(status.lastChecked).toLocaleString()}
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
                       </div>
-                      {getStatusBadge(record.status)}
+                      <div className="h-6 w-20 bg-gray-200 rounded animate-pulse"></div>
                     </div>
-
-                    {record.record && (
-                      <div className="mb-3">
-                        <p className="text-sm font-medium text-gray-700 mb-1">Record:</p>
-                        <code className="text-xs bg-gray-100 p-2 rounded block break-all">
-                          {record.record}
-                        </code>
-                      </div>
-                    )}
-
-                    {record.issues.length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-sm font-medium text-gray-700 mb-1">Issues:</p>
-                        <ul className="text-sm text-red-600 space-y-1">
-                          {record.issues.map((issue, index) => (
-                            <li key={index} className="flex items-start gap-1">
-                              <span>•</span>
-                              <span>{issue}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {record.recommendations.length > 0 && (
+                  ))}
+                </div>
+              ) : status ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {getStatusIcon(status.spf.verified, !!status.spf.error)}
                       <div>
-                        <p className="text-sm font-medium text-gray-700 mb-1">Recommendations:</p>
-                        <ul className="text-sm text-blue-600 space-y-1">
-                          {record.recommendations.map((rec, index) => (
-                            <li key={index} className="flex items-start gap-1">
-                              <span>•</span>
-                              <span>{rec}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="font-medium">SPF (Sender Policy Framework)</div>
+                        <div className="text-sm text-muted-foreground">
+                          Authorizes email servers to send on your behalf
+                        </div>
                       </div>
-                    )}
+                    </div>
+                    {getStatusBadge(status.spf.verified, !!status.spf.error)}
                   </div>
-                ))}
-              </div>
 
-              {/* Overall Recommendations */}
-              {authResult.recommendations.length > 0 && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="font-semibold text-blue-800 mb-2">Recommendations</h4>
-                  <ul className="text-sm text-blue-700 space-y-1">
-                    {authResult.recommendations.map((rec, index) => (
-                      <li key={index} className="flex items-start gap-1">
-                        <span>•</span>
-                        <span>{rec}</span>
-                      </li>
-                    ))}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {getStatusIcon(status.dkim.verified, !!status.dkim.error)}
+                      <div>
+                        <div className="font-medium">DKIM (DomainKeys Identified Mail)</div>
+                        <div className="text-sm text-muted-foreground">
+                          Cryptographically signs your emails
+                        </div>
+                      </div>
+                    </div>
+                    {getStatusBadge(status.dkim.verified, !!status.dkim.error)}
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {getStatusIcon(status.dmarc.verified, !!status.dmarc.error)}
+                      <div>
+                        <div className="font-medium">DMARC (Domain-based Message Authentication)</div>
+                        <div className="text-sm text-muted-foreground">
+                          Tells receivers what to do with unauthenticated emails
+                        </div>
+                      </div>
+                    </div>
+                    {getStatusBadge(status.dmarc.verified, !!status.dmarc.error)}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  Click "Verify Now" to check your domain authentication status
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* DNS Records Setup */}
+          <Tabs defaultValue="spf" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="spf">SPF Setup</TabsTrigger>
+              <TabsTrigger value="dkim">DKIM Setup</TabsTrigger>
+              <TabsTrigger value="dmarc">DMARC Setup</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="spf" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">SPF Record Setup</CardTitle>
+                  <CardDescription>
+                    Add this TXT record to your DNS to authorize email servers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {generatedRecords.filter(r => r.type === 'SPF').map((record, index) => (
+                    <div key={index} className="space-y-2">
+                      <div className="grid grid-cols-4 gap-2 text-sm">
+                        <div className="font-medium">Type:</div>
+                        <div className="col-span-3">TXT</div>
+                        <div className="font-medium">Name:</div>
+                        <div className="col-span-3">@ (or leave blank)</div>
+                        <div className="font-medium">Value:</div>
+                        <div className="col-span-3 font-mono text-xs bg-gray-50 p-2 rounded border break-all">
+                          {record.value}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-2 h-6 w-6 p-0"
+                            onClick={() => copyToClipboard(record.value)}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p><strong>What this does:</strong></p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Tells receiving servers which servers can send emails from your domain</li>
+                      <li>Helps prevent email spoofing and improves deliverability</li>
+                      <li>Required by most email providers for good reputation</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="dkim" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">DKIM Record Setup</CardTitle>
+                  <CardDescription>
+                    Add this TXT record to enable DKIM email signing
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {generatedRecords.filter(r => r.type === 'DKIM').map((record, index) => (
+                    <div key={index} className="space-y-2">
+                      <div className="grid grid-cols-4 gap-2 text-sm">
+                        <div className="font-medium">Type:</div>
+                        <div className="col-span-3">TXT</div>
+                        <div className="font-medium">Name:</div>
+                        <div className="col-span-3 font-mono text-xs">{record.name}</div>
+                        <div className="font-medium">Value:</div>
+                        <div className="col-span-3 font-mono text-xs bg-gray-50 p-2 rounded border break-all max-h-32 overflow-y-auto">
+                          {record.value}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-2 h-6 w-6 p-0"
+                            onClick={() => copyToClipboard(record.value)}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p><strong>What this does:</strong></p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Adds a cryptographic signature to your emails</li>
+                      <li>Proves emails actually came from your domain</li>
+                      <li>Significantly improves email deliverability</li>
+                      <li>Required for DMARC compliance</li>
+                    </ul>
+                    <p className="text-yellow-600">
+                      <strong>Note:</strong> Keep your private key secure - never share it or put it in DNS
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="dmarc" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">DMARC Record Setup</CardTitle>
+                  <CardDescription>
+                    Start with monitoring, then gradually strengthen the policy
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {generatedRecords.filter(r => r.type === 'DMARC').map((record, index) => (
+                    <div key={index} className="space-y-2">
+                      <div className="grid grid-cols-4 gap-2 text-sm">
+                        <div className="font-medium">Type:</div>
+                        <div className="col-span-3">TXT</div>
+                        <div className="font-medium">Name:</div>
+                        <div className="col-span-3">_dmarc</div>
+                        <div className="font-medium">Value:</div>
+                        <div className="col-span-3 font-mono text-xs bg-gray-50 p-2 rounded border break-all">
+                          {record.value}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-2 h-6 w-6 p-0"
+                            onClick={() => copyToClipboard(record.value)}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p><strong>Progressive Implementation:</strong></p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2">
+                      <li><strong>Start:</strong> p=none (monitoring only)</li>
+                      <li><strong>Test:</strong> p=quarantine; pct=25 (quarantine 25%)</li>
+                      <li><strong>Increase:</strong> p=quarantine; pct=100 (quarantine all)</li>
+                      <li><strong>Final:</strong> p=reject (reject all failing emails)</li>
+                    </ol>
+                    <p className="text-yellow-600">
+                      <strong>Important:</strong> Never jump straight to "reject" - test thoroughly first!
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          {/* Help Links */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Need Help?</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <h4 className="font-medium mb-2">Popular DNS Providers:</h4>
+                  <ul className="space-y-1">
+                    <li>
+                      <a href="https://www.godaddy.com/help/add-a-txt-record-19232" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                        GoDaddy DNS Setup <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                        Cloudflare DNS Setup <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://www.namecheap.com/support/knowledgebase/article.aspx/317/2237/how-do-i-add-txtspfdkimdmarc-records-for-my-domain/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                        Namecheap DNS Setup <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </li>
                   </ul>
                 </div>
-              )}
-            </div>
-          )}
+                <div>
+                  <h4 className="font-medium mb-2">Testing Tools:</h4>
+                  <ul className="space-y-1">
+                    <li>
+                      <a href={`https://mxtoolbox.com/spf.aspx?domain=${domain}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                        Test SPF Record <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </li>
+                    <li>
+                      <a href={`https://mxtoolbox.com/dkim.aspx?domain=${domain}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                        Test DKIM Record <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </li>
+                    <li>
+                      <a href={`https://mxtoolbox.com/dmarc.aspx?domain=${domain}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                        Test DMARC Record <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </DialogContent>
     </Dialog>

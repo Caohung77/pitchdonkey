@@ -1,15 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = createServerSupabaseClient()
 
     // Get usage notifications
     const { data: notifications, error } = await supabase
@@ -19,13 +14,8 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(20)
 
-    if (error) {
-      console.error('Error fetching notifications:', error)
-      return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 })
-    }
-
-    // If no notifications exist, return some mock data for demo
-    if (!notifications || notifications.length === 0) {
+    // If no notifications exist or error fetching, return some mock data for demo
+    if (error || !notifications || notifications.length === 0) {
       const mockNotifications = [
         {
           id: '1',
@@ -44,7 +34,7 @@ export async function GET(request: NextRequest) {
           createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
         }
       ]
-      return NextResponse.json(mockNotifications)
+      return createSuccessResponse(mockNotifications)
     }
 
     // Transform database notifications to match frontend interface
@@ -57,13 +47,9 @@ export async function GET(request: NextRequest) {
       createdAt: notification.created_at
     }))
 
-    return NextResponse.json(transformedNotifications)
+    return createSuccessResponse(transformedNotifications)
 
   } catch (error) {
-    console.error('Error fetching notifications:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

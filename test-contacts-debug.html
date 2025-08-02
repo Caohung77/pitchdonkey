@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Contacts Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #fff3cd; border-color: #ffeaa7; }
+    </style>
+</head>
+<body>
+    <h1>Contacts Page Debug</h1>
+    <div id="results"></div>
+    <button onclick="runTests()">Run Tests</button>
+    
+    <script>
+        async function runTests() {
+            const resultsDiv = document.getElementById('results')
+            resultsDiv.innerHTML = '<div class="loading test-result">Running tests...</div>'
+            
+            const tests = [
+                { name: 'Session Check', url: '/api/auth/session' },
+                { name: 'User Profile', url: '/api/user/profile' },
+                { name: 'Contacts List', url: '/api/contacts' },
+                { name: 'Contact Stats', url: '/api/contacts/stats' }
+            ]
+            
+            let results = []
+            
+            for (const test of tests) {
+                try {
+                    const response = await fetch(test.url)
+                    const data = await response.json()
+                    
+                    results.push({
+                        name: test.name,
+                        status: response.status,
+                        success: response.ok,
+                        data: data,
+                        headers: Object.fromEntries(response.headers.entries())
+                    })
+                } catch (error) {
+                    results.push({
+                        name: test.name,
+                        status: 'ERROR',
+                        success: false,
+                        error: error.message
+                    })
+                }
+            }
+            
+            // Display results
+            resultsDiv.innerHTML = results.map(result => `
+                <div class="test-result ${result.success ? 'success' : 'error'}">
+                    <h3>${result.name}</h3>
+                    <p><strong>Status:</strong> ${result.status}</p>
+                    <p><strong>Success:</strong> ${result.success}</p>
+                    ${result.error ? `<p><strong>Error:</strong> ${result.error}</p>` : ''}
+                    <details>
+                        <summary>Response Data</summary>
+                        <pre>${JSON.stringify(result.data || result.error, null, 2)}</pre>
+                    </details>
+                    ${result.headers ? `
+                        <details>
+                            <summary>Response Headers</summary>
+                            <pre>${JSON.stringify(result.headers, null, 2)}</pre>
+                        </details>
+                    ` : ''}
+                </div>
+            `).join('')
+        }
+        
+        // Run tests on page load
+        runTests()
+    </script>
+</body>
+</html>

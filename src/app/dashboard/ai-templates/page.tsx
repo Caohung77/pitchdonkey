@@ -1,14 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/components/auth/AuthProvider'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { 
-  Mail, 
-  LogOut, 
   Search, 
   Plus,
   Sparkles,
@@ -16,7 +12,8 @@ import {
   Trash2,
   Eye,
   Copy,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react'
 import {
   Dialog,
@@ -30,15 +27,10 @@ import { Label } from '@/components/ui/label'
 import { AITemplate } from '@/lib/ai-templates'
 
 export default function AITemplatesPage() {
-  return (
-    <ProtectedRoute>
-      <AITemplatesContent />
-    </ProtectedRoute>
-  )
+  return <AITemplatesContent />
 }
 
 function AITemplatesContent() {
-  const { user, signOut } = useAuth()
   const [templates, setTemplates] = useState<AITemplate[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -93,9 +85,7 @@ function AITemplatesContent() {
     }
   }
 
-  const handleSignOut = async () => {
-    await signOut()
-  }
+
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -118,39 +108,17 @@ function AITemplatesContent() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <Mail className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900">ColdReach Pro</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Welcome, {user?.user_metadata?.full_name || user?.email}
-              </span>
-              <Button variant="outline" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
+    <div>
+      {/* Page Header */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">AI Templates</h1>
+            <p className="text-gray-600">Manage your AI personalization templates</p>
           </div>
+          <CreateTemplateDialog onTemplateCreated={fetchTemplates} />
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">AI Templates</h1>
-              <p className="text-gray-600">Manage your AI personalization templates</p>
-            </div>
-            <CreateTemplateDialog onTemplateCreated={fetchTemplates} />
-          </div>
-        </div>
+      </div>
 
         {/* Filters */}
         <Card className="mb-6">
@@ -293,7 +261,6 @@ function AITemplatesContent() {
             ))}
           </div>
         )}
-      </main>
     </div>
   )
 }

@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createServerSupabaseClient } from '@/lib/supabase'
 import { z } from 'zod'
 import { EmailValidationService } from './email-validation'
 import { contactSchema, updateContactSchema } from './validations'
@@ -10,17 +9,26 @@ export interface Contact {
   email: string
   first_name: string
   last_name: string
-  company_name?: string
-  job_title?: string
+  company?: string
+  position?: string
   website?: string
-  industry?: string
   phone?: string
   linkedin_url?: string
+  twitter_url?: string
+  country?: string
+  city?: string
+  timezone?: string
   custom_fields: Record<string, any>
   tags: string[]
-  status: 'active' | 'unsubscribed' | 'bounced' | 'deleted'
-  email_status: 'valid' | 'invalid' | 'risky' | 'unknown'
-  last_contacted?: string
+  segments: string[]
+  status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
+  unsubscribed_at?: string
+  last_contacted_at?: string
+  last_opened_at?: string
+  last_clicked_at?: string
+  last_replied_at?: string
+  ai_research_data: Record<string, any>
+  ai_personalization_score?: number
   created_at: string
   updated_at: string
 }
@@ -35,7 +43,7 @@ export interface ContactStats {
 }
 
 export class ContactService {
-  private supabase = createRouteHandlerClient({ cookies })
+  private supabase = createServerSupabaseClient()
 
   async createContact(userId: string, contactData: Partial<Contact>) {
     // Validate input data using Zod schema
@@ -64,7 +72,6 @@ export class ContactService {
         ...validatedData,
         email: EmailValidationService.normalizeEmail(validatedData.email),
         status: 'active',
-        email_status: emailStatus,
         custom_fields: validatedData.custom_fields || {},
         tags: validatedData.tags || [],
       })
@@ -90,8 +97,7 @@ export class ContactService {
       try {
         const emailValidation = await EmailValidationService.validateEmail(validatedUpdates.email)
         validatedUpdates.email = EmailValidationService.normalizeEmail(validatedUpdates.email)
-        // Update email status based on validation
-        ;(validatedUpdates as any).email_status = emailValidation.status
+        // Email validation completed (no email_status column in database)
       } catch (error) {
         console.warn('Email validation failed during update:', error)
       }
@@ -168,7 +174,7 @@ export class ContactService {
 
     // Apply filters
     if (search) {
-      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,company_name.ilike.%${search}%`)
+      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,company.ilike.%${search}%`)
     }
 
     if (status && status !== 'all') {
@@ -318,7 +324,6 @@ export class ContactService {
           ...validatedContact,
           email: normalizedEmail,
           status: 'active',
-          email_status: emailStatus,
           custom_fields: validatedContact.custom_fields || {},
           tags: validatedContact.tags || [],
         })

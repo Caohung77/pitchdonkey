@@ -1,15 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = createServerSupabaseClient()
 
     // Get email accounts
     const { data: emailAccounts, error: accountsError } = await supabase
@@ -20,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     if (accountsError) {
       console.error('Error fetching email accounts:', accountsError)
-      return NextResponse.json({ error: 'Failed to fetch email accounts' }, { status: 500 })
+      return handleApiError(accountsError)
     }
 
     // Get current date for daily usage calculation
@@ -150,13 +145,9 @@ export async function GET(request: NextRequest) {
       recommendations
     }
 
-    return NextResponse.json(healthData)
+    return createSuccessResponse(healthData)
 
   } catch (error) {
-    console.error('Error fetching account health:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

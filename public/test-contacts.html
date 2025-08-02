@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test New Contacts Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        .info { background-color: #d1ecf1; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Test New Contacts Page</h1>
+    <div id="results"></div>
+    
+    <div>
+        <button onclick="testContactsPage()">Test Contacts Page</button>
+        <button onclick="openContactsPage()">Open Contacts Page</button>
+    </div>
+    
+    <script>
+        function addResult(title, content, type = 'info') {
+            const results = document.getElementById('results')
+            const div = document.createElement('div')
+            div.className = `test ${type}`
+            div.innerHTML = `<h3>${title}</h3><pre>${JSON.stringify(content, null, 2)}</pre>`
+            results.appendChild(div)
+        }
+        
+        async function testContactsPage() {
+            document.getElementById('results').innerHTML = ''
+            
+            try {
+                // Test if the new contacts page loads
+                const response = await fetch('/contacts')
+                
+                addResult('Contacts Page Load Test', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    success: response.ok,
+                    contentType: response.headers.get('content-type')
+                }, response.ok ? 'success' : 'error')
+                
+                if (response.ok) {
+                    addResult('Test Result', 'New contacts page is accessible!', 'success')
+                } else {
+                    addResult('Test Result', 'Contacts page failed to load', 'error')
+                }
+                
+            } catch (error) {
+                addResult('Test Error', { error: error.message }, 'error')
+            }
+        }
+        
+        function openContactsPage() {
+            window.open('/contacts', '_blank')
+        }
+        
+        // Auto-run test on page load
+        testContactsPage()
+    </script>
+</body>
+</html>

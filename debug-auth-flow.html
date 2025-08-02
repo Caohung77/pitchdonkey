@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Flow Debug</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .step { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        .info { background-color: #d1ecf1; }
+        pre { background: #f8f9fa; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Authentication Flow Debug</h1>
+    <div id="steps"></div>
+    <button onclick="runDebug()">Run Debug</button>
+    
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        
+        const { createClient } = supabase
+        const supabaseClient = createClient(supabaseUrl, supabaseKey)
+        
+        async function runDebug() {
+            const stepsDiv = document.getElementById('steps')
+            stepsDiv.innerHTML = ''
+            
+            function addStep(title, content, type = 'info') {
+                const step = document.createElement('div')
+                step.className = `step ${type}`
+                step.innerHTML = `<h3>${title}</h3><pre>${JSON.stringify(content, null, 2)}</pre>`
+                stepsDiv.appendChild(step)
+            }
+            
+            try {
+                // Step 1: Check client-side session
+                addStep('Step 1: Client-side Session Check', 'Checking...', 'info')
+                const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession()
+                
+                if (sessionError) {
+                    addStep('Step 1: Client-side Session Check', { error: sessionError.message }, 'error')
+                    return
+                }
+                
+                addStep('Step 1: Client-side Session Check', {
+                    hasSession: !!session,
+                    userId: session?.user?.id,
+                    email: session?.user?.email,
+                    expiresAt: session?.expires_at
+                }, session ? 'success' : 'error')
+                
+                if (!session) {
+                    addStep('Authentication Required', 'Please sign in first', 'error')
+                    return
+                }
+                
+                // Step 2: Check cookies
+                addStep('Step 2: Cookie Check', {
+                    allCookies: document.cookie,
+                    supabaseCookies: document.cookie.split(';').filter(c => c.includes('supabase'))
+                }, 'info')
+                
+                // Step 3: Test session API
+                addStep('Step 3: Session API Test', 'Testing...', 'info')
+                const sessionResponse = await fetch('/api/auth/session')
+                const sessionData = await sessionResponse.json()
+                
+                addStep('Step 3: Session API Test', {
+                    status: sessionResponse.status,
+                    data: sessionData
+                }, sessionResponse.ok ? 'success' : 'error')
+                
+                // Step 4: Test user profile API
+                addStep('Step 4: User Profile API Test', 'Testing...', 'info')
+                const profileResponse = await fetch('/api/user/profile')
+                const profileData = await profileResponse.json()
+                
+                addStep('Step 4: User Profile API Test', {
+                    status: profileResponse.status,
+                    data: profileData
+                }, profileResponse.ok ? 'success' : 'error')
+                
+                // Step 5: Test contacts API
+                addStep('Step 5: Contacts API Test', 'Testing...', 'info')
+                const contactsResponse = await fetch('/api/contacts')
+                const contactsData = await contactsResponse.json()
+                
+                addStep('Step 5: Contacts API Test', {
+                    status: contactsResponse.status,
+                    data: contactsData
+                }, contactsResponse.ok ? 'success' : 'error')
+                
+                // Step 6: Test contacts stats API
+                addStep('Step 6: Contacts Stats API Test', 'Testing...', 'info')
+                const statsResponse = await fetch('/api/contacts/stats')
+                const statsData = await statsResponse.json()
+                
+                addStep('Step 6: Contacts Stats API Test', {
+                    status: statsResponse.status,
+                    data: statsData
+                }, statsResponse.ok ? 'success' : 'error')
+                
+            } catch (error) {
+                addStep('Debug Error', { error: error.message }, 'error')
+            }
+        }
+        
+        // Auto-run on page load
+        runDebug()
+    </script>
+</body>
+</html>

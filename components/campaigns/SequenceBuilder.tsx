@@ -58,7 +58,7 @@ export function SequenceBuilder({ sequence, onChange, errors = {} }: SequenceBui
       conditions: []
     }
     onChange([...sequence, newStep])
-    setExpandedSteps(prev => new Set([...prev, newStep.id]))
+    setExpandedSteps(prev => new Set([...Array.from(prev), newStep.id]))
   }
 
   const removeStep = (stepId: string) => {
@@ -289,7 +289,7 @@ export function SequenceBuilder({ sequence, onChange, errors = {} }: SequenceBui
                       <p className="text-red-500 text-sm mt-1">{errors[`step_${index}_content`]}</p>
                     )}
                     <p className="text-xs text-gray-500 mt-1">
-                      Tip: Use variables like {{first_name}}, {{company_name}}, {{job_title}} for personalization
+                      Tip: Use variables like {'{first_name}'}, {'{company_name}'}, {'{job_title}'} for personalization
                     </p>
                   </div>
 

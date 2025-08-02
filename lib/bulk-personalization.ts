@@ -1,5 +1,26 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { AIPersonalizationService, PersonalizationRequest } from './ai-providers'
+import { z } from 'zod'
+
+// Validation schema for bulk personalization requests
+export const bulkPersonalizationRequestSchema = z.object({
+  name: z.string().min(1, 'Job name is required').max(100, 'Job name must be less than 100 characters'),
+  description: z.string().max(500, 'Description must be less than 500 characters').optional(),
+  template_id: z.string().uuid('Invalid template ID').optional(),
+  custom_prompt: z.string().max(2000, 'Custom prompt must be less than 2000 characters').optional(),
+  contact_ids: z.array(z.string().uuid('Invalid contact ID')).min(1, 'At least one contact is required').max(1000, 'Maximum 1000 contacts allowed'),
+  variables: z.record(z.string()).default({}),
+  ai_provider: z.enum(['openai', 'anthropic'], {
+    required_error: 'AI provider is required',
+    invalid_type_error: 'AI provider must be either openai or anthropic'
+  })
+}).refine(
+  (data) => data.template_id || data.custom_prompt,
+  {
+    message: 'Either template_id or custom_prompt is required',
+    path: ['template_id']
+  }
+)
 
 export interface BulkPersonalizationJob {
   id: string

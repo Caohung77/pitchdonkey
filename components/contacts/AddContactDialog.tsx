@@ -1,39 +1,29 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { X, Plus } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Plus, AlertCircle } from 'lucide-react'
 
 interface AddContactDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  onSave: (contactData: any) => void
-  initialData?: any
+  onContactAdded: () => void
 }
 
-export function AddContactDialog({
-  isOpen,
-  onClose,
-  onSave,
-  initialData
-}: AddContactDialogProps) {
+function AddContactDialog({ onContactAdded }: AddContactDialogProps) {
+  const [open, setOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  
   const [formData, setFormData] = useState({
     email: '',
     first_name: '',
     last_name: '',
-    company_name: '',
-    job_title: '',
-    website: '',
+    company: '',
+    position: '',
     phone: '',
-    industry: '',
-    tags: [] as string[],
-    ...initialData
   })
-  
-  const [newTag, setNewTag] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -42,225 +32,155 @@ export function AddContactDialog({
     }))
   }
 
-  const handleAddTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tags: [...prev.tags, newTag.trim()]
-      }))
-      setNewTag('')
-    }
-  }
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
-    }))
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     
     if (!formData.email || !formData.first_name || !formData.last_name) {
-      alert('Please fill in all required fields')
+      setError('Please fill in all required fields')
       return
     }
 
     setIsSubmitting(true)
     
     try {
-      await onSave(formData)
-      onClose()
-      // Reset form
-      setFormData({
-        email: '',
-        first_name: '',
-        last_name: '',
-        company_name: '',
-        job_title: '',
-        website: '',
-        phone: '',
-        industry: '',
-        tags: []
+      const response = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
       })
+
+      if (response.ok) {
+        // Reset form
+        setFormData({
+          email: '',
+          first_name: '',
+          last_name: '',
+          company: '',
+          position: '',
+          phone: '',
+        })
+        setOpen(false)
+        onContactAdded()
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to add contact')
+      }
     } catch (error) {
-      console.error('Error saving contact:', error)
-      alert('Failed to save contact')
+      console.error('Error adding contact:', error)
+      setError(error instanceof Error ? error.message : 'Failed to add contact')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Contact
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>
-            {initialData ? 'Edit Contact' : 'Add New Contact'}
-          </DialogTitle>
+          <DialogTitle>Add New Contact</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Required Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Email Address <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder="john@example.com"
-                required
-              />
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center">
+              <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+              <span className="text-red-800 text-sm">{error}</span>
             </div>
+          </div>
+        )}
 
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">
+              <Label htmlFor="first_name">
                 First Name <span className="text-red-500">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
+                id="first_name"
                 type="text"
                 value={formData.first_name}
                 onChange={(e) => handleInputChange('first_name', e.target.value)}
-                className="w-full p-2 border rounded-md"
                 placeholder="John"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">
+              <Label htmlFor="last_name">
                 Last Name <span className="text-red-500">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
+                id="last_name"
                 type="text"
                 value={formData.last_name}
                 onChange={(e) => handleInputChange('last_name', e.target.value)}
-                className="w-full p-2 border rounded-md"
                 placeholder="Doe"
                 required
               />
             </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Company Name
-              </label>
-              <input
-                type="text"
-                value={formData.company_name}
-                onChange={(e) => handleInputChange('company_name', e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder="Acme Corp"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Job Title
-              </label>
-              <input
-                type="text"
-                value={formData.job_title}
-                onChange={(e) => handleInputChange('job_title', e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder="Software Engineer"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Website
-              </label>
-              <input
-                type="url"
-                value={formData.website}
-                onChange={(e) => handleInputChange('website', e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder="https://example.com"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder="+1 (555) 123-4567"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Industry
-              </label>
-              <input
-                type="text"
-                value={formData.industry}
-                onChange={(e) => handleInputChange('industry', e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder="Technology"
-              />
-            </div>
           </div>
 
-          {/* Tags Section */}
           <div>
-            <label className="block text-sm font-medium mb-2">Tags</label>
-            
-            {/* Existing Tags */}
-            {formData.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {formData.tags.map((tag, index) => (
-                  <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="ml-1 hover:text-red-600"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {/* Add New Tag */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                className="flex-1 p-2 border rounded-md"
-                placeholder="Add a tag..."
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleAddTag}
-                disabled={!newTag.trim()}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+            <Label htmlFor="email">
+              Email Address <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              placeholder="john@example.com"
+              required
+            />
           </div>
 
-          {/* Form Actions */}
-          <div className="flex justify-end space-x-3 pt-4 border-t">
+          <div>
+            <Label htmlFor="company">Company Name</Label>
+            <Input
+              id="company"
+              type="text"
+              value={formData.company}
+              onChange={(e) => handleInputChange('company', e.target.value)}
+              placeholder="Acme Corp"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="position">Position</Label>
+            <Input
+              id="position"
+              type="text"
+              value={formData.position}
+              onChange={(e) => handleInputChange('position', e.target.value)}
+              placeholder="Software Engineer"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="phone">Phone Number</Label>
+            <Input
+              id="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => handleInputChange('phone', e.target.value)}
+              placeholder="+1 (555) 123-4567"
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
+              onClick={() => setOpen(false)}
               disabled={isSubmitting}
             >
               Cancel
@@ -269,7 +189,7 @@ export function AddContactDialog({
               type="submit"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Saving...' : (initialData ? 'Update Contact' : 'Add Contact')}
+              {isSubmitting ? 'Adding...' : 'Add Contact'}
             </Button>
           </div>
         </form>
@@ -277,3 +197,5 @@ export function AddContactDialog({
     </Dialog>
   )
 }
+
+export default AddContactDialog

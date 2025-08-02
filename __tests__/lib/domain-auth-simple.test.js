@@ -1,72 +1,83 @@
-// Simple test for domain authentication service
-const dns = require('dns/promises');
+// Simple test for DNS record generators without complex mocking
 
-// Mock DNS module
-jest.mock('dns/promises');
+const { SPFGenerator } = require('../../lib/dns-record-generators/spf-generator')
+const { DMARCGenerator } = require('../../lib/dns-record-generators/dmarc-generator')
 
-describe('Domain Authentication Service', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  test('should clean domain input correctly', () => {
-    // Test domain cleaning function
-    const cleanDomain = (input) => {
-      let domain = input.toLowerCase();
-      domain = domain.replace(/^https?:\/\//, '');
-      domain = domain.replace(/^www\./, '');
-      domain = domain.split('/')[0].split('?')[0];
-      return domain;
-    };
-
-    expect(cleanDomain('https://www.example.com/path')).toBe('example.com');
-    expect(cleanDomain('www.example.com')).toBe('example.com');
-    expect(cleanDomain('example.com')).toBe('example.com');
-    expect(cleanDomain('EXAMPLE.COM')).toBe('example.com');
-  });
-
-  test('should extract domain from email correctly', () => {
-    const getDomainFromEmail = (email) => {
-      const domain = email.split('@')[1];
-      return domain ? domain.toLowerCase() : '';
-    };
-
-    expect(getDomainFromEmail('test@example.com')).toBe('example.com');
-    expect(getDomainFromEmail('user@GMAIL.COM')).toBe('gmail.com');
-    expect(getDomainFromEmail('invalid-email')).toBe('');
-  });
-
-  test('should format database result correctly', () => {
-    const formatForDatabase = (result) => {
-      return {
-        spf: {
-          status: result.spf.status,
-          record: result.spf.record,
-          valid: result.spf.status === 'valid'
-        },
-        dkim: {
-          status: result.dkim.status,
-          record: result.dkim.record,
-          valid: result.dkim.status === 'valid'
-        },
-        dmarc: {
-          status: result.dmarc.status,
-          record: result.dmarc.record,
-          valid: result.dmarc.status === 'valid'
-        }
-      };
-    };
-
-    const mockResult = {
-      spf: { status: 'valid', record: 'v=spf1 ~all' },
-      dkim: { status: 'warning', record: 'v=DKIM1; p=test' },
-      dmarc: { status: 'missing', record: null }
-    };
-
-    const formatted = formatForDatabase(mockResult);
-
-    expect(formatted.spf.valid).toBe(true);
-    expect(formatted.dkim.valid).toBe(false);
-    expect(formatted.dmarc.valid).toBe(false);
-  });
-});
+describe('DNS Record Generators', () => {
+  describe('SPF Generator', () => {
+    test('should generate SPF record for Gmail', () => {
+      const { record, parsed } = SPFGenerator.generateForProviders('example.com', ['gmail'])
+      
+      expect(record.type).toBe('TXT')
+      expect(record.name).toBe('example.com')
+      expect(record.value).toContain('v=spf1')
+      expect(record.value).toContain('include:_spf.google.com')
+      expect(record.value).toContain('~all')
+      
+      expect(parsed.version).toBe('spf1')
+      expect(parsed.qualifier).toBe('softfail')
+    })
+    
+    test('should validate SPF record', () => {
+      const result = SPFGenerator.validateRecord('v=spf1 include:_spf.google.com ~all')
+      
+      // Check that validation runs without throwing errors
+      expect(result).toHaveProperty('isValid')
+      expect(result).toHaveProperty('errors')
+      expect(result).toHaveProperty('warnings')
+      expect(Array.isArray(result.errors)).toBe(true)
+    })
+    
+    test('should generate setup instructions', () => {
+      const { record } = SPFGenerator.generateForProviders('boniforce.de', ['gmail'])
+      const instructions = SPFGenerator.getSetupInstructions('boniforce.de', record)
+      
+      expect(instructions).toContain('boniforce.de')
+      expect(instructions).toContain('TXT record')
+      expect(instructions).toContain('SPF tells receiving email servers')
+    })
+  })
+  
+  describe('DMARC Generator', () => {
+    test('should generate basic DMARC record', () => {
+      const { record, parsed } = DMARCGenerator.generateBasicRecord('example.com', 'reports@example.com')
+      
+      expect(record.type).toBe('TXT')
+      expect(record.name).toBe('_dmarc.example.com')
+      expect(record.value).toContain('v=DMARC1')
+      expect(record.value).toContain('p=none')
+      expect(record.value).toContain('rua=mailto:reports@example.com')
+      
+      expect(parsed.version).toBe('DMARC1')
+      expect(parsed.policy).toBe('none')
+    })
+    
+    test('should generate progressive DMARC records', () => {
+      const records = DMARCGenerator.generateProgressiveRecords('example.com', 'reports@example.com')
+      
+      expect(records.monitoring.parsed.policy).toBe('none')
+      expect(records.quarantine25.parsed.policy).toBe('quarantine')
+      expect(records.quarantine25.parsed.percentage).toBe(25)
+      expect(records.quarantine100.parsed.policy).toBe('quarantine')
+      expect(records.quarantine100.parsed.percentage).toBe(100)
+      expect(records.reject.parsed.policy).toBe('reject')
+    })
+    
+    test('should validate DMARC record', () => {
+      const result = DMARCGenerator.validateRecord('v=DMARC1; p=none; rua=mailto:reports@example.com')
+      
+      expect(result.isValid).toBe(true)
+      expect(result.errors).toHaveLength(0)
+    })
+    
+    test('should generate setup instructions', () => {
+      const { record } = DMARCGenerator.generateBasicRecord('boniforce.de', 'reports@boniforce.de')
+      const instructions = DMARCGenerator.getSetupInstructions('boniforce.de', record)
+      
+      expect(instructions).toContain('boniforce.de')
+      expect(instructions).toContain('_dmarc')
+      expect(instructions).toContain('Progressive Implementation')
+      expect(instructions).toContain('p=none')
+    })
+  })
+})

@@ -1,15 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // For now, we'll return mock activity data
     // In a real implementation, you'd have an activity log table
@@ -66,13 +59,9 @@ export async function GET(request: NextRequest) {
       .limit(10)
     */
 
-    return NextResponse.json(mockActivity)
+    return createSuccessResponse(mockActivity)
 
   } catch (error) {
-    console.error('Error fetching activity:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

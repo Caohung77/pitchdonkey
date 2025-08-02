@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase-client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 interface User {
   id: string
@@ -13,6 +15,7 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, name?: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -23,54 +26,126 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check for existing session
-    checkSession()
+    console.log('AuthProvider: Initializing...')
+    
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      console.log('AuthProvider: Initial session check:', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        error: error?.message
+      })
+      
+      if (session?.user) {
+        setUserFromSupabaseUser(session.user)
+      } else {
+        console.log('AuthProvider: No initial session found')
+      }
+      setLoading(false)
+    })
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('AuthProvider: Auth state change:', {
+        event,
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userId: session?.user?.id
+      })
+      
+      if (session?.user) {
+        console.log('AuthProvider: Setting user from session')
+        setUserFromSupabaseUser(session.user)
+      } else {
+        console.log('AuthProvider: No session/user, clearing user state')
+        setUser(null)
+      }
+      setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  const checkSession = async () => {
-    try {
-      // Check for user info in cookies
-      const userInfo = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('user-info='))
-        ?.split('=')[1]
+  const setUserFromSupabaseUser = async (supabaseUser: SupabaseUser) => {
+    // Create fallback user data immediately
+    const fallbackUser = {
+      id: supabaseUser.id,
+      email: supabaseUser.email!,
+      name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+      plan: 'starter'
+    }
 
-      if (userInfo) {
-        const userData = JSON.parse(decodeURIComponent(userInfo))
-        setUser(userData)
+    // Set fallback user immediately to ensure authentication works
+    setUser(fallbackUser)
+
+    // Try to get enhanced user profile from our API in the background
+    // But don't let API failures affect the authentication state
+    try {
+      const response = await fetch('/api/user/profile', {
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.data) {
+          // Update with enhanced profile data
+          setUser({
+            id: result.data.id,
+            email: result.data.email,
+            name: result.data.name || fallbackUser.name,
+            plan: result.data.plan || 'starter'
+          })
+        }
+      } else {
+        console.warn('User profile API returned:', response.status, 'but keeping fallback user')
       }
     } catch (error) {
-      console.error('Session check failed:', error)
-    } finally {
-      setLoading(false)
+      console.warn('Error fetching enhanced user profile (keeping fallback):', error)
+      // Keep the fallback user - don't clear the user state
     }
   }
 
   const signIn = async (email: string, password: string) => {
-    const response = await fetch('/api/auth/signin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     })
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Sign in failed')
+    if (error) {
+      throw new Error(error.message)
     }
+  }
 
-    const data = await response.json()
-    setUser(data.user)
+  const signUp = async (email: string, password: string, name?: string) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: name || email.split('@')[0],
+        }
+      }
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
   }
 
   const signOut = async () => {
-    // Clear cookies
-    document.cookie = 'session-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    document.cookie = 'user-info=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    setUser(null)
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      throw new Error(error.message)
+    }
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   )

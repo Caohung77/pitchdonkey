@@ -75,18 +75,24 @@ export default function DashboardPage() {
       
       // Fetch dashboard stats
       const statsResponse = await fetch('/api/dashboard/stats')
-      const statsData = await statsResponse.json()
-      setStats(statsData)
+      if (statsResponse.ok) {
+        const statsResult = await statsResponse.json()
+        setStats(statsResult.success ? statsResult.data : statsResult)
+      }
 
       // Fetch account health
       const healthResponse = await fetch('/api/dashboard/health')
-      const healthData = await healthResponse.json()
-      setAccountHealth(healthData)
+      if (healthResponse.ok) {
+        const healthResult = await healthResponse.json()
+        setAccountHealth(healthResult.success ? healthResult.data : healthResult)
+      }
 
       // Fetch recent activity
       const activityResponse = await fetch('/api/dashboard/activity')
-      const activityData = await activityResponse.json()
-      setRecentActivity(activityData)
+      if (activityResponse.ok) {
+        const activityResult = await activityResponse.json()
+        setRecentActivity(activityResult.success ? activityResult.data : activityResult)
+      }
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error)

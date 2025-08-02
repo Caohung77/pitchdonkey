@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { supabase } from '@/lib/supabase-client'
 
 export default function SignInPage() {
   const router = useRouter()
@@ -23,21 +24,16 @@ export default function SignInPage() {
     setError('')
 
     try {
-      const response = await fetch('/api/auth/signin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
       })
 
-      if (response.ok) {
-        // For now, just redirect to dashboard
-        // In a real app, you'd handle the JWT token here
+      if (error) {
+        setError(error.message)
+      } else if (data.user) {
+        // Successful login - redirect to dashboard
         router.push('/dashboard')
-      } else {
-        const data = await response.json()
-        setError(data.error || 'Invalid credentials')
       }
     } catch (error) {
       setError('Something went wrong. Please try again.')
@@ -46,9 +42,30 @@ export default function SignInPage() {
     }
   }
 
-  const handleDemoLogin = () => {
-    // For demo purposes, just redirect to dashboard
-    router.push('/dashboard')
+  const handleDemoLogin = async () => {
+    setLoading(true)
+    setError('')
+    
+    try {
+      // Try to sign in with the existing demo user
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: 'banbau@gmx.net',
+        password: 'demo123456', // You'll need to set this password
+      })
+
+      if (error) {
+        // If demo user doesn't work, just redirect anyway for demo purposes
+        console.warn('Demo login failed, redirecting anyway:', error.message)
+        router.push('/dashboard')
+      } else if (data.user) {
+        router.push('/dashboard')
+      }
+    } catch (error) {
+      console.warn('Demo login error, redirecting anyway:', error)
+      router.push('/dashboard')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

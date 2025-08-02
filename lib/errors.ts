@@ -677,3 +677,35 @@ export const retryConfigSchema = z.object({
   backoffMultiplier: z.number().min(1),
   retryableErrors: z.array(z.nativeEnum(ErrorType))
 })
+
+/**
+ * API error handler for Next.js API routes
+ */
+export async function handleApiError(error: unknown): Promise<Response> {
+  let appError: AppError
+
+  if (error instanceof AppError) {
+    appError = error
+  } else if (error instanceof Error) {
+    // Convert generic error to AppError
+    appError = await errorHandler.handleError(error, {})
+  } else {
+    appError = new AppError(
+      'Unknown error occurred',
+      ErrorType.UNKNOWN,
+      ErrorSeverity.MEDIUM
+    )
+    await errorHandler.handleError(appError)
+  }
+
+  // Return appropriate HTTP response
+  return new Response(
+    JSON.stringify(errorHandler.createErrorResponse(appError)),
+    {
+      status: appError.statusCode,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  )
+}

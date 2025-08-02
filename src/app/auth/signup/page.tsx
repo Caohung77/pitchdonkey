@@ -51,12 +51,15 @@ export default function SignUpPage() {
         }),
       })
 
+      const data = await response.json()
+
       if (response.ok) {
-        // For now, just redirect to dashboard
-        // In a real app, you'd handle the JWT token here
-        router.push('/dashboard')
+        if (data.requiresConfirmation) {
+          setError('Please check your email to confirm your account before signing in.')
+        } else {
+          router.push('/dashboard')
+        }
       } else {
-        const data = await response.json()
         setError(data.error || 'Failed to create account')
       }
     } catch (error) {

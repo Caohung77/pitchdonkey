@@ -1,465 +1,500 @@
-import dns from 'dns/promises'
+import { createServerSupabaseClient } from '@/lib/supabase'
+import { 
+  DomainAuth, 
+  DomainAuthOverview, 
+  DNSProviderCredentials,
+  DomainVerificationHistory,
+  CreateDomainAuthRequest,
+  UpdateDomainAuthRequest,
+  DomainAuthError,
+  DNSLookupError,
+  ValidationError,
+  VerificationResult,
+  DomainVerificationStatus
+} from '@/lib/types/domain-auth'
+import { DomainVerificationEngine } from '@/lib/domain-verification-engine'
+import { updateEmailAccountVerificationStatus } from '@/lib/domain-auth-integration'
 
-export interface DomainAuthRecord {
-  type: 'SPF' | 'DKIM' | 'DMARC'
-  status: 'valid' | 'warning' | 'missing' | 'unknown'
-  record: string | null
-  issues: string[]
-  recommendations: string[]
-}
-
-export interface DomainAuthResult {
-  domain: string
-  spf: DomainAuthRecord
-  dkim: DomainAuthRecord
-  dmarc: DomainAuthRecord
-  overall_score: number
-  overall_status: 'excellent' | 'good' | 'warning' | 'critical'
-  recommendations: string[]
-  last_checked: string
-}
-
+/**
+ * Domain Authentication Service
+ * Handles CRUD operations for domain authentication records
+ */
 export class DomainAuthService {
-  private static readonly DKIM_SELECTORS = [
-    'default',
-    'google',
-    'gmail',
-    'outlook',
-    'mail',
-    'dkim',
-    'selector1',
-    'selector2',
-    'k1',
-    'k2',
-    's1',
-    's2'
-  ]
+  private supabase = createServerSupabaseClient()
 
   /**
-   * Check domain authentication records (SPF, DKIM, DMARC)
+   * Get all domain authentication records for a user
    */
-  static async checkDomainAuthentication(domain: string): Promise<DomainAuthResult> {
-    const cleanDomain = this.cleanDomain(domain)
-    const timestamp = new Date().toISOString()
-
+  async getUserDomains(userId: string): Promise<DomainAuthOverview[]> {
     try {
-      const [spfResult, dkimResult, dmarcResult] = await Promise.all([
-        this.checkSPF(cleanDomain),
-        this.checkDKIM(cleanDomain),
-        this.checkDMARC(cleanDomain)
-      ])
+      const { data, error } = await this.supabase
+        .from('domain_auth_overview')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
 
-      const overallScore = this.calculateOverallScore(spfResult, dkimResult, dmarcResult)
-      const overallStatus = this.getOverallStatus(overallScore)
-      const recommendations = this.generateRecommendations(spfResult, dkimResult, dmarcResult, overallStatus)
-
-      return {
-        domain: cleanDomain,
-        spf: spfResult,
-        dkim: dkimResult,
-        dmarc: dmarcResult,
-        overall_score: overallScore,
-        overall_status: overallStatus,
-        recommendations,
-        last_checked: timestamp
+      if (error) {
+        throw new DomainAuthError(`Failed to fetch user domains: ${error.message}`, 'FETCH_ERROR')
       }
+
+      return data || []
     } catch (error) {
-      // If there's a general error, return unknown status for all records
-      return {
-        domain: cleanDomain,
-        spf: this.createUnknownRecord('SPF'),
-        dkim: this.createUnknownRecord('DKIM'),
-        dmarc: this.createUnknownRecord('DMARC'),
-        overall_score: 0,
-        overall_status: 'critical',
-        recommendations: ['🔴 Critical: Unable to check domain authentication due to DNS issues'],
-        last_checked: timestamp
-      }
+      console.error('Error fetching user domains:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to fetch domains', 'UNKNOWN_ERROR')
     }
   }
 
   /**
-   * Clean domain input by removing protocol, www, and paths
+   * Get a specific domain authentication record
    */
-  private static cleanDomain(input: string): string {
-    let domain = input.toLowerCase()
-    
-    // Remove protocol
-    domain = domain.replace(/^https?:\/\//, '')
-    
-    // Remove www
-    domain = domain.replace(/^www\./, '')
-    
-    // Remove path and query parameters
-    domain = domain.split('/')[0].split('?')[0]
-    
-    return domain
+  async getDomain(userId: string, domain: string): Promise<DomainAuth | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('domain_auth')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('domain', domain)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null // No record found
+        }
+        throw new DomainAuthError(`Failed to fetch domain: ${error.message}`, 'FETCH_ERROR', domain)
+      }
+
+      return data
+    } catch (error) {
+      console.error('Error fetching domain:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to fetch domain', 'UNKNOWN_ERROR', domain)
+    }
   }
 
   /**
-   * Check SPF record
+   * Create a new domain authentication record
    */
-  private static async checkSPF(domain: string): Promise<DomainAuthRecord> {
+  async createDomain(userId: string, request: CreateDomainAuthRequest): Promise<DomainAuth> {
     try {
-      const txtRecords = await dns.resolveTxt(domain)
-      const spfRecords = txtRecords
-        .flat()
-        .filter(record => record.startsWith('v=spf1'))
-
-      if (spfRecords.length === 0) {
-        return {
-          type: 'SPF',
-          status: 'missing',
-          record: null,
-          issues: ['No SPF record found'],
-          recommendations: ['Add an SPF record to prevent email spoofing']
-        }
+      const domainData = {
+        user_id: userId,
+        domain: request.domain.toLowerCase(),
+        dns_provider: request.dns_provider || 'manual',
+        auto_configured: request.auto_configure || false,
       }
 
-      if (spfRecords.length > 1) {
-        return {
-          type: 'SPF',
-          status: 'warning',
-          record: spfRecords[0],
-          issues: ['Multiple SPF records found'],
-          recommendations: ['Consolidate into a single SPF record']
+      const { data, error } = await this.supabase
+        .from('domain_auth')
+        .insert(domainData)
+        .select()
+        .single()
+
+      if (error) {
+        if (error.code === '23505') {
+          throw new DomainAuthError('Domain already exists for this user', 'DUPLICATE_DOMAIN', request.domain)
         }
+        throw new DomainAuthError(`Failed to create domain: ${error.message}`, 'CREATE_ERROR', request.domain)
       }
 
-      const spfRecord = spfRecords[0]
-      const issues = this.analyzeSPFRecord(spfRecord)
-      const status = issues.length > 0 ? 'warning' : 'valid'
+      return data
+    } catch (error) {
+      console.error('Error creating domain:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to create domain', 'UNKNOWN_ERROR', request.domain)
+    }
+  }
 
-      return {
-        type: 'SPF',
+  /**
+   * Update a domain authentication record
+   */
+  async updateDomain(userId: string, domain: string, request: UpdateDomainAuthRequest): Promise<DomainAuth> {
+    try {
+      const updateData = {
+        ...request,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { data, error } = await this.supabase
+        .from('domain_auth')
+        .update(updateData)
+        .eq('user_id', userId)
+        .eq('domain', domain)
+        .select()
+        .single()
+
+      if (error) {
+        throw new DomainAuthError(`Failed to update domain: ${error.message}`, 'UPDATE_ERROR', domain)
+      }
+
+      return data
+    } catch (error) {
+      console.error('Error updating domain:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to update domain', 'UNKNOWN_ERROR', domain)
+    }
+  }
+
+  /**
+   * Delete a domain authentication record
+   */
+  async deleteDomain(userId: string, domain: string): Promise<void> {
+    try {
+      const { error } = await this.supabase
+        .from('domain_auth')
+        .delete()
+        .eq('user_id', userId)
+        .eq('domain', domain)
+
+      if (error) {
+        throw new DomainAuthError(`Failed to delete domain: ${error.message}`, 'DELETE_ERROR', domain)
+      }
+    } catch (error) {
+      console.error('Error deleting domain:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to delete domain', 'UNKNOWN_ERROR', domain)
+    }
+  }
+
+  /**
+   * Update verification status for a domain
+   */
+  async updateVerificationStatus(
+    userId: string, 
+    domain: string, 
+    type: 'spf' | 'dkim' | 'dmarc', 
+    verified: boolean, 
+    record?: string, 
+    errorMessage?: string
+  ): Promise<void> {
+    try {
+      const updateData: any = {
+        [`${type}_verified`]: verified,
+        [`${type}_last_checked`]: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      if (record) {
+        updateData[`${type}_record`] = record
+      }
+
+      if (errorMessage) {
+        updateData[`${type}_error_message`] = errorMessage
+      } else {
+        updateData[`${type}_error_message`] = null
+      }
+
+      const { error } = await this.supabase
+        .from('domain_auth')
+        .update(updateData)
+        .eq('user_id', userId)
+        .eq('domain', domain)
+
+      if (error) {
+        throw new DomainAuthError(`Failed to update verification status: ${error.message}`, 'UPDATE_ERROR', domain, type)
+      }
+    } catch (error) {
+      console.error('Error updating verification status:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to update verification status', 'UNKNOWN_ERROR', domain, type)
+    }
+  }
+
+  /**
+   * Add verification history record
+   */
+  async addVerificationHistory(
+    domainAuthId: string,
+    type: 'spf' | 'dkim' | 'dmarc',
+    status: boolean,
+    errorMessage?: string,
+    dnsResponse?: string,
+    responseTimeMs?: number
+  ): Promise<void> {
+    try {
+      const historyData = {
+        domain_auth_id: domainAuthId,
+        verification_type: type,
         status,
-        record: spfRecord,
-        issues,
-        recommendations: issues.length > 0 ? ['Review and fix SPF record issues'] : []
+        error_message: errorMessage,
+        dns_response: dnsResponse,
+        response_time_ms: responseTimeMs,
+      }
+
+      const { error } = await this.supabase
+        .from('domain_verification_history')
+        .insert(historyData)
+
+      if (error) {
+        throw new DomainAuthError(`Failed to add verification history: ${error.message}`, 'HISTORY_ERROR')
       }
     } catch (error) {
-      return this.createUnknownRecord('SPF')
+      console.error('Error adding verification history:', error)
+      // Don't throw here as this is not critical for the main operation
     }
   }
 
   /**
-   * Analyze SPF record for common issues
+   * Get verification history for a domain
    */
-  private static analyzeSPFRecord(record: string): string[] {
-    const issues: string[] = []
-
-    // Check for too many DNS lookups (includes and redirects)
-    const includeCount = (record.match(/include:/g) || []).length
-    const redirectCount = (record.match(/redirect=/g) || []).length
-    const totalLookups = includeCount + redirectCount
-
-    if (totalLookups > 10) {
-      issues.push('Too many DNS lookups (limit is 10)')
-    }
-
-    // Check for proper termination
-    if (!record.includes('-all') && !record.includes('~all') && !record.includes('+all') && !record.includes('?all')) {
-      issues.push('SPF record missing proper termination mechanism')
-    }
-
-    // Check for dangerous +all
-    if (record.includes('+all')) {
-      issues.push('SPF record uses +all which allows all senders')
-    }
-
-    // Check for syntax issues
-    if (!record.startsWith('v=spf1 ')) {
-      issues.push('SPF record has invalid syntax')
-    }
-
-    return issues
-  }
-
-  /**
-   * Check DKIM records
-   */
-  private static async checkDKIM(domain: string): Promise<DomainAuthRecord> {
+  async getVerificationHistory(userId: string, domain: string, limit = 50): Promise<DomainVerificationHistory[]> {
     try {
-      let foundRecord: string | null = null
-      let foundSelector: string | null = null
+      const { data, error } = await this.supabase
+        .from('domain_verification_history')
+        .select(`
+          *,
+          domain_auth!inner(user_id, domain)
+        `)
+        .eq('domain_auth.user_id', userId)
+        .eq('domain_auth.domain', domain)
+        .order('checked_at', { ascending: false })
+        .limit(limit)
 
-      // Try common DKIM selectors
-      for (const selector of this.DKIM_SELECTORS) {
-        try {
-          const dkimDomain = `${selector}._domainkey.${domain}`
-          const txtRecords = await dns.resolveTxt(dkimDomain)
-          const dkimRecords = txtRecords
-            .flat()
-            .filter(record => record.startsWith('v=DKIM1'))
-
-          if (dkimRecords.length > 0) {
-            foundRecord = dkimRecords[0]
-            foundSelector = selector
-            break
-          }
-        } catch (error) {
-          // Continue to next selector
-          continue
-        }
+      if (error) {
+        throw new DomainAuthError(`Failed to fetch verification history: ${error.message}`, 'FETCH_ERROR', domain)
       }
 
-      if (!foundRecord) {
-        return {
-          type: 'DKIM',
-          status: 'missing',
-          record: null,
-          issues: ['No DKIM records found for common selectors'],
-          recommendations: ['Set up DKIM signing with your email provider']
-        }
+      return data || []
+    } catch (error) {
+      console.error('Error fetching verification history:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to fetch verification history', 'UNKNOWN_ERROR', domain)
+    }
+  }
+
+  /**
+   * Get domains that need verification (haven't been checked recently)
+   */
+  async getDomainsNeedingVerification(userId: string, hoursThreshold = 24): Promise<DomainAuth[]> {
+    try {
+      const thresholdDate = new Date()
+      thresholdDate.setHours(thresholdDate.getHours() - hoursThreshold)
+
+      const { data, error } = await this.supabase
+        .from('domain_auth')
+        .select('*')
+        .eq('user_id', userId)
+        .or(`spf_last_checked.is.null,spf_last_checked.lt.${thresholdDate.toISOString()},dkim_last_checked.is.null,dkim_last_checked.lt.${thresholdDate.toISOString()},dmarc_last_checked.is.null,dmarc_last_checked.lt.${thresholdDate.toISOString()}`)
+
+      if (error) {
+        throw new DomainAuthError(`Failed to fetch domains needing verification: ${error.message}`, 'FETCH_ERROR')
       }
 
-      const issues = this.analyzeDKIMRecord(foundRecord)
-      const status = issues.length > 0 ? 'warning' : 'valid'
+      return data || []
+    } catch (error) {
+      console.error('Error fetching domains needing verification:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to fetch domains needing verification', 'UNKNOWN_ERROR')
+    }
+  }
+
+  /**
+   * Get dashboard statistics for a user
+   */
+  async getDashboardStats(userId: string) {
+    try {
+      const domains = await this.getUserDomains(userId)
+      
+      const stats = {
+        totalDomains: domains.length,
+        fullyVerified: domains.filter(d => d.fully_verified).length,
+        partiallyVerified: domains.filter(d => !d.fully_verified && (d.spf_verified || d.dkim_verified || d.dmarc_verified)).length,
+        unverified: domains.filter(d => !d.spf_verified && !d.dkim_verified && !d.dmarc_verified).length,
+      }
+
+      const overallHealth = this.calculateOverallHealth(domains)
 
       return {
-        type: 'DKIM',
-        status,
-        record: foundRecord,
-        issues,
-        recommendations: issues.length > 0 ? ['Review and fix DKIM record issues'] : []
+        domains,
+        stats,
+        overallHealth,
       }
     } catch (error) {
-      return this.createUnknownRecord('DKIM')
+      console.error('Error getting dashboard stats:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to get dashboard stats', 'UNKNOWN_ERROR')
     }
   }
 
   /**
-   * Analyze DKIM record for common issues
+   * Verify domain authentication records and update database
    */
-  private static analyzeDKIMRecord(record: string): string[] {
-    const issues: string[] = []
-
-    // Check for empty public key
-    const publicKeyMatch = record.match(/p=([^;]*)/)
-    if (!publicKeyMatch || !publicKeyMatch[1] || publicKeyMatch[1].trim() === '') {
-      issues.push('DKIM public key is empty')
-    }
-
-    // Check for deprecated SHA-1
-    if (record.includes('h=sha1')) {
-      issues.push('DKIM uses SHA-1 which is deprecated')
-    }
-
-    // Check for valid syntax
-    if (!record.startsWith('v=DKIM1')) {
-      issues.push('DKIM record has invalid syntax')
-    }
-
-    return issues
-  }
-
-  /**
-   * Check DMARC record
-   */
-  private static async checkDMARC(domain: string): Promise<DomainAuthRecord> {
+  async verifyDomain(userId: string, domain: string, dkimSelector?: string): Promise<DomainVerificationStatus> {
     try {
-      const dmarcDomain = `_dmarc.${domain}`
-      const txtRecords = await dns.resolveTxt(dmarcDomain)
-      const dmarcRecords = txtRecords
-        .flat()
-        .filter(record => record.startsWith('v=DMARC1'))
-
-      if (dmarcRecords.length === 0) {
-        return {
-          type: 'DMARC',
-          status: 'missing',
-          record: null,
-          issues: ['No DMARC record found'],
-          recommendations: ['Add a DMARC record to protect against email spoofing']
-        }
+      // Get the domain record to ensure it exists
+      const domainRecord = await this.getDomain(userId, domain)
+      if (!domainRecord) {
+        throw new DomainAuthError('Domain not found', 'NOT_FOUND', domain)
       }
 
-      if (dmarcRecords.length > 1) {
-        return {
-          type: 'DMARC',
-          status: 'warning',
-          record: dmarcRecords[0],
-          issues: ['Multiple DMARC records found'],
-          recommendations: ['Use only one DMARC record']
-        }
+      // Use the stored DKIM selector if not provided
+      const selector = dkimSelector || domainRecord.dkim_selector || 'coldreach2024'
+
+      // Perform verification
+      const verificationStatus = await DomainVerificationEngine.verifyAll(domain, selector)
+
+      // Update database with results
+      await this.updateVerificationResults(userId, domain, verificationStatus, domainRecord.id)
+
+      // Update email account verification status
+      await updateEmailAccountVerificationStatus(userId, domain)
+
+      return verificationStatus
+    } catch (error) {
+      console.error('Error verifying domain:', error)
+      throw error instanceof DomainAuthError ? error : new DomainAuthError('Failed to verify domain', 'VERIFICATION_ERROR', domain)
+    }
+  }
+
+  /**
+   * Update database with verification results
+   */
+  private async updateVerificationResults(
+    userId: string, 
+    domain: string, 
+    status: DomainVerificationStatus, 
+    domainAuthId: string
+  ): Promise<void> {
+    try {
+      // Update SPF status
+      if (status.spf) {
+        await this.updateVerificationStatus(
+          userId,
+          domain,
+          'spf',
+          status.spf.success,
+          status.spf.record?.raw,
+          status.spf.success ? undefined : status.spf.validation.errors.join('; ')
+        )
+
+        // Add to history
+        await this.addVerificationHistory(
+          domainAuthId,
+          'spf',
+          status.spf.success,
+          status.spf.success ? undefined : status.spf.validation.errors.join('; '),
+          JSON.stringify(status.spf.record),
+          status.spf.responseTime
+        )
       }
 
-      const dmarcRecord = dmarcRecords[0]
-      const issues = this.analyzeDMARCRecord(dmarcRecord)
-      const status = issues.length > 0 ? 'warning' : 'valid'
+      // Update DKIM status
+      if (status.dkim) {
+        await this.updateVerificationStatus(
+          userId,
+          domain,
+          'dkim',
+          status.dkim.success,
+          status.dkim.record?.raw,
+          status.dkim.success ? undefined : status.dkim.validation.errors.join('; ')
+        )
 
-      return {
-        type: 'DMARC',
-        status,
-        record: dmarcRecord,
-        issues,
-        recommendations: issues.length > 0 ? ['Review and fix DMARC record issues'] : []
+        // Add to history
+        await this.addVerificationHistory(
+          domainAuthId,
+          'dkim',
+          status.dkim.success,
+          status.dkim.success ? undefined : status.dkim.validation.errors.join('; '),
+          JSON.stringify(status.dkim.record),
+          status.dkim.responseTime
+        )
+      }
+
+      // Update DMARC status
+      if (status.dmarc) {
+        await this.updateVerificationStatus(
+          userId,
+          domain,
+          'dmarc',
+          status.dmarc.success,
+          status.dmarc.record?.raw,
+          status.dmarc.success ? undefined : status.dmarc.validation.errors.join('; ')
+        )
+
+        // Add to history
+        await this.addVerificationHistory(
+          domainAuthId,
+          'dmarc',
+          status.dmarc.success,
+          status.dmarc.success ? undefined : status.dmarc.validation.errors.join('; '),
+          JSON.stringify(status.dmarc.record),
+          status.dmarc.responseTime
+        )
       }
     } catch (error) {
-      return this.createUnknownRecord('DMARC')
+      console.error('Error updating verification results:', error)
+      // Don't throw here as the verification itself succeeded
     }
   }
 
   /**
-   * Analyze DMARC record for common issues
+   * Verify multiple domains in batch
    */
-  private static analyzeDMARCRecord(record: string): string[] {
-    const issues: string[] = []
+  async verifyMultipleDomains(userId: string, domains: string[]): Promise<DomainVerificationStatus[]> {
+    const results: DomainVerificationStatus[] = []
 
-    // Check policy
-    const policyMatch = record.match(/p=([^;]*)/i)
-    if (!policyMatch) {
-      issues.push('DMARC record missing policy')
-    } else {
-      const policy = policyMatch[1].toLowerCase()
-      if (!['none', 'quarantine', 'reject'].includes(policy)) {
-        issues.push(`Invalid DMARC policy: ${policy}`)
-      } else if (policy === 'none') {
-        issues.push('DMARC policy is set to none (monitoring only)')
-      }
+    // Process domains in parallel but limit concurrency
+    const batchSize = 3
+    for (let i = 0; i < domains.length; i += batchSize) {
+      const batch = domains.slice(i, i + batchSize)
+      const batchResults = await Promise.allSettled(
+        batch.map(domain => this.verifyDomain(userId, domain))
+      )
+
+      batchResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          results.push(result.value)
+        } else {
+          // Create error result for failed verification
+          results.push({
+            domain: batch[index],
+            spf: null,
+            dkim: null,
+            dmarc: null,
+            overallStatus: 'error',
+            lastChecked: new Date().toISOString()
+          })
+        }
+      })
     }
 
-    // Check for reporting addresses
-    if (!record.includes('rua=') && !record.includes('ruf=')) {
-      issues.push('DMARC record missing reporting addresses')
-    }
-
-    // Check for valid syntax
-    if (!record.startsWith('v=DMARC1')) {
-      issues.push('DMARC record has invalid syntax')
-    }
-
-    return issues
+    return results
   }
 
   /**
-   * Create unknown record for error cases
+   * Calculate overall health status based on domain verification states
    */
-  private static createUnknownRecord(type: 'SPF' | 'DKIM' | 'DMARC'): DomainAuthRecord {
-    return {
-      type,
-      status: 'unknown',
-      record: null,
-      issues: [`Unable to check ${type} record`],
-      recommendations: [`Verify DNS configuration and try again`]
-    }
-  }
+  private calculateOverallHealth(domains: DomainAuthOverview[]): 'excellent' | 'good' | 'needs-attention' | 'critical' {
+    if (domains.length === 0) return 'critical'
 
-  /**
-   * Calculate overall authentication score
-   */
-  private static calculateOverallScore(
-    spf: DomainAuthRecord,
-    dkim: DomainAuthRecord,
-    dmarc: DomainAuthRecord
-  ): number {
-    let score = 0
+    const fullyVerifiedCount = domains.filter(d => d.fully_verified).length
+    const partiallyVerifiedCount = domains.filter(d => !d.fully_verified && (d.spf_verified || d.dkim_verified || d.dmarc_verified)).length
+    const unverifiedCount = domains.filter(d => !d.spf_verified && !d.dkim_verified && !d.dmarc_verified).length
 
-    // SPF scoring (30 points max)
-    if (spf.status === 'valid') score += 30
-    else if (spf.status === 'warning') score += 15
-    else if (spf.status === 'missing') score += 0
-    else score += 5 // unknown
+    const fullyVerifiedRatio = fullyVerifiedCount / domains.length
+    const partiallyVerifiedRatio = partiallyVerifiedCount / domains.length
+    const unverifiedRatio = unverifiedCount / domains.length
 
-    // DKIM scoring (35 points max)
-    if (dkim.status === 'valid') score += 35
-    else if (dkim.status === 'warning') score += 20
-    else if (dkim.status === 'missing') score += 0
-    else score += 5 // unknown
-
-    // DMARC scoring (35 points max)
-    if (dmarc.status === 'valid') score += 35
-    else if (dmarc.status === 'warning') score += 20
-    else if (dmarc.status === 'missing') score += 0
-    else score += 5 // unknown
-
-    return Math.min(100, score)
-  }
-
-  /**
-   * Get overall status based on score
-   */
-  private static getOverallStatus(score: number): 'excellent' | 'good' | 'warning' | 'critical' {
-    if (score >= 90) return 'excellent'
-    if (score >= 70) return 'good'
-    if (score >= 40) return 'warning'
+    if (fullyVerifiedRatio >= 0.8) return 'excellent'
+    if (fullyVerifiedRatio >= 0.5 || (fullyVerifiedRatio + partiallyVerifiedRatio) >= 0.8) return 'good'
+    if (unverifiedRatio < 0.5) return 'needs-attention'
     return 'critical'
   }
+}
 
-  /**
-   * Generate recommendations based on results
-   */
-  private static generateRecommendations(
-    spf: DomainAuthRecord,
-    dkim: DomainAuthRecord,
-    dmarc: DomainAuthRecord,
-    overallStatus: string
-  ): string[] {
-    const recommendations: string[] = []
-
-    if (overallStatus === 'excellent') {
-      recommendations.push('✅ Your domain authentication is properly configured!')
-      return recommendations
-    }
-
-    // Critical recommendations
-    if (spf.status === 'missing') {
-      recommendations.push('🔴 Critical: Set up SPF record to prevent email spoofing')
-    }
-    if (dkim.status === 'missing') {
-      recommendations.push('🔴 Critical: Configure DKIM signing for email authentication')
-    }
-    if (dmarc.status === 'missing') {
-      recommendations.push('🔴 Critical: Implement DMARC policy for email protection')
-    }
-
-    // Warning recommendations
-    if (spf.status === 'warning') {
-      recommendations.push('🟡 Warning: Fix SPF record issues to improve deliverability')
-    }
-    if (dkim.status === 'warning') {
-      recommendations.push('🟡 Warning: Address DKIM configuration issues')
-    }
-    if (dmarc.status === 'warning') {
-      recommendations.push('🟡 Warning: Optimize DMARC policy for better protection')
-    }
-
-    // General recommendations
-    if (overallStatus === 'critical') {
-      recommendations.push('📚 Consider consulting with your email provider for setup assistance')
-    }
-
-    return recommendations
+/**
+ * Utility function to extract domain from email address
+ */
+export function extractDomainFromEmail(email: string): string {
+  const parts = email.split('@')
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new DomainAuthError('Invalid email address format', 'INVALID_EMAIL')
   }
+  return parts[1].toLowerCase()
+}
 
-  /**
-   * Get domain from email address
-   */
-  static getDomainFromEmail(email: string): string {
-    const domain = email.split('@')[1]
-    return domain ? domain.toLowerCase() : ''
-  }
+/**
+ * Utility function to validate domain format
+ */
+export function validateDomain(domain: string): boolean {
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
+  return domainRegex.test(domain) && domain.length <= 253
+}
 
-  /**
-   * Update email account with domain authentication results
-   */
-  static formatForDatabase(result: DomainAuthResult) {
-    return {
-      spf: {
-        status: result.spf.status,
-        record: result.spf.record,
-        valid: result.spf.status === 'valid'
-      },
-      dkim: {
-        status: result.dkim.status,
-        record: result.dkim.record,
-        valid: result.dkim.status === 'valid'
-      },
-      dmarc: {
-        status: result.dmarc.status,
-        record: result.dmarc.record,
-        valid: result.dmarc.status === 'valid'
-      }
-    }
-  }
+/**
+ * Utility function to normalize domain (lowercase, remove trailing dot)
+ */
+export function normalizeDomain(domain: string): string {
+  return domain.toLowerCase().replace(/\.$/, '')
 }

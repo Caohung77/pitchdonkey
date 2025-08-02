@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { DomainAuthDialog } from './DomainAuthDialog'
+import DomainAuthDialog from './DomainAuthDialog'
 
 interface EmailAccount {
   id: string

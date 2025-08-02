@@ -1,5 +1,44 @@
 import { createServerSupabaseClient, supabase } from './supabase'
 import { User } from '@supabase/supabase-js'
+import { NextAuthOptions } from 'next-auth'
+import GoogleProvider from 'next-auth/providers/google'
+import { SupabaseAdapter } from '@next-auth/supabase-adapter'
+
+// NextAuth configuration
+export const authOptions: NextAuthOptions = {
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
+  adapter: SupabaseAdapter({
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    secret: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  }),
+  callbacks: {
+    async session({ session, user }) {
+      // Add user ID to session
+      if (session.user) {
+        session.user.id = user.id
+      }
+      return session
+    },
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id
+      }
+      return token
+    },
+  },
+  pages: {
+    signIn: '/auth/signin',
+    error: '/auth/error',
+  },
+  session: {
+    strategy: 'database',
+  },
+}
 
 // Client-side auth helpers
 export const authHelpers = {

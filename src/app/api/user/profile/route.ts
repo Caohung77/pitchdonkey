@@ -1,92 +1,69 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = createServerSupabaseClient()
 
     // Get user profile data
     const { data: profile, error: profileError } = await supabase
       .from('users')
-      .select('id, email, name, plan, subscription_status')
+      .select('id, email, full_name, subscription_tier, subscription_status')
       .eq('id', user.id)
       .single()
 
     if (profileError) {
       console.error('Error fetching user profile:', profileError)
-      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 })
-    }
-
-    // Get subscription details if available
-    const { data: subscription, error: subError } = await supabase
-      .from('user_subscriptions')
-      .select('plan_id, status')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .single()
-
-    if (subError && subError.code !== 'PGRST116') {
-      console.error('Error fetching subscription:', subError)
+      // Return basic user data if profile doesn't exist
+      const fallbackUserData = {
+        id: user.id,
+        name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        email: user.email,
+        plan: 'starter',
+        subscriptionStatus: 'active'
+      }
+      return createSuccessResponse(fallbackUserData)
     }
 
     const userData = {
       id: profile.id,
-      name: profile.name || user.email?.split('@')[0] || 'User',
+      name: profile.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
       email: profile.email || user.email,
-      plan: subscription?.plan_id || profile.plan || 'starter',
-      subscriptionStatus: subscription?.status || profile.subscription_status || 'active'
+      plan: profile.subscription_tier || 'starter',
+      subscriptionStatus: profile.subscription_status || 'active'
     }
 
-    return NextResponse.json(userData)
+    return createSuccessResponse(userData)
 
   } catch (error) {
-    console.error('Error fetching user profile:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})
 
-export async function PUT(request: NextRequest) {
+export const PUT = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createClient()
+    const supabase = createServerSupabaseClient()
     
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { name } = body
 
     // Update user profile
     const { data: updatedProfile, error: updateError } = await supabase
       .from('users')
-      .update({ name })
+      .update({ full_name: name })
       .eq('id', user.id)
       .select()
       .single()
 
     if (updateError) {
       console.error('Error updating user profile:', updateError)
-      return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 })
+      return handleApiError(updateError)
     }
 
-    return NextResponse.json(updatedProfile)
+    return createSuccessResponse(updatedProfile)
 
   } catch (error) {
-    console.error('Error updating user profile:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Test</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        .info { background-color: #d1ecf1; }
+        pre { background: #f8f9fa; padding: 10px; overflow-x: auto; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Authentication Test</h1>
+    <div id="status"></div>
+    
+    <div>
+        <button onclick="checkAuth()">Check Auth</button>
+        <button onclick="testContactsAPI()">Test Contacts API</button>
+        <button onclick="simulateContactsPageLoad()">Simulate Contacts Page Load</button>
+        <button onclick="signOut()">Sign Out</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        
+        const { createClient } = supabase
+        const supabaseClient = createClient(supabaseUrl, supabaseKey)
+        
+        function addResult(title, content, type = 'info') {
+            const results = document.getElementById('results')
+            const div = document.createElement('div')
+            div.className = `test ${type}`
+            div.innerHTML = `<h3>${title}</h3><pre>${JSON.stringify(content, null, 2)}</pre>`
+            results.appendChild(div)
+        }
+        
+        async function checkAuth() {
+            document.getElementById('results').innerHTML = ''
+            
+            try {
+                const { data: { session }, error } = await supabaseClient.auth.getSession()
+                
+                if (error) {
+                    addResult('Auth Check', { error: error.message }, 'error')
+                    return
+                }
+                
+                if (!session) {
+                    addResult('Auth Check', { message: 'No session found', needsSignIn: true }, 'error')
+                    return
+                }
+                
+                addResult('Auth Check', {
+                    hasSession: true,
+                    userId: session.user.id,
+                    email: session.user.email,
+                    expiresAt: new Date(session.expires_at * 1000).toISOString()
+                }, 'success')
+                
+            } catch (error) {
+                addResult('Auth Check', { error: error.message }, 'error')
+            }
+        }
+        
+        async function testContactsAPI() {
+            try {
+                // Test session API first
+                const sessionResponse = await fetch('/api/auth/session')
+                const sessionData = await sessionResponse.json()
+                addResult('Session API', { status: sessionResponse.status, data: sessionData }, sessionResponse.ok ? 'success' : 'error')
+                
+                // Test contacts API
+                const contactsResponse = await fetch('/api/contacts')
+                const contactsData = await contactsResponse.json()
+                addResult('Contacts API', { status: contactsResponse.status, data: contactsData }, contactsResponse.ok ? 'success' : 'error')
+                
+                // Test contacts stats API
+                const statsResponse = await fetch('/api/contacts/stats')
+                const statsData = await statsResponse.json()
+                addResult('Contacts Stats API', { status: statsResponse.status, data: statsData }, statsResponse.ok ? 'success' : 'error')
+                
+            } catch (error) {
+                addResult('API Test Error', { error: error.message }, 'error')
+            }
+        }
+        
+        async function simulateContactsPageLoad() {
+            addResult('Simulating Contacts Page Load', 'Starting simulation...', 'info')
+            
+            // This simulates what happens when you navigate to /dashboard/contacts
+            try {
+                // 1. Check client-side session (what AuthProvider does)
+                const { data: { session } } = await supabaseClient.auth.getSession()
+                addResult('Step 1: Client Session', { hasSession: !!session }, session ? 'success' : 'error')
+                
+                if (!session) {
+                    addResult('Simulation Result', 'Would redirect to sign-in', 'error')
+                    return
+                }
+                
+                // 2. Test API calls that the contacts page makes
+                const apiCalls = [
+                    { name: 'Contacts List', url: '/api/contacts' },
+                    { name: 'Contacts Stats', url: '/api/contacts/stats' }
+                ]
+                
+                for (const apiCall of apiCalls) {
+                    const response = await fetch(apiCall.url)
+                    const data = await response.json()
+                    addResult(`Step 2: ${apiCall.name}`, { 
+                        status: response.status, 
+                        success: response.ok,
+                        data: data 
+                    }, response.ok ? 'success' : 'error')
+                    
+                    if (!response.ok) {
+                        addResult('Simulation Result', `Failed at ${apiCall.name} - this might cause sign-out`, 'error')
+                        return
+                    }
+                }
+                
+                addResult('Simulation Result', 'All checks passed - contacts page should work', 'success')
+                
+            } catch (error) {
+                addResult('Simulation Error', { error: error.message }, 'error')
+            }
+        }
+        
+        async function signOut() {
+            try {
+                const { error } = await supabaseClient.auth.signOut()
+                if (error) {
+                    addResult('Sign Out', { error: error.message }, 'error')
+                } else {
+                    addResult('Sign Out', { success: true }, 'success')
+                }
+            } catch (error) {
+                addResult('Sign Out Error', { error: error.message }, 'error')
+            }
+        }
+        
+        // Auto-check auth on page load
+        checkAuth()
+    </script>
+</body>
+</html>

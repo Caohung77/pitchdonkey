@@ -1,15 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = createServerSupabaseClient()
 
     // Get current period (this month)
     const currentDate = new Date()
@@ -79,13 +74,9 @@ export async function GET(request: NextRequest) {
       replyRate
     }
 
-    return NextResponse.json(stats)
+    return createSuccessResponse(stats)
 
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

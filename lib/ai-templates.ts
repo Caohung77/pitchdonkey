@@ -201,10 +201,21 @@ export class AITemplateService {
   }
 
   async incrementUsage(templateId: string, userId: string) {
+    // First get the current usage count
+    const { data: template, error: fetchError } = await this.supabase
+      .from('ai_templates')
+      .select('usage_count')
+      .eq('id', templateId)
+      .eq('user_id', userId)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    // Then update with incremented count
     const { error } = await this.supabase
       .from('ai_templates')
       .update({
-        usage_count: this.supabase.raw('usage_count + 1'),
+        usage_count: (template?.usage_count || 0) + 1,
         updated_at: new Date().toISOString(),
       })
       .eq('id', templateId)

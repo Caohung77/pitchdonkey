@@ -282,7 +282,7 @@ export class AIPersonalizationService {
   }
 
   private async personalizeWithAnthropic(request: PersonalizationRequest, startTime: number): Promise<PersonalizationResult> {
-    const client = AIPersonalizationService.clients.get('anthropic') as Anthropic
+    const client = AIPersonalizationService.clients.get('anthropic') as any
     if (!client) {
       throw new Error('Anthropic client not initialized')
     }
@@ -453,7 +453,7 @@ Please return only the personalized email content without any additional comment
     }
     
     // Test Anthropic
-    const anthropicClient = this.clients.get('anthropic') as Anthropic
+    const anthropicClient = this.clients.get('anthropic') as any
     if (anthropicClient) {
       try {
         await anthropicClient.messages.create({

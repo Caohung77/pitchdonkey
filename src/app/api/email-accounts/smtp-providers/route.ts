@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createServerSupabaseClient } from '@/lib/supabase'
 import { SMTP_PROVIDERS, SMTPService } from '@/lib/smtp-providers'
-import { handleApiError, AuthenticationError } from '@/lib/errors'
 
 // GET /api/email-accounts/smtp-providers - Get SMTP provider templates
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      throw new AuthenticationError()
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -39,19 +37,22 @@ export async function GET(request: NextRequest) {
       })
     }
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    console.error('Error fetching SMTP providers:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 }
 
 // POST /api/email-accounts/smtp-providers/detect - Detect provider from host
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      throw new AuthenticationError()
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -74,7 +75,10 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    console.error('Error detecting SMTP provider:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 }

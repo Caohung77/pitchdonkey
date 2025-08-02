@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { EmailAccountService } from '@/lib/email-providers'
-import { handleApiError, AuthenticationError, NotFoundError } from '@/lib/errors'
+import { createServerSupabaseClient } from '@/lib/supabase'
 import { z } from 'zod'
 
 const updateEmailAccountSchema = z.object({
-  name: z.string().optional(),
-  settings: z.object({
-    daily_limit: z.number().min(1).max(1000).optional(),
-    delay_between_emails: z.number().min(30).max(3600).optional(),
-    warm_up_enabled: z.boolean().optional(),
-    signature: z.string().optional(),
-  }).optional(),
-  is_active: z.boolean().optional(),
+  status: z.enum(['pending', 'active', 'inactive', 'suspended']).optional(),
+  daily_send_limit: z.number().min(1).max(1000).optional(),
+  warmup_enabled: z.boolean().optional(),
+  smtp_host: z.string().optional(),
+  smtp_port: z.number().optional(),
+  smtp_username: z.string().optional(),
+  smtp_password: z.string().optional(),
+  smtp_secure: z.boolean().optional(),
 })
 
 // GET /api/email-accounts/[id] - Get specific email account
@@ -22,11 +19,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      throw new AuthenticationError()
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { data: account, error } = await supabase
@@ -34,11 +31,10 @@ export async function GET(
       .select('*')
       .eq('id', params.id)
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .single()
 
     if (error || !account) {
-      throw new NotFoundError('Email account not found')
+      return NextResponse.json({ error: 'Email account not found' }, { status: 404 })
     }
 
     return NextResponse.json({
@@ -46,8 +42,8 @@ export async function GET(
       data: account,
     })
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    console.error('Error fetching email account:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -57,11 +53,11 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      throw new AuthenticationError()
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Verify account ownership
@@ -73,14 +69,28 @@ export async function PUT(
       .single()
 
     if (!existingAccount) {
-      throw new NotFoundError('Email account not found')
+      return NextResponse.json({ error: 'Email account not found' }, { status: 404 })
     }
 
     const body = await request.json()
     const validatedData = updateEmailAccountSchema.parse(body)
 
-    const emailService = new EmailAccountService()
-    const account = await emailService.updateEmailAccount(params.id, validatedData)
+    // Update the account with validated data
+    const { data: account, error } = await supabase
+      .from('email_accounts')
+      .update({
+        ...validatedData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', params.id)
+      .eq('user_id', user.id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating email account:', error)
+      return NextResponse.json({ error: 'Failed to update email account' }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
@@ -88,8 +98,8 @@ export async function PUT(
       message: 'Email account updated successfully',
     })
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    console.error('Error updating email account:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -99,11 +109,11 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      throw new AuthenticationError()
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Verify account ownership
@@ -115,18 +125,27 @@ export async function DELETE(
       .single()
 
     if (!existingAccount) {
-      throw new NotFoundError('Email account not found')
+      return NextResponse.json({ error: 'Email account not found' }, { status: 404 })
     }
 
-    const emailService = new EmailAccountService()
-    await emailService.deleteEmailAccount(params.id)
+    // Delete the account
+    const { error } = await supabase
+      .from('email_accounts')
+      .delete()
+      .eq('id', params.id)
+      .eq('user_id', user.id)
+
+    if (error) {
+      console.error('Error deleting email account:', error)
+      return NextResponse.json({ error: 'Failed to delete email account' }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Email account deleted successfully',
     })
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    console.error('Error deleting email account:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

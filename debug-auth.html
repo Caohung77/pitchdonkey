@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Debug</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Authentication Debug</h1>
+    <div id="status"></div>
+    <div id="user-info"></div>
+    <div id="api-tests"></div>
+    
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        
+        // This is just for debugging - we'll use the actual values from .env.local
+        
+        async function debugAuth() {
+            const statusDiv = document.getElementById('status')
+            const userDiv = document.getElementById('user-info')
+            const apiDiv = document.getElementById('api-tests')
+            
+            statusDiv.innerHTML = '<p>Checking authentication...</p>'
+            
+            try {
+                // Test session from cookies
+                const sessionResponse = await fetch('/api/auth/session')
+                const sessionData = await sessionResponse.json()
+                
+                statusDiv.innerHTML += `<p>Session API: ${sessionResponse.status} - ${JSON.stringify(sessionData)}</p>`
+                
+                // Test user profile API
+                const profileResponse = await fetch('/api/user/profile')
+                const profileData = await profileResponse.json()
+                
+                userDiv.innerHTML = `<p>Profile API: ${profileResponse.status} - ${JSON.stringify(profileData)}</p>`
+                
+                // Test contacts API
+                const contactsResponse = await fetch('/api/contacts')
+                const contactsData = await contactsResponse.json()
+                
+                apiDiv.innerHTML = `<p>Contacts API: ${contactsResponse.status} - ${JSON.stringify(contactsData)}</p>`
+                
+                // Test contacts stats API
+                const statsResponse = await fetch('/api/contacts/stats')
+                const statsData = await statsResponse.json()
+                
+                apiDiv.innerHTML += `<p>Stats API: ${statsResponse.status} - ${JSON.stringify(statsData)}</p>`
+                
+            } catch (error) {
+                statusDiv.innerHTML += `<p>Error: ${error.message}</p>`
+            }
+        }
+        
+        // Run debug on page load
+        debugAuth()
+        
+        // Add refresh button
+        document.body.innerHTML += '<button onclick="debugAuth()">Refresh Debug</button>'
+    </script>
+</body>
+</html>

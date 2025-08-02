@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -21,7 +22,8 @@ import {
   Target,
   Shield,
   Palette,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -31,6 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface User {
   id: string
@@ -67,42 +70,117 @@ export default function DashboardLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const pathname = usePathname()
+  const router = useRouter()
 
   useEffect(() => {
-    fetchUserData()
-    fetchNotifications()
+    checkSession()
   }, [])
 
-  const fetchUserData = async () => {
+  useEffect(() => {
+    if (user) {
+      fetchNotifications()
+    }
+  }, [user])
+
+  const checkSession = async () => {
     try {
-      const response = await fetch('/api/user/profile')
-      const userData = await response.json()
+      console.log('DashboardLayout: Checking session...')
+      
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('DashboardLayout: Session error:', sessionError)
+        setError('Session error: ' + sessionError.message)
+        setLoading(false)
+        return
+      }
+
+      if (!session?.user) {
+        console.log('DashboardLayout: No session found, redirecting to signin')
+        router.push('/auth/signin')
+        return
+      }
+
+      console.log('DashboardLayout: Session found for user:', session.user.email)
+      
+      // Create user object from session
+      const userData: User = {
+        id: session.user.id,
+        email: session.user.email!,
+        name: session.user.user_metadata?.full_name || 
+              session.user.user_metadata?.name || 
+              session.user.email?.split('@')[0] || 
+              'User',
+        plan: session.user.user_metadata?.plan || 'starter'
+      }
+
       setUser(userData)
+      setLoading(false)
+      setError(null)
+
     } catch (error) {
-      console.error('Error fetching user data:', error)
+      console.error('DashboardLayout: Error checking session:', error)
+      setError('Failed to check authentication')
+      setLoading(false)
     }
   }
+
+
 
   const fetchNotifications = async () => {
     try {
       const response = await fetch('/api/notifications')
-      const notificationData = await response.json()
-      setNotifications(notificationData)
-      setUnreadCount(notificationData.filter((n: Notification) => !n.isRead).length)
+      
+      if (response.status === 401) {
+        // Handle auth errors by signing out
+        await handleSignOut()
+        return
+      }
+      
+      if (response.ok) {
+        const result = await response.json()
+        const notificationData = result.success ? result.data : result
+        
+        // Ensure notificationData is an array
+        if (Array.isArray(notificationData)) {
+          setNotifications(notificationData)
+          setUnreadCount(notificationData.filter((n: Notification) => !n.isRead).length)
+        } else {
+          console.warn('Notifications API returned non-array data:', notificationData)
+          setNotifications([])
+          setUnreadCount(0)
+        }
+      } else {
+        console.error('Failed to fetch notifications:', response.status)
+        setNotifications([])
+        setUnreadCount(0)
+      }
     } catch (error) {
       console.error('Error fetching notifications:', error)
+      setNotifications([])
+      setUnreadCount(0)
     }
   }
 
   const handleSignOut = async () => {
     try {
-      await fetch('/api/auth/signout', { method: 'POST' })
-      window.location.href = '/auth/signin'
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Sign out error:', error)
+        setError('Failed to sign out')
+      } else {
+        setUser(null)
+        setError(null)
+        router.push('/auth/signin')
+      }
     } catch (error) {
-      console.error('Error signing out:', error)
+      console.error('Sign out error:', error)
+      setError('Failed to sign out')
     }
   }
 
@@ -119,7 +197,7 @@ export default function DashboardLayout({
   }
 
   const getPlanBadgeColor = (plan: string) => {
-    switch (plan.toLowerCase()) {
+    switch (plan?.toLowerCase()) {
       case 'starter': return 'bg-blue-100 text-blue-800'
       case 'professional': return 'bg-purple-100 text-purple-800'
       case 'agency': return 'bg-gold-100 text-gold-800'
@@ -134,6 +212,63 @@ export default function DashboardLayout({
       case 'success': return '✅'
       default: return 'ℹ️'
     }
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6">
+            <div className="text-center">
+              <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Error</h2>
+              <p className="text-gray-600 mb-4">{error}</p>
+              <Button onClick={checkSession} className="w-full">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // No user state (should not happen due to redirect, but just in case)
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6">
+            <div className="text-center">
+              <AlertCircle className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Authentication Required</h2>
+              <p className="text-gray-600 mb-4">
+                Please sign in to access the dashboard.
+              </p>
+              <Button 
+                onClick={() => router.push('/auth/signin')}
+                className="w-full"
+              >
+                Go to Sign In
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -208,12 +343,12 @@ export default function DashboardLayout({
                 <div className="flex-shrink-0">
                   <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
                     <span className="text-sm font-medium text-white">
-                      {user.name.charAt(0).toUpperCase()}
+                      {user.name?.charAt(0)?.toUpperCase() || 'U'}
                     </span>
                   </div>
                 </div>
                 <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                  <p className="text-sm font-medium text-gray-900">{user.name || 'User'}</p>
                   <Badge className={`text-xs ${getPlanBadgeColor(user.plan)}`}>
                     {user.plan}
                   </Badge>
@@ -300,7 +435,7 @@ export default function DashboardLayout({
                   <Button variant="ghost" className="flex items-center space-x-2">
                     <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
                       <span className="text-sm font-medium text-white">
-                        {user?.name.charAt(0).toUpperCase() || 'U'}
+                        {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                       </span>
                     </div>
                     <ChevronDown className="h-4 w-4" />

@@ -12,7 +12,7 @@ export interface ABTest {
   variants: ABTestVariant[]
   traffic_split: number[] // percentages that sum to 100
   winner_criteria: 'open_rate' | 'click_rate' | 'reply_rate'
-  confidence_level: 0.90 | 0.95 | 0.99
+  confidence_level: number
   minimum_sample_size: number
   test_duration_hours: number
   auto_select_winner: boolean
@@ -96,7 +96,9 @@ export const abTestSchema = z.object({
   test_type: z.enum(['subject_line', 'content', 'send_time']),
   variants: z.array(abTestVariantSchema).min(2, 'At least 2 variants required').max(5, 'Maximum 5 variants allowed'),
   winner_criteria: z.enum(['open_rate', 'click_rate', 'reply_rate']).default('open_rate'),
-  confidence_level: z.enum([0.90, 0.95, 0.99]).default(0.95),
+  confidence_level: z.number().refine(val => [0.90, 0.95, 0.99].includes(val), {
+    message: 'Confidence level must be 0.90, 0.95, or 0.99'
+  }).default(0.95),
   minimum_sample_size: z.number().min(50).max(10000).default(100),
   test_duration_hours: z.number().min(24).max(168).default(72), // 1-7 days
   auto_select_winner: z.boolean().default(true)
@@ -652,4 +654,4 @@ export class ABTestService {
       progressPercentage
     }
   }
-}"
+}
