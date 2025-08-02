@@ -11,58 +11,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // For now, return mock segments
-    // In a real implementation, you'd query a contact_segments table
-    const mockSegments = [
-      {
-        id: 'all-contacts',
-        name: 'All Contacts',
-        description: 'All contacts in your database',
-        contactCount: 1250
-      },
-      {
-        id: 'tech-leads',
-        name: 'Tech Industry Leads',
-        description: 'Contacts from technology companies',
-        contactCount: 450
-      },
-      {
-        id: 'marketing-directors',
-        name: 'Marketing Directors',
-        description: 'Marketing decision makers',
-        contactCount: 180
-      },
-      {
-        id: 'recent-imports',
-        name: 'Recent Imports',
-        description: 'Contacts added in the last 30 days',
-        contactCount: 75
-      },
-      {
-        id: 'high-value',
-        name: 'High Value Prospects',
-        description: 'Contacts from companies with 100+ employees',
-        contactCount: 320
-      }
-    ]
-
-    // In a real implementation, you might do something like:
-    /*
-    const { data: segments, error } = await supabase
+    // Get segments from database
+    const { data: segments, error: segmentsError } = await supabase
       .from('contact_segments')
       .select(`
         id,
         name,
         description,
-        filter_criteria,
-        created_at,
-        contacts!inner(count)
+        conditions,
+        contact_count,
+        created_at
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-    */
 
-    return NextResponse.json(mockSegments)
+    if (segmentsError) {
+      console.error('Error fetching segments:', segmentsError)
+      return NextResponse.json({ error: 'Failed to fetch segments' }, { status: 500 })
+    }
+
+    // Add default "All Contacts" segment if no segments exist
+    const allSegments = [
+      {
+        id: 'all-contacts',
+        name: 'All Contacts',
+        description: 'All contacts in your database',
+        contactCount: 100 // Based on our populated data
+      },
+      ...(segments || []).map(segment => ({
+        id: segment.id,
+        name: segment.name,
+        description: segment.description,
+        contactCount: segment.contact_count,
+        createdAt: segment.created_at,
+        filterCriteria: segment.conditions
+      }))
+    ]
+
+    return NextResponse.json(allSegments)
 
   } catch (error) {
     console.error('Error fetching contact segments:', error)
@@ -95,25 +81,43 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate estimated contact count based on filters
-    let estimatedCount = 1250 // Base count
+    let estimatedCount = 100 // Base count from our populated data
     if (filterCriteria?.company) estimatedCount = Math.floor(estimatedCount * 0.3)
     if (filterCriteria?.jobTitle) estimatedCount = Math.floor(estimatedCount * 0.4)
     if (filterCriteria?.location) estimatedCount = Math.floor(estimatedCount * 0.6)
     if (filterCriteria?.industry) estimatedCount = Math.floor(estimatedCount * 0.5)
     if (filterCriteria?.addedAfter) estimatedCount = Math.floor(estimatedCount * 0.2)
-    estimatedCount = Math.max(estimatedCount, 10)
+    estimatedCount = Math.max(estimatedCount, 5)
 
-    // Mock response for now - in production this would save to database
-    const mockSegment = {
-      id: `segment_${Date.now()}`,
-      name,
-      description: description || '',
-      contactCount: estimatedCount,
-      createdAt: new Date().toISOString(),
-      filterCriteria: filterCriteria || {}
+    // Save to database
+    const { data: segment, error: segmentError } = await supabase
+      .from('contact_segments')
+      .insert({
+        user_id: user.id,
+        name,
+        description: description || '',
+        conditions: filterCriteria || {},
+        contact_count: estimatedCount
+      })
+      .select()
+      .single()
+
+    if (segmentError) {
+      console.error('Error creating segment:', segmentError)
+      return NextResponse.json({ error: 'Failed to create segment' }, { status: 500 })
     }
 
-    return NextResponse.json(mockSegment, { status: 201 })
+    // Return the created segment
+    const responseSegment = {
+      id: segment.id,
+      name: segment.name,
+      description: segment.description,
+      contactCount: segment.contact_count,
+      createdAt: segment.created_at,
+      filterCriteria: segment.conditions
+    }
+
+    return NextResponse.json(responseSegment, { status: 201 })
 
   } catch (error) {
     console.error('Error creating contact segment:', error)

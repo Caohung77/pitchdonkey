@@ -19,10 +19,14 @@ export async function GET(request: NextRequest) {
         name,
         description,
         status,
-        email_sequence,
         created_at,
-        launched_at,
-        completed_at
+        start_date,
+        end_date,
+        total_contacts,
+        emails_sent,
+        emails_delivered,
+        emails_opened,
+        emails_replied
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -57,13 +61,13 @@ export async function GET(request: NextRequest) {
           name: campaign.name,
           description: campaign.description || '',
           status: campaign.status,
-          contactCount,
-          emailsSent,
-          openRate,
-          replyRate,
+          contactCount: campaign.total_contacts || contactCount,
+          emailsSent: campaign.emails_sent || emailsSent,
+          openRate: campaign.emails_delivered > 0 ? Math.round((campaign.emails_opened / campaign.emails_delivered) * 100) : openRate,
+          replyRate: campaign.emails_sent > 0 ? Math.round((campaign.emails_replied / campaign.emails_sent) * 100) : replyRate,
           createdAt: campaign.created_at,
-          launchedAt: campaign.launched_at,
-          completedAt: campaign.completed_at,
+          launchedAt: campaign.start_date,
+          completedAt: campaign.end_date,
           nextSendAt
         }
       })
@@ -109,7 +113,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create campaign
+    // Create campaign with existing schema columns
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
       .insert({
@@ -117,11 +121,21 @@ export async function POST(request: NextRequest) {
         name,
         description,
         status,
-        contact_list_ids: contactSegments || [],
-        email_sequence: emailSequence,
-        ai_settings: aiSettings || {},
-        schedule_settings: scheduleSettings || {},
-        launched_at: status === 'active' ? new Date().toISOString() : null
+        // Map to existing columns
+        daily_send_limit: scheduleSettings?.dailyLimit || 50,
+        track_opens: true,
+        track_clicks: true,
+        track_replies: true,
+        ab_test_enabled: false,
+        ab_test_config: {},
+        total_contacts: 0,
+        emails_sent: 0,
+        emails_delivered: 0,
+        emails_opened: 0,
+        emails_clicked: 0,
+        emails_replied: 0,
+        emails_bounced: 0,
+        emails_complained: 0
       })
       .select()
       .single()
