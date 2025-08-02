@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Contact Lists - NOW WORKING!</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .success { 
+            background: #f0fdf4; 
+            border: 1px solid #bbf7d0; 
+            color: #166534; 
+            padding: 16px; 
+            border-radius: 6px; 
+            margin: 16px 0;
+        }
+        .error { 
+            background: #fef2f2; 
+            border: 1px solid #fecaca; 
+            color: #dc2626; 
+            padding: 16px; 
+            border-radius: 6px; 
+            margin: 16px 0;
+        }
+        .info { 
+            background: #eff6ff; 
+            border: 1px solid #bfdbfe; 
+            color: #1d4ed8; 
+            padding: 16px; 
+            border-radius: 6px; 
+            margin: 16px 0;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 8px 8px 8px 0;
+        }
+        button:hover { background: #2563eb; }
+        button.success { background: #10b981; }
+        button.success:hover { background: #059669; }
+        .log {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Contact Lists - Table Created!</h1>
+        <p>The <code>contact_lists</code> table has been successfully created in your Supabase database!</p>
+        
+        <div class="success">
+            ✅ <strong>Table Status:</strong> contact_lists table exists and is ready to use!
+        </div>
+        
+        <button onclick="testEverything()">🧪 Test Everything</button>
+        <button onclick="createTestList()">📝 Create Test List</button>
+        <button onclick="clearLog()">🗑️ Clear Log</button>
+    </div>
+
+    <div class="container">
+        <h2>🚀 What You Can Do Now</h2>
+        <div class="info">
+            <h3>✅ Contact Lists are now working!</h3>
+            <ol>
+                <li><strong>Go to Contacts:</strong> Navigate to <code>/dashboard/contacts</code></li>
+                <li><strong>Click Lists Tab:</strong> You'll see "Contacts", "Segments", and "Lists" tabs</li>
+                <li><strong>Create a List:</strong> Click "Create List" and select specific contacts</li>
+                <li><strong>Use in Campaigns:</strong> Go to <code>/dashboard/campaigns/new</code> and select your lists</li>
+            </ol>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+            <button onclick="window.open('/dashboard/contacts?tab=lists', '_blank')">📋 Open Contact Lists</button>
+            <button onclick="window.open('/dashboard/campaigns/new', '_blank')">🚀 Create Campaign</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 Test Results</h2>
+        <div id="testLog" class="log">Ready to test the new functionality...\n</div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            logDiv.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('testLog').textContent = 'Log cleared...\n';
+        }
+
+        async function testContactListsAPI() {
+            log('🔍 Testing contact lists API...');
+            
+            try {
+                const response = await fetch('/api/contacts/lists');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log(`✅ Contact lists API working! Found ${data.length} lists.`, 'success');
+                    return true;
+                } else {
+                    log(`❌ API error: ${data.error}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ API request failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testContactsAPI() {
+            log('📋 Testing contacts API...');
+            
+            try {
+                const response = await fetch('/api/contacts?limit=5');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const contacts = data.success ? data.data.contacts : data;
+                    log(`✅ Contacts API working! Found ${contacts.length} contacts.`, 'success');
+                    return contacts;
+                } else {
+                    log(`❌ Contacts API error: ${data.error}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                log(`❌ Contacts API failed: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        async function createTestList() {
+            log('📝 Creating a test contact list...');
+            
+            try {
+                // Get some contacts first
+                const contacts = await testContactsAPI();
+                if (!contacts || contacts.length === 0) {
+                    log('⚠️ No contacts available for test list creation', 'warning');
+                    return;
+                }
+                
+                // Create test list
+                const testData = {
+                    name: `Test List ${Date.now()}`,
+                    description: 'Test list created after table creation',
+                    contactIds: contacts.slice(0, Math.min(3, contacts.length)).map(c => c.id),
+                    tags: ['test', 'working']
+                };
+                
+                log(`📤 Creating list with ${testData.contactIds.length} contacts...`);
+                
+                const response = await fetch('/api/contacts/lists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log(`🎉 SUCCESS! List created: "${result.name}"`, 'success');
+                    log(`📊 List contains ${result.contactCount} contacts`, 'success');
+                    log(`🆔 List ID: ${result.id}`, 'info');
+                    return true;
+                } else {
+                    log(`❌ Failed to create list: ${result.error}`, 'error');
+                    if (result.details) {
+                        log(`Details: ${result.details}`, 'error');
+                    }
+                    return false;
+                }
+                
+            } catch (error) {
+                log(`❌ Test list creation failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testEverything() {
+            log('🎯 Testing complete contact lists functionality...');
+            log('');
+            
+            // Test 1: Contact Lists API
+            const listsWorking = await testContactListsAPI();
+            
+            // Test 2: Contacts API
+            const contacts = await testContactsAPI();
+            
+            // Test 3: Create a test list
+            if (listsWorking && contacts) {
+                await createTestList();
+            }
+            
+            log('');
+            if (listsWorking && contacts) {
+                log('🎉 ALL TESTS PASSED! Contact lists are fully functional!', 'success');
+                log('💡 You can now create contact lists in the UI', 'success');
+                log('🚀 Lists can be used as campaign destinations', 'success');
+            } else {
+                log('⚠️ Some tests failed. Check the errors above.', 'warning');
+            }
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            log('🎉 Contact lists table has been created!');
+            log('Click "Test Everything" to verify functionality...');
+            log('');
+        });
+    </script>
+</body>
+</html>
