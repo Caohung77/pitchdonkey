@@ -209,7 +209,7 @@ export default function NewCampaignPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...campaignData,
-          status: 'active'
+          status: 'running'
         })
       })
 

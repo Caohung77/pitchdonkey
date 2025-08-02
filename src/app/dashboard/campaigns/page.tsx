@@ -33,7 +33,7 @@ interface Campaign {
   id: string
   name: string
   description: string
-  status: 'draft' | 'active' | 'paused' | 'completed'
+  status: 'draft' | 'running' | 'paused' | 'completed'
   contactCount: number
   emailsSent: number
   openRate: number
@@ -46,14 +46,14 @@ interface Campaign {
 
 const STATUS_COLORS = {
   draft: 'bg-gray-100 text-gray-800',
-  active: 'bg-green-100 text-green-800',
+  running: 'bg-green-100 text-green-800',
   paused: 'bg-yellow-100 text-yellow-800',
   completed: 'bg-blue-100 text-blue-800'
 }
 
 const STATUS_ICONS = {
   draft: '📝',
-  active: '🟢',
+  running: '🟢',
   paused: '⏸️',
   completed: '✅'
 }
@@ -159,15 +159,15 @@ export default function CampaignsPage() {
     switch (campaign.status) {
       case 'draft':
         return [
-          { label: 'Launch Campaign', action: () => handleStatusChange(campaign.id, 'active'), icon: Play }
+          { label: 'Launch Campaign', action: () => handleStatusChange(campaign.id, 'running'), icon: Play }
         ]
-      case 'active':
+      case 'running':
         return [
           { label: 'Pause Campaign', action: () => handleStatusChange(campaign.id, 'paused'), icon: Pause }
         ]
       case 'paused':
         return [
-          { label: 'Resume Campaign', action: () => handleStatusChange(campaign.id, 'active'), icon: Play }
+          { label: 'Resume Campaign', action: () => handleStatusChange(campaign.id, 'running'), icon: Play }
         ]
       default:
         return []
@@ -228,7 +228,7 @@ export default function CampaignsPage() {
         >
           <option value="all">All Status</option>
           <option value="draft">Draft</option>
-          <option value="active">Active</option>
+          <option value="running">Running</option>
           <option value="paused">Paused</option>
           <option value="completed">Completed</option>
         </select>
@@ -253,7 +253,7 @@ export default function CampaignsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Array.isArray(campaigns) ? campaigns.filter(c => c.status === 'active').length : 0}
+              {Array.isArray(campaigns) ? campaigns.filter(c => c.status === 'running').length : 0}
             </div>
           </CardContent>
         </Card>
@@ -332,7 +332,7 @@ export default function CampaignsPage() {
                       </div>
                     </div>
 
-                    {campaign.status === 'active' && campaign.nextSendAt && (
+                    {campaign.status === 'running' && campaign.nextSendAt && (
                       <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full inline-flex">
                         <AlertCircle className="h-3 w-3" />
                         <span>Next send: {formatDate(campaign.nextSendAt)}</span>

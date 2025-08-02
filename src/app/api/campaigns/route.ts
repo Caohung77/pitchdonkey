@@ -47,9 +47,9 @@ export async function GET(request: NextRequest) {
         const openRate = Math.floor(Math.random() * 40) + 15
         const replyRate = Math.floor(Math.random() * 15) + 2
 
-        // Calculate next send time for active campaigns
+        // Calculate next send time for running campaigns
         let nextSendAt = null
-        if (campaign.status === 'active') {
+        if (campaign.status === 'running') {
           const tomorrow = new Date()
           tomorrow.setDate(tomorrow.getDate() + 1)
           tomorrow.setHours(9, 0, 0, 0) // 9 AM tomorrow
