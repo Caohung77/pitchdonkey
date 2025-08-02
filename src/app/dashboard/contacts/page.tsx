@@ -11,6 +11,8 @@ import { ContactsStats } from '@/components/contacts/ContactsStats'
 import { ContactsFilters } from '@/components/contacts/ContactsFilters'
 import { AddContactModal } from '@/components/contacts/AddContactModal'
 import { ImportContactsModal } from '@/components/contacts/ImportContactsModal'
+import { SegmentManager } from '@/components/contacts/SegmentManager'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface User {
   id: string
@@ -25,6 +27,7 @@ interface ContactsPageState {
   sessionChecked: boolean
   searchTerm: string
   statusFilter: string
+  activeTab: string
 }
 
 function ContactsPageContent() {
@@ -34,7 +37,8 @@ function ContactsPageContent() {
     error: null,
     sessionChecked: false,
     searchTerm: '',
-    statusFilter: 'all'
+    statusFilter: 'all',
+    activeTab: 'contacts'
   })
 
   // Direct session management without AuthProvider
@@ -201,7 +205,7 @@ function ContactsPageContent() {
           <div className="flex justify-between items-center mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
-              <p className="text-gray-600">Manage your contact database</p>
+              <p className="text-gray-600">Manage your contact database and segments</p>
             </div>
             <div className="flex space-x-3">
               <ImportContactsModal onImportComplete={handleContactAdded} />
@@ -210,24 +214,41 @@ function ContactsPageContent() {
           </div>
         </div>
 
-        {/* Contact Statistics */}
-        <ContactsStats userId={state.user.id} />
+        <Tabs 
+          value={state.activeTab} 
+          onValueChange={(value) => setState(prev => ({ ...prev, activeTab: value }))}
+          className="space-y-6"
+        >
+          <TabsList>
+            <TabsTrigger value="contacts">Contacts</TabsTrigger>
+            <TabsTrigger value="segments">Segments</TabsTrigger>
+          </TabsList>
 
-        {/* Search and Filters */}
-        <ContactsFilters
-          searchTerm={state.searchTerm}
-          statusFilter={state.statusFilter}
-          onSearchChange={handleSearchChange}
-          onStatusFilterChange={handleStatusFilterChange}
-          onClearFilters={handleClearFilters}
-        />
+          <TabsContent value="contacts" className="space-y-6">
+            {/* Contact Statistics */}
+            <ContactsStats userId={state.user.id} />
 
-        {/* Contacts List */}
-        <ContactsList 
-          userId={state.user.id}
-          searchTerm={state.searchTerm}
-          statusFilter={state.statusFilter}
-        />
+            {/* Search and Filters */}
+            <ContactsFilters
+              searchTerm={state.searchTerm}
+              statusFilter={state.statusFilter}
+              onSearchChange={handleSearchChange}
+              onStatusFilterChange={handleStatusFilterChange}
+              onClearFilters={handleClearFilters}
+            />
+
+            {/* Contacts List */}
+            <ContactsList 
+              userId={state.user.id}
+              searchTerm={state.searchTerm}
+              statusFilter={state.statusFilter}
+            />
+          </TabsContent>
+
+          <TabsContent value="segments">
+            <SegmentManager userId={state.user.id} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

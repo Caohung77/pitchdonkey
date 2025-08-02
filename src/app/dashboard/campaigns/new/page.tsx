@@ -17,6 +17,7 @@ import {
   Info
 } from 'lucide-react'
 import { SequenceBuilder } from '@/components/campaigns/SequenceBuilder'
+import { CreateSegmentModal } from '@/components/contacts/CreateSegmentModal'
 
 interface CampaignData {
   name: string
@@ -94,6 +95,7 @@ export default function NewCampaignPage() {
   const [contactSegments, setContactSegments] = useState<ContactSegment[]>([])
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [showCreateSegmentModal, setShowCreateSegmentModal] = useState(false)
 
   useEffect(() => {
     fetchContactSegments()
@@ -120,6 +122,15 @@ export default function NewCampaignPage() {
       console.error('Error fetching contact segments:', error)
       setContactSegments([]) // Set empty array on error
     }
+  }
+
+  const handleSegmentCreated = (newSegment: ContactSegment) => {
+    setContactSegments(prev => [...prev, newSegment])
+    // Automatically select the new segment
+    setCampaignData(prev => ({
+      ...prev,
+      contactSegments: [...prev.contactSegments, newSegment.id]
+    }))
   }
 
   const validateStep = (step: number): boolean => {
@@ -259,7 +270,18 @@ export default function NewCampaignPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-medium mb-4">Select Contact Segments</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium">Select Contact Segments</h3>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowCreateSegmentModal(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Segment
+                </Button>
+              </div>
+              
               {errors.contacts && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
                   <p className="text-red-600 text-sm">{errors.contacts}</p>
@@ -315,8 +337,9 @@ export default function NewCampaignPage() {
                   <Button 
                     variant="outline" 
                     className="mt-2"
-                    onClick={() => router.push('/dashboard/contacts')}
+                    onClick={() => setShowCreateSegmentModal(true)}
                   >
+                    <Plus className="h-4 w-4 mr-2" />
                     Create Contact Segment
                   </Button>
                 </div>
@@ -672,6 +695,13 @@ export default function NewCampaignPage() {
           )}
         </div>
       </div>
+
+      {/* Create Segment Modal */}
+      <CreateSegmentModal
+        isOpen={showCreateSegmentModal}
+        onClose={() => setShowCreateSegmentModal(false)}
+        onSegmentCreated={handleSegmentCreated}
+      />
     </div>
   )
 }
