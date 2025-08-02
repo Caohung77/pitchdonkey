@@ -72,10 +72,23 @@ export default function CampaignsPage() {
     try {
       setLoading(true)
       const response = await fetch('/api/campaigns')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
-      setCampaigns(data)
+      
+      // Ensure data is an array
+      if (Array.isArray(data)) {
+        setCampaigns(data)
+      } else {
+        console.error('API returned non-array data:', data)
+        setCampaigns([]) // Set empty array as fallback
+      }
     } catch (error) {
       console.error('Error fetching campaigns:', error)
+      setCampaigns([]) // Set empty array on error
     } finally {
       setLoading(false)
     }
@@ -135,7 +148,7 @@ export default function CampaignsPage() {
     }
   }
 
-  const filteredCampaigns = campaigns.filter(campaign => {
+  const filteredCampaigns = (Array.isArray(campaigns) ? campaigns : []).filter(campaign => {
     const matchesSearch = campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || campaign.status === statusFilter
@@ -229,7 +242,7 @@ export default function CampaignsPage() {
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{campaigns.length}</div>
+            <div className="text-2xl font-bold">{Array.isArray(campaigns) ? campaigns.length : 0}</div>
           </CardContent>
         </Card>
 
@@ -240,7 +253,7 @@ export default function CampaignsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {campaigns.filter(c => c.status === 'active').length}
+              {Array.isArray(campaigns) ? campaigns.filter(c => c.status === 'active').length : 0}
             </div>
           </CardContent>
         </Card>
@@ -252,7 +265,7 @@ export default function CampaignsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {campaigns.reduce((sum, c) => sum + c.contactCount, 0).toLocaleString()}
+              {Array.isArray(campaigns) ? campaigns.reduce((sum, c) => sum + c.contactCount, 0).toLocaleString() : '0'}
             </div>
           </CardContent>
         </Card>
@@ -264,7 +277,7 @@ export default function CampaignsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {campaigns.reduce((sum, c) => sum + c.emailsSent, 0).toLocaleString()}
+              {Array.isArray(campaigns) ? campaigns.reduce((sum, c) => sum + c.emailsSent, 0).toLocaleString() : '0'}
             </div>
           </CardContent>
         </Card>
