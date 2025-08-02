@@ -102,10 +102,23 @@ export default function NewCampaignPage() {
   const fetchContactSegments = async () => {
     try {
       const response = await fetch('/api/contacts/segments')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const segments = await response.json()
-      setContactSegments(segments)
+      
+      // Ensure segments is an array
+      if (Array.isArray(segments)) {
+        setContactSegments(segments)
+      } else {
+        console.error('API returned non-array data:', segments)
+        setContactSegments([]) // Set empty array as fallback
+      }
     } catch (error) {
       console.error('Error fetching contact segments:', error)
+      setContactSegments([]) // Set empty array on error
     }
   }
 
@@ -254,7 +267,7 @@ export default function NewCampaignPage() {
               )}
               
               <div className="grid gap-4">
-                {contactSegments.map((segment) => (
+                {(Array.isArray(contactSegments) ? contactSegments : []).map((segment) => (
                   <div
                     key={segment.id}
                     className={`border rounded-lg p-4 cursor-pointer transition-colors ${
@@ -295,7 +308,7 @@ export default function NewCampaignPage() {
                 ))}
               </div>
 
-              {contactSegments.length === 0 && (
+              {(!Array.isArray(contactSegments) || contactSegments.length === 0) && (
                 <div className="text-center py-8 text-gray-500">
                   <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No contact segments found</p>
@@ -525,7 +538,7 @@ export default function NewCampaignPage() {
                 <CardContent>
                   <div className="space-y-2">
                     {campaignData.contactSegments.map(segmentId => {
-                      const segment = contactSegments.find(s => s.id === segmentId)
+                      const segment = (Array.isArray(contactSegments) ? contactSegments : []).find(s => s.id === segmentId)
                       return segment ? (
                         <div key={segmentId} className="flex items-center justify-between">
                           <span className="text-sm">{segment.name}</span>
