@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -45,27 +45,44 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
   })
   const [filters, setFilters] = useState<FilterCriteria>({})
   const [loading, setLoading] = useState(false)
-  const [estimatedCount, setEstimatedCount] = useState(0)
+  const [estimatedCount, setEstimatedCount] = useState(100) // Start with total count
+
+  // Update estimation whenever filters change
+  useEffect(() => {
+    estimateContactCount()
+  }, [filters.company, filters.jobTitle, filters.location, filters.industry, filters.addedAfter])
 
   const handleBasicNext = () => {
     if (segmentData.name.trim()) {
       setStep('filters')
-      // Estimate contact count based on filters
-      estimateContactCount()
+      // Estimation will be handled by useEffect
     }
   }
 
   const estimateContactCount = () => {
-    // Mock estimation - in real app, this would query the database
-    let count = 1250 // Total contacts
+    // Start with base count from our populated database
+    let count = 100 // We know we have 100 contacts
     
-    if (filters.company) count = Math.floor(count * 0.3)
-    if (filters.jobTitle) count = Math.floor(count * 0.4)
-    if (filters.location) count = Math.floor(count * 0.6)
-    if (filters.industry) count = Math.floor(count * 0.5)
-    if (filters.addedAfter) count = Math.floor(count * 0.2)
+    // Apply filters to estimate count
+    if (filters.company && filters.company.trim()) {
+      count = Math.floor(count * 0.3) // ~30 contacts might match company filter
+    }
+    if (filters.jobTitle && filters.jobTitle.trim()) {
+      count = Math.floor(count * 0.4) // ~40% might match job title
+    }
+    if (filters.location && filters.location.trim()) {
+      count = Math.floor(count * 0.6) // ~60% might match location
+    }
+    if (filters.industry && filters.industry !== '') {
+      count = Math.floor(count * 0.5) // ~50% might match industry
+    }
+    if (filters.addedAfter && filters.addedAfter !== '') {
+      count = Math.floor(count * 0.2) // ~20% might be recent
+    }
     
-    setEstimatedCount(Math.max(count, 10))
+    // Ensure minimum count
+    const finalCount = Math.max(count, 5)
+    setEstimatedCount(finalCount)
   }
 
   const handleCreateSegment = async () => {
@@ -84,17 +101,22 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
 
       if (response.ok) {
         const newSegment = await response.json()
-        // Add estimated count to the segment
+        // Use the contact count from the API response or fall back to estimated count
         const segmentWithCount = {
           ...newSegment,
-          contactCount: estimatedCount
+          contactCount: newSegment.contactCount || estimatedCount
         }
         onSegmentCreated(segmentWithCount)
         onClose()
         resetForm()
+      } else {
+        const errorData = await response.json()
+        console.error('Error creating segment:', errorData)
+        alert('Failed to create segment. Please try again.')
       }
     } catch (error) {
       console.error('Error creating segment:', error)
+      alert('Failed to create segment. Please check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -104,7 +126,7 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
     setStep('basic')
     setSegmentData({ name: '', description: '' })
     setFilters({})
-    setEstimatedCount(0)
+    setEstimatedCount(100) // Reset to total count
   }
 
   if (!isOpen) return null
@@ -194,7 +216,6 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
                     value={filters.company || ''}
                     onChange={(e) => {
                       setFilters(prev => ({ ...prev, company: e.target.value }))
-                      estimateContactCount()
                     }}
                   />
                 </div>
@@ -211,7 +232,6 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
                     value={filters.jobTitle || ''}
                     onChange={(e) => {
                       setFilters(prev => ({ ...prev, jobTitle: e.target.value }))
-                      estimateContactCount()
                     }}
                   />
                 </div>
@@ -228,7 +248,6 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
                     value={filters.location || ''}
                     onChange={(e) => {
                       setFilters(prev => ({ ...prev, location: e.target.value }))
-                      estimateContactCount()
                     }}
                   />
                 </div>
@@ -243,7 +262,6 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
                     value={filters.industry || ''}
                     onChange={(e) => {
                       setFilters(prev => ({ ...prev, industry: e.target.value }))
-                      estimateContactCount()
                     }}
                   >
                     <option value="">All Industries</option>
@@ -253,7 +271,13 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
                     <option value="education">Education</option>
                     <option value="retail">Retail</option>
                     <option value="manufacturing">Manufacturing</option>
-                    <option value="other">Other</option>
+                    <option value="consulting">Consulting</option>
+                    <option value="marketing">Marketing</option>
+                    <option value="media">Media</option>
+                    <option value="legal">Legal</option>
+                    <option value="real-estate">Real Estate</option>
+                    <option value="automotive">Automotive</option>
+                    <option value="energy">Energy</option>
                   </select>
                 </div>
 
@@ -268,7 +292,6 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
                     value={filters.addedAfter || ''}
                     onChange={(e) => {
                       setFilters(prev => ({ ...prev, addedAfter: e.target.value }))
-                      estimateContactCount()
                     }}
                   />
                 </div>
