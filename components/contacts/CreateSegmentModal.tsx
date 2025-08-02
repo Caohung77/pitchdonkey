@@ -88,6 +88,11 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
   const handleCreateSegment = async () => {
     try {
       setLoading(true)
+      console.log('Creating segment with data:', {
+        name: segmentData.name,
+        description: segmentData.description,
+        filterCriteria: filters
+      })
       
       const response = await fetch('/api/contacts/segments', {
         method: 'POST',
@@ -99,23 +104,29 @@ export function CreateSegmentModal({ isOpen, onClose, onSegmentCreated }: Create
         })
       })
 
+      console.log('API Response status:', response.status)
+
       if (response.ok) {
         const newSegment = await response.json()
+        console.log('Created segment:', newSegment)
+        
         // Use the contact count from the API response or fall back to estimated count
         const segmentWithCount = {
           ...newSegment,
           contactCount: newSegment.contactCount || estimatedCount
         }
+        
+        console.log('Calling onSegmentCreated with:', segmentWithCount)
         onSegmentCreated(segmentWithCount)
         onClose()
         resetForm()
       } else {
         const errorData = await response.json()
-        console.error('Error creating segment:', errorData)
-        alert('Failed to create segment. Please try again.')
+        console.error('API Error:', errorData)
+        alert(`Failed to create segment: ${errorData.error || 'Unknown error'}`)
       }
     } catch (error) {
-      console.error('Error creating segment:', error)
+      console.error('Network/Parse Error:', error)
       alert('Failed to create segment. Please check your connection and try again.')
     } finally {
       setLoading(false)
