@@ -60,15 +60,30 @@ export function CreateContactListModal({ isOpen, onClose, onListCreated }: Creat
   const fetchContacts = async () => {
     try {
       setContactsLoading(true)
-      const response = await fetch('/api/contacts')
+      const response = await fetch('/api/contacts?limit=1000') // Get more contacts for list creation
       if (response.ok) {
-        const data = await response.json()
-        if (Array.isArray(data)) {
-          setContacts(data)
+        const result = await response.json()
+        console.log('Contacts API response:', result) // Debug log
+        
+        // Handle the API response structure
+        if (result.success && result.data && result.data.contacts) {
+          console.log('Found contacts:', result.data.contacts.length) // Debug log
+          setContacts(result.data.contacts)
+        } else if (Array.isArray(result)) {
+          // Fallback for direct array response
+          console.log('Direct array response:', result.length) // Debug log
+          setContacts(result)
+        } else {
+          console.error('Unexpected API response structure:', result)
+          setContacts([])
         }
+      } else {
+        console.error('Failed to fetch contacts:', response.status)
+        setContacts([])
       }
     } catch (error) {
       console.error('Error fetching contacts:', error)
+      setContacts([])
     } finally {
       setContactsLoading(false)
     }

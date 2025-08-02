@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Contacts API</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 4px;
+        }
+        button:hover { background: #2563eb; }
+        .log {
+            background: #f1f5f9;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+        }
+        .contact-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .contact-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            background: #fafafa;
+        }
+        .contact-card h4 {
+            margin: 0 0 4px 0;
+            color: #1e293b;
+        }
+        .contact-card p {
+            margin: 2px 0;
+            color: #64748b;
+            font-size: 14px;
+        }
+        .status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status.success { background: #dcfce7; color: #166534; }
+        .status.error { background: #fef2f2; color: #dc2626; }
+        .status.warning { background: #fffbeb; color: #d97706; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Debug Contacts API</h1>
+        <p>This page helps debug why contacts aren't showing in the list creation modal.</p>
+        
+        <div style="margin: 16px 0;">
+            <button onclick="testContactsAPI()">Test Contacts API</button>
+            <button onclick="testContactsAPIWithLimit()">Test with Limit 1000</button>
+            <button onclick="testContactListsAPI()">Test Contact Lists API</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <div id="log" class="log"></div>
+    </div>
+
+    <div class="container">
+        <h2>📋 Contacts Preview</h2>
+        <div id="contacts-status" class="status warning">No contacts loaded yet</div>
+        <div id="contacts-grid" class="contact-grid"></div>
+    </div>
+
+    <div class="container">
+        <h2>🛠️ Troubleshooting Steps</h2>
+        <ol>
+            <li><strong>Create contact_lists table:</strong> Run the SQL in <code>create-contact-lists-table.sql</code> in your Supabase SQL editor</li>
+            <li><strong>Check authentication:</strong> Make sure you're logged in to the dashboard</li>
+            <li><strong>Verify contacts exist:</strong> Click "Test Contacts API" to see if contacts are returned</li>
+            <li><strong>Check API response structure:</strong> Look at the console logs to see the exact response format</li>
+        </ol>
+    </div>
+
+    <script>
+        let logElement = document.getElementById('log');
+        let contactsStatusElement = document.getElementById('contacts-status');
+        let contactsGridElement = document.getElementById('contacts-grid');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            logElement.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            logElement.textContent = '';
+        }
+
+        function updateContactsStatus(message, type) {
+            contactsStatusElement.textContent = message;
+            contactsStatusElement.className = `status ${type}`;
+        }
+
+        function displayContacts(contacts) {
+            contactsGridElement.innerHTML = '';
+            
+            if (!contacts || contacts.length === 0) {
+                contactsGridElement.innerHTML = '<p>No contacts to display</p>';
+                return;
+            }
+
+            contacts.slice(0, 20).forEach(contact => { // Show first 20 contacts
+                const card = document.createElement('div');
+                card.className = 'contact-card';
+                card.innerHTML = `
+                    <h4>${contact.first_name || 'N/A'} ${contact.last_name || 'N/A'}</h4>
+                    <p><strong>Email:</strong> ${contact.email || 'N/A'}</p>
+                    <p><strong>Company:</strong> ${contact.company || 'N/A'}</p>
+                    <p><strong>Position:</strong> ${contact.position || 'N/A'}</p>
+                    <p><strong>ID:</strong> ${contact.id}</p>
+                `;
+                contactsGridElement.appendChild(card);
+            });
+
+            if (contacts.length > 20) {
+                const moreCard = document.createElement('div');
+                moreCard.className = 'contact-card';
+                moreCard.innerHTML = `<p><strong>... and ${contacts.length - 20} more contacts</strong></p>`;
+                contactsGridElement.appendChild(moreCard);
+            }
+        }
+
+        async function testContactsAPI() {
+            log('Testing contacts API...');
+            updateContactsStatus('Loading...', 'warning');
+            
+            try {
+                const response = await fetch('/api/contacts');
+                const data = await response.json();
+                
+                log(`Response status: ${response.status}`);
+                log(`Response data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    if (data.success && data.data && data.data.contacts) {
+                        log(`✅ Found ${data.data.contacts.length} contacts in data.data.contacts`, 'success');
+                        updateContactsStatus(`${data.data.contacts.length} contacts loaded`, 'success');
+                        displayContacts(data.data.contacts);
+                    } else if (Array.isArray(data)) {
+                        log(`✅ Found ${data.length} contacts in direct array`, 'success');
+                        updateContactsStatus(`${data.length} contacts loaded`, 'success');
+                        displayContacts(data);
+                    } else {
+                        log(`⚠️ Unexpected response structure`, 'warning');
+                        updateContactsStatus('Unexpected response structure', 'error');
+                    }
+                } else {
+                    log(`❌ API error: ${data.error || 'Unknown error'}`, 'error');
+                    updateContactsStatus(`API error: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Request failed: ${error.message}`, 'error');
+                updateContactsStatus(`Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testContactsAPIWithLimit() {
+            log('Testing contacts API with limit=1000...');
+            updateContactsStatus('Loading with limit...', 'warning');
+            
+            try {
+                const response = await fetch('/api/contacts?limit=1000');
+                const data = await response.json();
+                
+                log(`Response status: ${response.status}`);
+                log(`Response data structure: ${JSON.stringify(Object.keys(data), null, 2)}`);
+                
+                if (response.ok) {
+                    if (data.success && data.data && data.data.contacts) {
+                        log(`✅ Found ${data.data.contacts.length} contacts with limit`, 'success');
+                        updateContactsStatus(`${data.data.contacts.length} contacts loaded (with limit)`, 'success');
+                        displayContacts(data.data.contacts);
+                    } else {
+                        log(`⚠️ Unexpected response structure with limit`, 'warning');
+                        updateContactsStatus('Unexpected response structure', 'error');
+                    }
+                } else {
+                    log(`❌ API error with limit: ${data.error || 'Unknown error'}`, 'error');
+                    updateContactsStatus(`API error: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Request with limit failed: ${error.message}`, 'error');
+                updateContactsStatus(`Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testContactListsAPI() {
+            log('Testing contact lists API...');
+            
+            try {
+                const response = await fetch('/api/contacts/lists');
+                const data = await response.json();
+                
+                log(`Contact Lists API status: ${response.status}`);
+                log(`Contact Lists API data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    log(`✅ Contact lists API working: ${data.length} lists found`, 'success');
+                } else {
+                    log(`❌ Contact lists API error: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Contact lists API failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run basic test on page load
+        window.addEventListener('load', () => {
+            log('Debug page loaded. Click "Test Contacts API" to start debugging.');
+        });
+    </script>
+</body>
+</html>
