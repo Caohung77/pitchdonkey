@@ -14,7 +14,8 @@ import {
   Settings, 
   Play,
   AlertCircle,
-  Info
+  Info,
+  Plus
 } from 'lucide-react'
 import { SequenceBuilder } from '@/components/campaigns/SequenceBuilder'
 import { CreateSegmentModal } from '@/components/contacts/CreateSegmentModal'

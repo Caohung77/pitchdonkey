@@ -94,32 +94,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // In a real implementation, you'd create the segment:
-    /*
-    const { data: segment, error } = await supabase
-      .from('contact_segments')
-      .insert({
-        user_id: user.id,
-        name,
-        description,
-        filter_criteria: filterCriteria || {}
-      })
-      .select()
-      .single()
+    // Calculate estimated contact count based on filters
+    let estimatedCount = 1250 // Base count
+    if (filterCriteria?.company) estimatedCount = Math.floor(estimatedCount * 0.3)
+    if (filterCriteria?.jobTitle) estimatedCount = Math.floor(estimatedCount * 0.4)
+    if (filterCriteria?.location) estimatedCount = Math.floor(estimatedCount * 0.6)
+    if (filterCriteria?.industry) estimatedCount = Math.floor(estimatedCount * 0.5)
+    if (filterCriteria?.addedAfter) estimatedCount = Math.floor(estimatedCount * 0.2)
+    estimatedCount = Math.max(estimatedCount, 10)
 
-    if (error) {
-      console.error('Error creating segment:', error)
-      return NextResponse.json({ error: 'Failed to create segment' }, { status: 500 })
-    }
-    */
-
-    // Mock response for now
+    // Mock response for now - in production this would save to database
     const mockSegment = {
-      id: Date.now().toString(),
+      id: `segment_${Date.now()}`,
       name,
       description: description || '',
-      contactCount: 0,
-      createdAt: new Date().toISOString()
+      contactCount: estimatedCount,
+      createdAt: new Date().toISOString(),
+      filterCriteria: filterCriteria || {}
     }
 
     return NextResponse.json(mockSegment, { status: 201 })
