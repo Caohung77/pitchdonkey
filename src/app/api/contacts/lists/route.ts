@@ -90,10 +90,23 @@ export async function POST(request: NextRequest) {
 
     if (listError) {
       console.error('Error creating contact list:', listError)
+      
+      // More specific error handling
       if (listError.code === '23505') { // Unique constraint violation
         return NextResponse.json({ error: 'A list with this name already exists' }, { status: 400 })
       }
-      return NextResponse.json({ error: 'Failed to create contact list' }, { status: 500 })
+      if (listError.code === '42P01') { // Table does not exist
+        return NextResponse.json({ 
+          error: 'Contact lists table does not exist. Please create the table first.',
+          details: 'Run the SQL from create-contact-lists-table.sql in your Supabase dashboard'
+        }, { status: 500 })
+      }
+      
+      return NextResponse.json({ 
+        error: 'Failed to create contact list',
+        details: listError.message,
+        code: listError.code
+      }, { status: 500 })
     }
 
     // Return the created list

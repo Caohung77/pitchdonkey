@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Contact Lists - Create Database Table</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .error { 
+            background: #fef2f2; 
+            border: 1px solid #fecaca; 
+            color: #dc2626; 
+            padding: 16px; 
+            border-radius: 6px; 
+            margin: 16px 0;
+        }
+        .success { 
+            background: #f0fdf4; 
+            border: 1px solid #bbf7d0; 
+            color: #166534; 
+            padding: 16px; 
+            border-radius: 6px; 
+            margin: 16px 0;
+        }
+        .warning { 
+            background: #fffbeb; 
+            border: 1px solid #fed7aa; 
+            color: #d97706; 
+            padding: 16px; 
+            border-radius: 6px; 
+            margin: 16px 0;
+        }
+        .sql-code {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            white-space: pre;
+            margin: 16px 0;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 8px 8px 8px 0;
+        }
+        button:hover { background: #2563eb; }
+        button.copy { background: #10b981; }
+        button.copy:hover { background: #059669; }
+        .step {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 16px 0;
+        }
+        .step h3 {
+            margin: 0 0 12px 0;
+            color: #1e293b;
+        }
+        .step-number {
+            background: #3b82f6;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix Contact Lists - Create Database Table</h1>
+        <p>You're getting a 500 error when creating contact lists because the <code>contact_lists</code> table doesn't exist in your database.</p>
+        
+        <div id="status" class="warning">
+            <strong>⚠️ Table Status:</strong> Checking if contact_lists table exists...
+        </div>
+        
+        <button onclick="checkTableStatus()">🔍 Check Table Status</button>
+        <button onclick="testCreateList()">🧪 Test List Creation</button>
+    </div>
+
+    <div class="container">
+        <h2>📋 Step-by-Step Fix</h2>
+        
+        <div class="step">
+            <h3><span class="step-number">1</span>Copy the SQL Code</h3>
+            <p>Copy this SQL code to create the contact_lists table:</p>
+            <div class="sql-code" id="sqlCode">-- Create contact_lists table for static contact collections
+CREATE TABLE IF NOT EXISTS contact_lists (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  contact_ids UUID[] DEFAULT '{}',
+  tags TEXT[] DEFAULT '{}',
+  is_favorite BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Constraints
+  UNIQUE(user_id, name)
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_contact_lists_user_id ON contact_lists(user_id);
+CREATE INDEX IF NOT EXISTS idx_contact_lists_name ON contact_lists(user_id, name);
+CREATE INDEX IF NOT EXISTS idx_contact_lists_created_at ON contact_lists(created_at DESC);
+
+-- RLS (Row Level Security) Policies
+ALTER TABLE contact_lists ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own contact lists" ON contact_lists
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own contact lists" ON contact_lists
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own contact lists" ON contact_lists
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own contact lists" ON contact_lists
+    FOR DELETE USING (auth.uid() = user_id);</div>
+            <button class="copy" onclick="copySQL()">📋 Copy SQL</button>
+        </div>
+
+        <div class="step">
+            <h3><span class="step-number">2</span>Open Supabase Dashboard</h3>
+            <p>Go to your Supabase project dashboard and navigate to the <strong>SQL Editor</strong>.</p>
+            <button onclick="window.open('https://supabase.com/dashboard', '_blank')">🔗 Open Supabase Dashboard</button>
+        </div>
+
+        <div class="step">
+            <h3><span class="step-number">3</span>Run the SQL</h3>
+            <p>Paste the SQL code into the SQL Editor and click <strong>"Run"</strong> to execute it.</p>
+        </div>
+
+        <div class="step">
+            <h3><span class="step-number">4</span>Test the Fix</h3>
+            <p>Come back to this page and click the test button to verify everything works.</p>
+            <button onclick="testAfterFix()">✅ Test After Fix</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 Test Results</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('testResults');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'warning';
+            resultsDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+        }
+
+        function clearResults() {
+            document.getElementById('testResults').innerHTML = '';
+        }
+
+        function copySQL() {
+            const sqlCode = document.getElementById('sqlCode').textContent;
+            navigator.clipboard.writeText(sqlCode).then(() => {
+                alert('✅ SQL copied to clipboard! Now paste it in your Supabase SQL Editor.');
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('❌ Failed to copy. Please select and copy the SQL manually.');
+            });
+        }
+
+        async function checkTableStatus() {
+            clearResults();
+            log('🔍 Checking if contact_lists table exists...');
+            
+            try {
+                const response = await fetch('/api/contacts/lists');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log(`✅ Table exists! Found ${data.length} contact lists.`, 'success');
+                    document.getElementById('status').innerHTML = '<strong>✅ Table Status:</strong> contact_lists table exists and is working!';
+                    document.getElementById('status').className = 'success';
+                } else {
+                    log(`❌ Table does not exist: ${data.error}`, 'error');
+                    if (data.details) {
+                        log(`Details: ${data.details}`, 'error');
+                    }
+                    document.getElementById('status').innerHTML = '<strong>❌ Table Status:</strong> contact_lists table does not exist';
+                    document.getElementById('status').className = 'error';
+                }
+            } catch (error) {
+                log(`❌ Error checking table: ${error.message}`, 'error');
+                document.getElementById('status').innerHTML = '<strong>❌ Table Status:</strong> Error checking table status';
+                document.getElementById('status').className = 'error';
+            }
+        }
+
+        async function testCreateList() {
+            clearResults();
+            log('🧪 Testing contact list creation...');
+            
+            try {
+                // First get some contacts
+                const contactsResponse = await fetch('/api/contacts?limit=5');
+                const contactsData = await contactsResponse.json();
+                
+                if (!contactsResponse.ok) {
+                    log(`❌ Failed to fetch contacts: ${contactsData.error}`, 'error');
+                    return;
+                }
+                
+                const contacts = contactsData.success ? contactsData.data.contacts : contactsData;
+                if (!contacts || contacts.length === 0) {
+                    log('⚠️ No contacts available for testing', 'warning');
+                    return;
+                }
+                
+                log(`📋 Found ${contacts.length} contacts for testing`);
+                
+                // Try to create a test list
+                const testListData = {
+                    name: `Test List ${Date.now()}`,
+                    description: 'Automated test list',
+                    contactIds: contacts.slice(0, 2).map(c => c.id),
+                    tags: ['test']
+                };
+                
+                const createResponse = await fetch('/api/contacts/lists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testListData)
+                });
+                
+                const createData = await createResponse.json();
+                
+                if (createResponse.ok) {
+                    log(`✅ List created successfully: "${createData.name}" with ${createData.contactCount} contacts`, 'success');
+                } else {
+                    log(`❌ Failed to create list: ${createData.error}`, 'error');
+                    if (createData.details) {
+                        log(`Details: ${createData.details}`, 'error');
+                    }
+                    if (createData.code) {
+                        log(`Error code: ${createData.code}`, 'error');
+                    }
+                }
+                
+            } catch (error) {
+                log(`❌ Test failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAfterFix() {
+            clearResults();
+            log('🎯 Testing complete functionality after fix...');
+            
+            // Check table exists
+            await checkTableStatus();
+            
+            // Wait a moment
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Test list creation
+            await testCreateList();
+            
+            log('🎉 If both tests passed, your contact lists are now working!', 'success');
+            log('💡 You can now go to /dashboard/contacts → Lists tab and create lists', 'success');
+        }
+
+        // Auto-check on page load
+        window.addEventListener('load', () => {
+            checkTableStatus();
+        });
+    </script>
+</body>
+</html>
