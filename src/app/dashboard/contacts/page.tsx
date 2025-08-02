@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase-client'
-import { Mail, LogOut, AlertCircle } from 'lucide-react'
+import { Mail, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ContactsErrorBoundary } from '@/components/contacts/ContactsErrorBoundary'
@@ -101,24 +101,7 @@ function ContactsPageContent() {
     }
   }
 
-  const handleSignOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error('Sign out error:', error)
-        setState(prev => ({ ...prev, error: 'Failed to sign out' }))
-      } else {
-        setState(prev => ({
-          ...prev,
-          user: null,
-          error: null
-        }))
-      }
-    } catch (error) {
-      console.error('Sign out error:', error)
-      setState(prev => ({ ...prev, error: 'Failed to sign out' }))
-    }
-  }
+
 
   const handleRetrySession = () => {
     setState(prev => ({ ...prev, loading: true, error: null }))
@@ -211,31 +194,9 @@ function ContactsPageContent() {
 
   // Main contacts interface
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <Mail className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900">ColdReach Pro</span>
-              <span className="ml-4 text-sm text-gray-500">- Dashboard Contacts</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Welcome, {state.user.name}
-              </span>
-              <Button variant="outline" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
+    <div className="space-y-6">
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <div>
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <div>
@@ -267,7 +228,7 @@ function ContactsPageContent() {
           searchTerm={state.searchTerm}
           statusFilter={state.statusFilter}
         />
-      </main>
+      </div>
     </div>
   )
 }
