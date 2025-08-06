@@ -38,6 +38,12 @@ interface CampaignData {
     avoidWeekends: boolean
     dailyLimit: number
   }
+  launchSettings: {
+    launchType: 'now' | 'scheduled'
+    scheduledDate?: string
+    scheduledTime?: string
+    timezone?: string
+  }
 }
 
 interface EmailStep {
@@ -93,6 +99,10 @@ export default function NewCampaignPage() {
       businessHoursOnly: true,
       avoidWeekends: true,
       dailyLimit: 50
+    },
+    launchSettings: {
+      launchType: 'now',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
     }
   })
   const [contactSegments, setContactSegments] = useState<ContactSegment[]>([])
@@ -195,6 +205,28 @@ export default function NewCampaignPage() {
             newErrors[`step_${index}_content`] = 'Email content is required'
           }
         })
+        break
+      case 3: // Settings
+        if (campaignData.launchSettings.launchType === 'scheduled') {
+          if (!campaignData.launchSettings.scheduledDate) {
+            newErrors.scheduledDate = 'Launch date is required for scheduled campaigns'
+          }
+          if (!campaignData.launchSettings.scheduledTime) {
+            newErrors.scheduledTime = 'Launch time is required for scheduled campaigns'
+          }
+          if (!campaignData.launchSettings.timezone) {
+            newErrors.timezone = 'Timezone is required for scheduled campaigns'
+          }
+          
+          // Validate that scheduled time is in the future
+          if (campaignData.launchSettings.scheduledDate && campaignData.launchSettings.scheduledTime) {
+            const scheduledDateTime = new Date(campaignData.launchSettings.scheduledDate + 'T' + campaignData.launchSettings.scheduledTime)
+            const now = new Date()
+            if (scheduledDateTime <= now) {
+              newErrors.scheduledDateTime = 'Scheduled time must be in the future'
+            }
+          }
+        }
         break
     }
 
@@ -624,6 +656,143 @@ export default function NewCampaignPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Launch Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Play className="h-5 w-5 mr-2" />
+                  Launch Settings
+                </CardTitle>
+                <CardDescription>
+                  Choose when to start your campaign
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {(errors.scheduledDate || errors.scheduledTime || errors.timezone || errors.scheduledDateTime) && (
+                  <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                    {errors.scheduledDate && <p className="text-red-600 text-sm">{errors.scheduledDate}</p>}
+                    {errors.scheduledTime && <p className="text-red-600 text-sm">{errors.scheduledTime}</p>}
+                    {errors.timezone && <p className="text-red-600 text-sm">{errors.timezone}</p>}
+                    {errors.scheduledDateTime && <p className="text-red-600 text-sm">{errors.scheduledDateTime}</p>}
+                  </div>
+                )}
+                
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="radio"
+                      id="launch-now"
+                      name="launchType"
+                      value="now"
+                      checked={campaignData.launchSettings.launchType === 'now'}
+                      onChange={(e) => setCampaignData(prev => ({
+                        ...prev,
+                        launchSettings: { ...prev.launchSettings, launchType: 'now' }
+                      }))}
+                      className="rounded"
+                    />
+                    <label htmlFor="launch-now" className="text-sm font-medium">
+                      Send Now
+                    </label>
+                    <span className="text-xs text-gray-500">Start immediately after creation</span>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="radio"
+                      id="launch-scheduled"
+                      name="launchType"
+                      value="scheduled"
+                      checked={campaignData.launchSettings.launchType === 'scheduled'}
+                      onChange={(e) => setCampaignData(prev => ({
+                        ...prev,
+                        launchSettings: { ...prev.launchSettings, launchType: 'scheduled' }
+                      }))}
+                      className="rounded"
+                    />
+                    <label htmlFor="launch-scheduled" className="text-sm font-medium">
+                      Schedule for Later
+                    </label>
+                    <span className="text-xs text-gray-500">Choose specific date and time</span>
+                  </div>
+                </div>
+
+                {campaignData.launchSettings.launchType === 'scheduled' && (
+                  <div className="pl-6 space-y-4 border-l-2 border-blue-100">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Launch Date</label>
+                        <input
+                          type="date"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          min={new Date().toISOString().split('T')[0]}
+                          value={campaignData.launchSettings.scheduledDate || ''}
+                          onChange={(e) => setCampaignData(prev => ({
+                            ...prev,
+                            launchSettings: { ...prev.launchSettings, scheduledDate: e.target.value }
+                          }))}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Launch Time</label>
+                        <input
+                          type="time"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={campaignData.launchSettings.scheduledTime || ''}
+                          onChange={(e) => setCampaignData(prev => ({
+                            ...prev,
+                            launchSettings: { ...prev.launchSettings, scheduledTime: e.target.value }
+                          }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Timezone</label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        value={campaignData.launchSettings.timezone || ''}
+                        onChange={(e) => setCampaignData(prev => ({
+                          ...prev,
+                          launchSettings: { ...prev.launchSettings, timezone: e.target.value }
+                        }))}
+                      >
+                        <option value="">Select timezone...</option>
+                        <option value="America/New_York">Eastern Time (ET)</option>
+                        <option value="America/Chicago">Central Time (CT)</option>
+                        <option value="America/Denver">Mountain Time (MT)</option>
+                        <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                        <option value="Europe/London">London (GMT)</option>
+                        <option value="Europe/Paris">Paris (CET)</option>
+                        <option value="Asia/Tokyo">Tokyo (JST)</option>
+                        <option value="Asia/Shanghai">Shanghai (CST)</option>
+                        <option value="Australia/Sydney">Sydney (AEST)</option>
+                        <option value={Intl.DateTimeFormat().resolvedOptions().timeZone}>
+                          {Intl.DateTimeFormat().resolvedOptions().timeZone} (Auto-detected)
+                        </option>
+                      </select>
+                    </div>
+
+                    {campaignData.launchSettings.scheduledDate && campaignData.launchSettings.scheduledTime && (
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <div className="flex items-start">
+                          <Info className="h-4 w-4 text-blue-600 mt-0.5 mr-2" />
+                          <div className="text-sm">
+                            <p className="font-medium text-blue-900">Scheduled Launch</p>
+                            <p className="text-blue-700">
+                              Campaign will start on {new Date(campaignData.launchSettings.scheduledDate + 'T' + campaignData.launchSettings.scheduledTime).toLocaleDateString()} 
+                              at {campaignData.launchSettings.scheduledTime} ({campaignData.launchSettings.timezone || 'Local time'})
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )
 
@@ -725,6 +894,57 @@ export default function NewCampaignPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Launch Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Launch Settings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Launch Type</dt>
+                      <dd className="text-sm flex items-center">
+                        <Play className="h-4 w-4 mr-2 text-blue-500" />
+                        {campaignData.launchSettings.launchType === 'now' ? 'Send Now' : 'Scheduled'}
+                      </dd>
+                    </div>
+                    
+                    {campaignData.launchSettings.launchType === 'scheduled' && (
+                      <>
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Scheduled Date & Time</dt>
+                          <dd className="text-sm">
+                            {campaignData.launchSettings.scheduledDate && campaignData.launchSettings.scheduledTime ? (
+                              <>
+                                {new Date(campaignData.launchSettings.scheduledDate + 'T' + campaignData.launchSettings.scheduledTime).toLocaleDateString()} 
+                                at {campaignData.launchSettings.scheduledTime}
+                              </>
+                            ) : (
+                              'Not set'
+                            )}
+                          </dd>
+                        </div>
+                        
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Timezone</dt>
+                          <dd className="text-sm">{campaignData.launchSettings.timezone || 'Not set'}</dd>
+                        </div>
+                      </>
+                    )}
+                    
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">AI Personalization</dt>
+                      <dd className="text-sm">{campaignData.aiSettings.enabled ? 'Enabled' : 'Disabled'}</dd>
+                    </div>
+                    
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Daily Email Limit</dt>
+                      <dd className="text-sm">{campaignData.scheduleSettings.dailyLimit} emails per day</dd>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         )
@@ -820,7 +1040,7 @@ export default function NewCampaignPage() {
           ) : (
             <Button onClick={handleLaunch} disabled={loading}>
               <Play className="h-4 w-4 mr-2" />
-              Launch Campaign
+              {campaignData.launchSettings.launchType === 'now' ? 'Launch Now' : 'Schedule Campaign'}
             </Button>
           )}
         </div>
