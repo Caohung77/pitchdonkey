@@ -157,14 +157,14 @@ export class TimezoneScheduler {
       }
 
       // Detect recipient timezone
-      const recipientTimezone = await this.detectRecipientTimezone(context.contact, validatedSettings)
+      const recipientTimezone = await this.detectRecipientTimezone(context.contact, validatedSettings as ScheduleSettings)
       reasoning.push(`Using timezone: ${recipientTimezone.timezone}`)
 
       // Convert to recipient timezone
       const recipientTime = this.convertToTimezone(scheduledTime, recipientTimezone.timezone)
 
       // Apply optimal send time if available
-      const optimalTime = this.findOptimalSendTime(recipientTime, validatedSettings, recipientTimezone.timezone)
+      const optimalTime = this.findOptimalSendTime(recipientTime, validatedSettings as ScheduleSettings, recipientTimezone.timezone)
       if (optimalTime) {
         scheduledTime = optimalTime.scheduledTime
         reasoning.push(`Applied optimal send time: ${optimalTime.reasoning}`)
@@ -175,7 +175,7 @@ export class TimezoneScheduler {
       if (validatedSettings.business_hours_only) {
         const businessHoursResult = this.adjustForBusinessHours(
           scheduledTime, 
-          validatedSettings, 
+          validatedSettings as ScheduleSettings, 
           recipientTimezone.timezone
         )
         scheduledTime = businessHoursResult.adjustedTime
@@ -189,7 +189,7 @@ export class TimezoneScheduler {
       if (validatedSettings.custom_time_windows.length > 0) {
         const timeWindowResult = this.adjustForTimeWindows(
           scheduledTime,
-          validatedSettings.custom_time_windows,
+          (validatedSettings as ScheduleSettings).custom_time_windows,
           recipientTimezone.timezone
         )
         scheduledTime = timeWindowResult.adjustedTime
@@ -200,7 +200,7 @@ export class TimezoneScheduler {
       }
 
       // Avoid weekends
-      if (validatedSettings.avoid_weekends) {
+      if ((validatedSettings as ScheduleSettings).avoid_weekends) {
         const weekendResult = this.adjustForWeekends(scheduledTime, recipientTimezone.timezone)
         scheduledTime = weekendResult.adjustedTime
         if (weekendResult.wasAdjusted) {
@@ -210,10 +210,10 @@ export class TimezoneScheduler {
       }
 
       // Avoid holidays
-      if (validatedSettings.avoid_holidays && validatedSettings.holiday_list.length > 0) {
+      if ((validatedSettings as ScheduleSettings).avoid_holidays && (validatedSettings as ScheduleSettings).holiday_list.length > 0) {
         const holidayResult = await this.adjustForHolidays(
           scheduledTime,
-          validatedSettings.holiday_list,
+          (validatedSettings as ScheduleSettings).holiday_list,
           recipientTimezone.timezone
         )
         scheduledTime = holidayResult.adjustedTime

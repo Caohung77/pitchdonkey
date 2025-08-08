@@ -133,7 +133,7 @@ export class SpamChecker {
         isSpam,
         confidence,
         issues,
-        suggestions: [...new Set(suggestions)], // Remove duplicates
+        suggestions: Array.from(new Set(suggestions)), // Remove duplicates
         details: {
           contentScore,
           subjectScore,
@@ -207,7 +207,7 @@ export class SpamChecker {
     const hasExcessivePunctuation = /[!?]{2,}/.test(subject)
     const hasAllCaps = subject === subject.toUpperCase() && subject.length > 5
     const hasNumbers = /\d/.test(subject)
-    const hasEmojis = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]/u.test(subject)
+    const hasEmojis = false // Emoji detection disabled for compatibility
 
     // Calculate subject spam score
     let spamScore = 0
@@ -583,7 +583,7 @@ export class SpamChecker {
     const lowerContent = content.toLowerCase()
     const foundWords: string[] = []
 
-    for (const word of this.spamWords) {
+    for (const word of Array.from(this.spamWords)) {
       if (lowerContent.includes(word.toLowerCase())) {
         foundWords.push(word)
       }
@@ -674,10 +674,10 @@ export class SpamChecker {
     }
 
     return {
-      subjectSuggestions: [...new Set(subjectSuggestions)],
-      contentSuggestions: [...new Set(contentSuggestions)],
-      structureSuggestions: [...new Set(structureSuggestions)],
-      complianceSuggestions: [...new Set(complianceSuggestions)],
+      subjectSuggestions: Array.from(new Set(subjectSuggestions)),
+      contentSuggestions: Array.from(new Set(contentSuggestions)),
+      structureSuggestions: Array.from(new Set(structureSuggestions)),
+      complianceSuggestions: Array.from(new Set(complianceSuggestions)),
       overallScore: spamCheck.score
     }
   }

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Campaign Stop</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .log { background: #f0f0f0; padding: 10px; margin: 10px 0; font-family: monospace; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 5px; margin: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Campaign Stop Issue</h1>
+    
+    <div>
+        <label>Campaign ID:</label>
+        <input type="text" id="campaignId" value="0672b717-6c85-481c-9827-de1c110706ed">
+    </div>
+    
+    <div>
+        <button onclick="testStopRequest()">Test Stop Request (Direct API)</button>
+        <button onclick="testPauseRequest()">Test Pause Request (Direct API)</button>
+        <button onclick="getCampaignStatus()">Get Current Status</button>
+    </div>
+    
+    <div id="log" class="log"></div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+
+        async function getCampaignStatus() {
+            const campaignId = document.getElementById('campaignId').value;
+            log(`Getting status for campaign: ${campaignId}`);
+            
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log(`✅ Current status: ${data.status}`);
+                    log(`Campaign data: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    log(`❌ Error: ${data.error}`);
+                }
+            } catch (error) {
+                log(`❌ Exception: ${error.message}`);
+            }
+        }
+
+        async function testStopRequest() {
+            const campaignId = document.getElementById('campaignId').value;
+            log(`🛑 Testing STOP request for campaign: ${campaignId}`);
+            log(`Sending: { status: 'stopped' }`);
+            
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'stopped' })
+                });
+                
+                const data = await response.json();
+                
+                log(`Response status: ${response.status}`);
+                log(`Response data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    log(`✅ Stop request successful - new status: ${data.status}`);
+                } else {
+                    log(`❌ Stop request failed: ${data.error}`);
+                }
+            } catch (error) {
+                log(`❌ Exception during stop: ${error.message}`);
+            }
+        }
+
+        async function testPauseRequest() {
+            const campaignId = document.getElementById('campaignId').value;
+            log(`⏸️ Testing PAUSE request for campaign: ${campaignId}`);
+            log(`Sending: { status: 'paused' }`);
+            
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'paused' })
+                });
+                
+                const data = await response.json();
+                
+                log(`Response status: ${response.status}`);
+                log(`Response data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    log(`✅ Pause request successful - new status: ${data.status}`);
+                } else {
+                    log(`❌ Pause request failed: ${data.error}`);
+                }
+            } catch (error) {
+                log(`❌ Exception during pause: ${error.message}`);
+            }
+        }
+
+        // Auto-get status on load
+        window.onload = function() {
+            log('🚀 Debug page loaded');
+            setTimeout(getCampaignStatus, 500);
+        };
+    </script>
+</body>
+</html>

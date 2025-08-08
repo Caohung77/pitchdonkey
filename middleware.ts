@@ -6,8 +6,24 @@ export async function middleware(request: NextRequest) {
     const response = NextResponse.next()
     const supabase = createMiddlewareSupabaseClient(request, response)
 
-    // Refresh session if expired - required for Server Components
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    // Add timeout to prevent hanging
+    const sessionPromise = supabase.auth.getSession()
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Session check timeout')), 5000)
+    )
+
+    let session = null
+    let sessionError = null
+
+    try {
+      const result = await Promise.race([sessionPromise, timeoutPromise]) as any
+      session = result.data?.session
+      sessionError = result.error
+    } catch (error) {
+      console.warn('Middleware: Session check failed or timed out:', error)
+      // Let the request through and let the client handle authentication
+      return response
+    }
 
     // Log middleware activity for debugging
     console.log('Middleware:', {

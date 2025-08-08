@@ -1003,7 +1003,7 @@ export class RateLimiter {
 
   private clearQuotaCache(accountId: string): void {
     const keysToDelete = []
-    for (const key of this.quotaCache.keys()) {
+    for (const key of Array.from(this.quotaCache.keys())) {
       if (key.startsWith(`quota:${accountId}:`)) {
         keysToDelete.push(key)
       }
@@ -1015,7 +1015,7 @@ export class RateLimiter {
     this.clearQuotaCache(accountId)
     
     const usageKeysToDelete = []
-    for (const key of this.usageCache.keys()) {
+    for (const key of Array.from(this.usageCache.keys())) {
       if (key.startsWith(`usage:${accountId}:`)) {
         usageKeysToDelete.push(key)
       }

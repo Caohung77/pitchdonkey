@@ -1020,8 +1020,8 @@ export class EmailTracker {
               .eq('id', campaignId)
               .single()
 
-            const opens = events.filter(e => e.type === 'opened').length
-            const clicks = events.filter(e => e.type === 'clicked').length
+            const opens = events.filter((e: any) => e.type === 'opened').length
+            const clicks = events.filter((e: any) => e.type === 'clicked').length
             const total = events.length
 
             return {

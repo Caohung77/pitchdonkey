@@ -536,22 +536,22 @@ export class ReputationMonitor {
 
       if (error) throw error
 
-      const uniqueDomains = [...new Set(domains?.map(d => d.domain) || [])]
+      const uniqueDomains = Array.from(new Set(domains?.map(d => d.domain) || []))
 
       for (const domain of uniqueDomains) {
         try {
           // Get reputation score
-          const reputation = await this.getReputationScore(domain)
+          const reputation = await this.getReputationScore(domain as string)
 
           // Check for critical alerts
           const criticalAlerts = reputation.alerts.filter(a => a.severity === 'critical')
           
           if (criticalAlerts.length > 0) {
-            await this.sendReputationAlert(domain, criticalAlerts)
+            await this.sendReputationAlert(domain as string, criticalAlerts)
           }
 
           // Check blacklists
-          await this.checkBlacklists(domain)
+          await this.checkBlacklists(domain as string)
 
         } catch (error) {
           console.error(`Error monitoring reputation for ${domain}:`, error)

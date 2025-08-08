@@ -198,7 +198,7 @@ export class ValidationError extends AppError {
       'VALIDATION_FAILED',
       400,
       'Please check your input and try again',
-      { ...context, validationErrors },
+      context,
       [
         {
           type: 'manual',
@@ -243,7 +243,7 @@ export class RateLimitError extends AppError {
       'RATE_LIMIT_EXCEEDED',
       429,
       `Too many requests. Please try again in ${retryAfter} seconds`,
-      { ...context, retryAfter },
+      context,
       [
         {
           type: 'retry',
@@ -268,7 +268,7 @@ export class ExternalServiceError extends AppError {
       'EXTERNAL_SERVICE_ERROR',
       502,
       `${service} is temporarily unavailable. Please try again later`,
-      { ...context, service },
+      context,
       [
         {
           type: 'retry',
@@ -375,7 +375,7 @@ export class ErrorHandler {
     if (error instanceof AppError) {
       appError = error
       // Merge additional context
-      appError.context = { ...appError.context, ...context }
+      Object.assign(appError.context, context)
     } else {
       // Convert generic error to AppError
       appError = this.convertToAppError(error, context)

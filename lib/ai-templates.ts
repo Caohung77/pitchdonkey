@@ -560,17 +560,17 @@ export class AITemplateService {
   /**
    * Get variable suggestions based on existing templates
    */
-  getVariableSuggestions(userId: string): Promise<{
+  async getVariableSuggestions(userId: string): Promise<{
     common_variables: Array<{ variable: string; usage_count: number }>
     recent_variables: string[]
     category_variables: Record<string, string[]>
   }> {
-    return this.supabase
+    const { data, error } = await this.supabase
       .from('ai_templates')
       .select('variables, category, created_at')
       .eq('user_id', userId)
-      .then(({ data, error }) => {
-        if (error) throw error
+    
+    if (error) throw error
 
         const variableCount: Record<string, number> = {}
         const categoryVariables: Record<string, Set<string>> = {}
@@ -596,11 +596,11 @@ export class AITemplateService {
 
         // Get recent variables (last 30 days)
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        const recentVariables = [...new Set(
+        const recentVariables = Array.from(new Set(
           allVariables
             .filter(v => new Date(v.created_at) > thirtyDaysAgo)
             .map(v => v.variable)
-        )].slice(0, 10)
+        )).slice(0, 10)
 
         // Convert category variables to arrays
         const categoryVariablesArray: Record<string, string[]> = {}
@@ -608,11 +608,10 @@ export class AITemplateService {
           categoryVariablesArray[category] = Array.from(variables)
         })
 
-        return {
-          common_variables: commonVariables,
-          recent_variables: recentVariables,
-          category_variables: categoryVariablesArray
-        }
-      })
+    return {
+      common_variables: commonVariables,
+      recent_variables: recentVariables,
+      category_variables: categoryVariablesArray
+    }
   }
 }

@@ -28,7 +28,7 @@ export function withSecurity(
   return async (req: NextRequest, ...args: any[]): Promise<NextResponse> => {
     try {
       // Apply rate limiting
-      if (options.rateLimit !== false) {
+      if (options.rateLimit) {
         const rateLimitResult = await applyRateLimit(req, options.rateLimit)
         if (!rateLimitResult.allowed) {
           const retryAfter = Math.ceil((rateLimitResult.info.resetTime - Date.now()) / 1000)
@@ -274,7 +274,7 @@ export function withFileUploadSecurity(
     try {
       const formData = await req.formData()
       
-      for (const [key, value] of formData.entries()) {
+      for (const [key, value] of Array.from(formData.entries())) {
         if (value instanceof File) {
           const validation = security.validate.validateFile(value, options)
           

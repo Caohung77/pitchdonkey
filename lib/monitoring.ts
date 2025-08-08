@@ -172,7 +172,7 @@ export class SystemMonitor {
     const checks: HealthCheck[] = []
     const startTime = Date.now()
 
-    for (const [name, checkFn] of this.healthChecks) {
+    for (const [name, checkFn] of Array.from(this.healthChecks.entries())) {
       try {
         const checkStartTime = Date.now()
         const result = await Promise.race([

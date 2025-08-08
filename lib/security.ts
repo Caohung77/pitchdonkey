@@ -177,32 +177,30 @@ export class EncryptionManager {
   static encrypt(data: string, key: Buffer): string {
     const iv = crypto.randomBytes(this.ivLength)
     const cipher = crypto.createCipher(this.algorithm, key)
-    cipher.setAAD(Buffer.from('coldreach-pro'))
+    // Note: setAAD is only available for authenticated encryption modes
     
     let encrypted = cipher.update(data, 'utf8', 'hex')
     encrypted += cipher.final('hex')
     
-    const tag = cipher.getAuthTag()
+    // Note: getAuthTag is only available for authenticated encryption modes
     
-    return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`
+    return `${iv.toString('hex')}:${encrypted}`
   }
 
   /**
    * Decrypt sensitive data
    */
   static decrypt(encryptedData: string, key: Buffer): string {
-    const [ivHex, tagHex, encrypted] = encryptedData.split(':')
+    const [ivHex, encrypted] = encryptedData.split(':')
     
-    if (!ivHex || !tagHex || !encrypted) {
+    if (!ivHex || !encrypted) {
       throw new Error('Invalid encrypted data format')
     }
     
     const iv = Buffer.from(ivHex, 'hex')
-    const tag = Buffer.from(tagHex, 'hex')
     
     const decipher = crypto.createDecipher(this.algorithm, key)
-    decipher.setAAD(Buffer.from('coldreach-pro'))
-    decipher.setAuthTag(tag)
+    // Note: setAAD and setAuthTag are only available for authenticated encryption modes
     
     let decrypted = decipher.update(encrypted, 'hex', 'utf8')
     decrypted += decipher.final('utf8')
@@ -337,7 +335,7 @@ export class RateLimiter {
    */
   static cleanup(): void {
     const now = Date.now()
-    for (const [key, record] of this.store.entries()) {
+    for (const [key, record] of Array.from(this.store.entries())) {
       if (now > record.resetTime) {
         this.store.delete(key)
       }

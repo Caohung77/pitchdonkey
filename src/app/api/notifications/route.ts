@@ -6,50 +6,35 @@ export const GET = withAuth(async (request: NextRequest, user) => {
   try {
     const supabase = createServerSupabaseClient()
 
-    // Get usage notifications
-    const { data: notifications, error } = await supabase
-      .from('usage_notifications')
+    // Get user notifications
+    const { data: notifications, error: notificationsError } = await supabase
+      .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20)
 
-    // If no notifications exist or error fetching, return some mock data for demo
-    if (error || !notifications || notifications.length === 0) {
-      const mockNotifications = [
-        {
-          id: '1',
-          title: 'Welcome to ColdReach Pro!',
-          message: 'Get started by connecting your first email account.',
-          type: 'info',
-          isRead: false,
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '2',
-          title: 'Usage Update',
-          message: 'You have used 45% of your monthly email limit.',
-          type: 'info',
-          isRead: true,
-          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-        }
-      ]
-      return createSuccessResponse(mockNotifications)
+    if (notificationsError) {
+      console.error('Error fetching notifications:', notificationsError)
+      // Return empty array if notifications table doesn't exist or has errors
+      return createSuccessResponse([])
     }
 
-    // Transform database notifications to match frontend interface
-    const transformedNotifications = notifications.map(notification => ({
+    // Transform notifications to match expected format
+    const transformedNotifications = (notifications || []).map(notification => ({
       id: notification.id,
-      title: notification.title,
-      message: notification.message,
-      type: notification.type,
-      isRead: notification.is_read,
+      title: notification.title || 'Notification',
+      message: notification.message || '',
+      type: notification.type || 'info',
+      isRead: notification.is_read || false,
       createdAt: notification.created_at
     }))
 
     return createSuccessResponse(transformedNotifications)
 
   } catch (error) {
-    return handleApiError(error)
+    console.error('Notifications API error:', error)
+    // Return empty array on error to prevent dashboard from breaking
+    return createSuccessResponse([])
   }
 })

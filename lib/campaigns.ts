@@ -258,7 +258,7 @@ export const abTestSettingsSchema = z.object({
     { message: 'Traffic split must sum to 100%' }
   ),
   winner_criteria: z.enum(['open_rate', 'click_rate', 'reply_rate']).default('open_rate'),
-  confidence_level: z.enum([0.90, 0.95, 0.99]).default(0.95),
+  confidence_level: z.enum(['0.90', '0.95', '0.99']).default('0.95'),
   minimum_sample_size: z.number().min(50).max(10000).default(100),
   test_duration_hours: z.number().min(24).max(168).default(72), // 1-7 days
   auto_select_winner: z.boolean().default(true)
@@ -301,7 +301,7 @@ export const campaignTemplateSchema = z.object({
   category: z.enum(['cold_outreach', 'follow_up', 'nurture', 'event', 'product_launch', 'custom']),
   industry: z.string().optional(),
   use_case: z.string().min(1).max(200),
-  email_sequence: z.array(emailStepSchema.omit({ id: true, created_at: true, updated_at: true })),
+  email_sequence: z.array(emailStepSchema),
   default_ai_settings: aiPersonalizationSettingsSchema,
   default_schedule_settings: scheduleSettingsSchema,
   tags: z.array(z.string()).default([]),
@@ -594,4 +594,4 @@ Best regards,
       tags: []
     }
   }
-}"
+}

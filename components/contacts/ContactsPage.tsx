@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { Contact } from '@/lib/contacts'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -27,23 +28,8 @@ import {
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
 import { ContactCard } from './ContactCard'
-import { AddContactDialog } from './AddContactDialog'
-import { ContactImportDialog } from './ContactImportDialog'
-
-interface Contact {
-  id: string
-  email: string
-  first_name: string
-  last_name: string
-  company_name?: string
-  job_title?: string
-  website?: string
-  phone?: string
-  tags: string[]
-  status: 'active' | 'unsubscribed' | 'bounced' | 'deleted'
-  email_status: 'valid' | 'invalid' | 'risky' | 'unknown'
-  created_at: string
-}
+import AddContactDialog from './AddContactDialog'
+import ContactImportDialog from './ContactImportDialog'
 
 interface ContactStats {
   total: number
@@ -280,13 +266,12 @@ export function ContactsPage() {
       contact.email,
       contact.first_name,
       contact.last_name,
-      contact.company_name || '',
-      contact.job_title || '',
+      contact.company || '',
+      contact.position || '',
       contact.website || '',
       contact.phone || '',
       contact.tags.join('; '),
       contact.status,
-      contact.email_status,
       new Date(contact.created_at).toLocaleDateString()
     ])
 
@@ -585,6 +570,7 @@ export function ContactsPage() {
               onEdit={setEditingContact}
               onDelete={handleDeleteContact}
               onSelect={handleSelectContact}
+              onAddTag={(contactId) => {/* TODO: Implement tag functionality */}}
               isSelected={selectedContacts.has(contact.id)}
             />
           ))}
@@ -628,24 +614,19 @@ export function ContactsPage() {
 
       {/* Dialogs */}
       <AddContactDialog
-        isOpen={isAddDialogOpen}
-        onClose={() => setIsAddDialogOpen(false)}
-        onSave={handleAddContact}
+        onContactAdded={() => {
+          setIsAddDialogOpen(false)
+          // Refresh contacts list
+          window.location.reload()
+        }}
       />
 
-      <AddContactDialog
-        isOpen={!!editingContact}
-        onClose={() => setEditingContact(null)}
-        onSave={handleEditContact}
-        initialData={editingContact}
-      />
+      {/* TODO: Add proper edit dialog */}
 
       <ContactImportDialog
-        isOpen={isImportDialogOpen}
-        onClose={() => setIsImportDialogOpen(false)}
         onImportComplete={() => {
-          loadContacts()
-          loadStats()
+          // Refresh contacts list
+          window.location.reload()
         }}
       />
     </div>

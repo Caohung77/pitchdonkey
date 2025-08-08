@@ -256,7 +256,7 @@ export class MicrosoftOAuthService {
       const graphClient = Client.init({
         authProvider: {
           getAccessToken: async () => accessToken
-        } as AuthenticationProvider
+        } as any
       })
 
       const user = await graphClient.api('/me').get()
@@ -276,7 +276,7 @@ export class MicrosoftOAuthService {
       const graphClient = Client.init({
         authProvider: {
           getAccessToken: async () => tokens.access_token
-        } as AuthenticationProvider
+        } as any
       })
 
       await graphClient.api('/me').get()

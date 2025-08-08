@@ -459,9 +459,9 @@ export class DomainVerificationEngine {
     
     return {
       overallScore,
-      criticalIssues: [...new Set(criticalIssues)], // Remove duplicates
-      recommendations: [...new Set(recommendations)],
-      nextSteps: [...new Set(nextSteps)]
+      criticalIssues: Array.from(new Set(criticalIssues)), // Remove duplicates
+      recommendations: Array.from(new Set(recommendations)),
+      nextSteps: Array.from(new Set(nextSteps))
     }
   }
 }

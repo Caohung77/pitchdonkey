@@ -387,7 +387,7 @@ export class ContactService {
     // Update each contact with new tags
     const updates = contacts.map(contact => ({
       id: contact.id,
-      tags: [...new Set([...contact.tags, ...tags])], // Merge and deduplicate
+      tags: Array.from(new Set([...contact.tags, ...tags])), // Merge and deduplicate
       updated_at: new Date().toISOString(),
     }))
 
@@ -564,7 +564,7 @@ export class ContactService {
       ...duplicate,
       ...primary,
       // Merge tags
-      tags: [...new Set([...primary.tags, ...duplicate.tags])],
+      tags: Array.from(new Set([...primary.tags, ...duplicate.tags])),
       // Merge custom fields
       custom_fields: { ...duplicate.custom_fields, ...primary.custom_fields },
       // Keep the earliest creation date

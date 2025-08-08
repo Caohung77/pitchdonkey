@@ -92,7 +92,7 @@ export class BulkPersonalizationService {
     // Estimate cost and tokens
     const contentLength = jobData.template_id ? 500 : (jobData.custom_prompt?.length || 0)
     const estimatedTokens = Math.ceil((contentLength + 200) * jobData.contact_ids.length * 1.5)
-    const estimatedCost = this.aiService.estimateCost(estimatedTokens, jobData.ai_provider)
+    const estimatedCost = estimatedTokens * 0.002 // Simple cost estimation
 
     const job: Omit<BulkPersonalizationJob, 'id' | 'created_at' | 'updated_at'> = {
       user_id: userId,

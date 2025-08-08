@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase-client'
+import { usePathname } from 'next/navigation'
+import { useAuth } from '@/components/auth/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -35,14 +35,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Card, CardContent } from '@/components/ui/card'
 
-interface User {
-  id: string
-  name: string
-  email: string
-  avatar?: string
-  plan: string
-}
-
 interface Notification {
   id: string
   title: string
@@ -69,66 +61,16 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const pathname = usePathname()
-  const router = useRouter()
-
-  useEffect(() => {
-    checkSession()
-  }, [])
+  const { user, loading, error, signOut } = useAuth()
 
   useEffect(() => {
     if (user) {
       fetchNotifications()
     }
   }, [user])
-
-  const checkSession = async () => {
-    try {
-      console.log('DashboardLayout: Checking session...')
-      
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError) {
-        console.error('DashboardLayout: Session error:', sessionError)
-        setError('Session error: ' + sessionError.message)
-        setLoading(false)
-        return
-      }
-
-      if (!session?.user) {
-        console.log('DashboardLayout: No session found, redirecting to signin')
-        router.push('/auth/signin')
-        return
-      }
-
-      console.log('DashboardLayout: Session found for user:', session.user.email)
-      
-      // Create user object from session
-      const userData: User = {
-        id: session.user.id,
-        email: session.user.email!,
-        name: session.user.user_metadata?.full_name || 
-              session.user.user_metadata?.name || 
-              session.user.email?.split('@')[0] || 
-              'User',
-        plan: session.user.user_metadata?.plan || 'starter'
-      }
-
-      setUser(userData)
-      setLoading(false)
-      setError(null)
-
-    } catch (error) {
-      console.error('DashboardLayout: Error checking session:', error)
-      setError('Failed to check authentication')
-      setLoading(false)
-    }
-  }
 
 
 
@@ -138,7 +80,8 @@ export default function DashboardLayout({
       
       if (response.status === 401) {
         // Handle auth errors by signing out
-        await handleSignOut()
+        console.log('DashboardLayout: Notifications API returned 401, signing out')
+        await signOut()
         return
       }
       
@@ -164,23 +107,6 @@ export default function DashboardLayout({
       console.error('Error fetching notifications:', error)
       setNotifications([])
       setUnreadCount(0)
-    }
-  }
-
-  const handleSignOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error('Sign out error:', error)
-        setError('Failed to sign out')
-      } else {
-        setUser(null)
-        setError(null)
-        router.push('/auth/signin')
-      }
-    } catch (error) {
-      console.error('Sign out error:', error)
-      setError('Failed to sign out')
     }
   }
 
@@ -236,7 +162,7 @@ export default function DashboardLayout({
               <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-gray-900 mb-2">Error</h2>
               <p className="text-gray-600 mb-4">{error}</p>
-              <Button onClick={checkSession} className="w-full">
+              <Button onClick={() => window.location.reload()} className="w-full">
                 Retry
               </Button>
             </div>
@@ -259,7 +185,7 @@ export default function DashboardLayout({
                 Please sign in to access the dashboard.
               </p>
               <Button 
-                onClick={() => router.push('/auth/signin')}
+                onClick={() => window.location.href = '/auth/signin'}
                 className="w-full"
               >
                 Go to Sign In
@@ -468,7 +394,7 @@ export default function DashboardLayout({
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut}>
+                  <DropdownMenuItem onClick={signOut}>
                     <LogOut className="mr-2 h-4 w-4" />
                     Sign out
                   </DropdownMenuItem>

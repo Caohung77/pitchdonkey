@@ -19,7 +19,9 @@ import {
   Mail,
   Calendar,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  Square
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -28,12 +30,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { RescheduleCampaignDialog } from '@/components/campaigns/RescheduleCampaignDialog'
+import { StopCampaignDialog } from '@/components/campaigns/StopCampaignDialog'
 
 interface Campaign {
   id: string
   name: string
   description: string
-  status: 'draft' | 'running' | 'paused' | 'completed'
+  status: 'draft' | 'scheduled' | 'running' | 'paused' | 'stopped' | 'completed' | 'archived'
   contactCount: number
   emailsSent: number
   openRate: number
@@ -41,21 +45,28 @@ interface Campaign {
   createdAt: string
   launchedAt?: string
   completedAt?: string
+  stoppedAt?: string
   nextSendAt?: string
 }
 
 const STATUS_COLORS = {
   draft: 'bg-gray-100 text-gray-800',
+  scheduled: 'bg-blue-100 text-blue-800',
   running: 'bg-green-100 text-green-800',
   paused: 'bg-yellow-100 text-yellow-800',
-  completed: 'bg-blue-100 text-blue-800'
+  stopped: 'bg-red-100 text-red-800',
+  completed: 'bg-blue-100 text-blue-800',
+  archived: 'bg-gray-100 text-gray-800'
 }
 
 const STATUS_ICONS = {
   draft: '📝',
+  scheduled: '📅',
   running: '🟢',
   paused: '⏸️',
-  completed: '✅'
+  stopped: '🛑',
+  completed: '✅',
+  archived: '📦'
 }
 
 export default function CampaignsPage() {
@@ -63,6 +74,14 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [rescheduleDialog, setRescheduleDialog] = useState<{
+    open: boolean
+    campaign: Campaign | null
+  }>({ open: false, campaign: null })
+  const [stopDialog, setStopDialog] = useState<{
+    open: boolean
+    campaign: Campaign | null
+  }>({ open: false, campaign: null })
 
   useEffect(() => {
     fetchCampaigns()
@@ -96,6 +115,8 @@ export default function CampaignsPage() {
 
   const handleStatusChange = async (campaignId: string, newStatus: string) => {
     try {
+      console.log(`Updating campaign ${campaignId} status to ${newStatus}`)
+      
       const response = await fetch(`/api/campaigns/${campaignId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -103,6 +124,9 @@ export default function CampaignsPage() {
       })
 
       if (response.ok) {
+        const updatedCampaign = await response.json()
+        console.log('Campaign updated successfully:', updatedCampaign)
+        
         setCampaigns(prev => 
           prev.map(campaign => 
             campaign.id === campaignId 
@@ -110,9 +134,14 @@ export default function CampaignsPage() {
               : campaign
           )
         )
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to update campaign:', errorData)
+        alert(`Failed to update campaign: ${errorData.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Error updating campaign status:', error)
+      alert('Failed to update campaign status. Please try again.')
     }
   }
 
@@ -148,6 +177,75 @@ export default function CampaignsPage() {
     }
   }
 
+  const handleReschedule = async (campaignId: string, scheduleData: any) => {
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          scheduleSettings: {
+            ...scheduleData,
+            send_immediately: scheduleData.type === 'now'
+          }
+        })
+      })
+
+      if (response.ok) {
+        const updatedCampaign = await response.json()
+        setCampaigns(prev => 
+          prev.map(campaign => 
+            campaign.id === campaignId 
+              ? { ...campaign, ...updatedCampaign }
+              : campaign
+          )
+        )
+        
+        // If rescheduled to start now, also update status to active
+        if (scheduleData.type === 'now') {
+          await handleStatusChange(campaignId, 'active')
+        }
+      } else {
+        const errorData = await response.json()
+        alert(`Failed to reschedule campaign: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error rescheduling campaign:', error)
+      alert('Failed to reschedule campaign. Please try again.')
+    }
+  }
+
+  const handleStop = async (campaignId: string) => {
+    try {
+      console.log(`Stopping campaign ${campaignId}`)
+      
+      const response = await fetch(`/api/campaigns/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'stopped' }) // Now properly send 'stopped' status
+      })
+
+      if (response.ok) {
+        const updatedCampaign = await response.json()
+        console.log('Campaign stopped successfully:', updatedCampaign)
+        
+        setCampaigns(prev => 
+          prev.map(campaign => 
+            campaign.id === campaignId 
+              ? { ...campaign, status: 'stopped' as Campaign['status'] } // Show as stopped in UI
+              : campaign
+          )
+        )
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to stop campaign:', errorData)
+        alert(`Failed to stop campaign: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error stopping campaign:', error)
+      alert('Failed to stop campaign. Please try again.')
+    }
+  }
+
   const filteredCampaigns = (Array.isArray(campaigns) ? campaigns : []).filter(campaign => {
     const matchesSearch = campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -159,16 +257,27 @@ export default function CampaignsPage() {
     switch (campaign.status) {
       case 'draft':
         return [
-          { label: 'Launch Campaign', action: () => handleStatusChange(campaign.id, 'running'), icon: Play }
+          { label: 'Launch Campaign', action: () => handleStatusChange(campaign.id, 'running'), icon: Play },
+          { label: 'Schedule Campaign', action: () => setRescheduleDialog({ open: true, campaign }), icon: Clock }
+        ]
+      case 'scheduled':
+        return [
+          { label: 'Launch Now', action: () => handleStatusChange(campaign.id, 'running'), icon: Play },
+          { label: 'Reschedule Campaign', action: () => setRescheduleDialog({ open: true, campaign }), icon: Clock }
         ]
       case 'running':
         return [
-          { label: 'Pause Campaign', action: () => handleStatusChange(campaign.id, 'paused'), icon: Pause }
+          { label: 'Pause Campaign', action: () => handleStatusChange(campaign.id, 'paused'), icon: Pause },
+          { label: 'Stop Campaign', action: () => setStopDialog({ open: true, campaign }), icon: Square }
         ]
       case 'paused':
         return [
-          { label: 'Resume Campaign', action: () => handleStatusChange(campaign.id, 'running'), icon: Play }
+          { label: 'Resume Campaign', action: () => handleStatusChange(campaign.id, 'running'), icon: Play },
+          { label: 'Stop Campaign', action: () => setStopDialog({ open: true, campaign }), icon: Square },
+          { label: 'Reschedule Campaign', action: () => setRescheduleDialog({ open: true, campaign }), icon: Clock }
         ]
+      case 'stopped':
+        return [] // Stopped campaigns cannot be resumed or modified
       default:
         return []
     }
@@ -228,9 +337,12 @@ export default function CampaignsPage() {
         >
           <option value="all">All Status</option>
           <option value="draft">Draft</option>
+          <option value="scheduled">Scheduled</option>
           <option value="running">Running</option>
           <option value="paused">Paused</option>
+          <option value="stopped">Stopped</option>
           <option value="completed">Completed</option>
+          <option value="archived">Archived</option>
         </select>
       </div>
 
@@ -415,6 +527,26 @@ export default function CampaignsPage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Reschedule Dialog */}
+      {rescheduleDialog.campaign && (
+        <RescheduleCampaignDialog
+          open={rescheduleDialog.open}
+          onOpenChange={(open) => setRescheduleDialog({ open, campaign: null })}
+          campaign={rescheduleDialog.campaign}
+          onReschedule={handleReschedule}
+        />
+      )}
+
+      {/* Stop Dialog */}
+      {stopDialog.campaign && (
+        <StopCampaignDialog
+          open={stopDialog.open}
+          onOpenChange={(open) => setStopDialog({ open, campaign: null })}
+          campaign={stopDialog.campaign}
+          onStop={handleStop}
+        />
       )}
     </div>
   )

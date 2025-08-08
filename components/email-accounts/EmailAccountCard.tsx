@@ -220,10 +220,7 @@ export default function EmailAccountCard({
       </CardContent>
       
       <DomainAuthDialog 
-        isOpen={isDomainAuthOpen}
-        onClose={() => setIsDomainAuthOpen(false)}
-        emailAccountId={account.id} 
-        email={account.email} 
+        domain={account.email.split('@')[1] || ''}
       />
     </Card>
   )

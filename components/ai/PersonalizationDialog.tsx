@@ -112,13 +112,13 @@ export default function PersonalizationDialog({
             initialVariables[variable] = contact.last_name
             break
           case 'company_name':
-            initialVariables[variable] = contact.company_name || ''
+            initialVariables[variable] = contact.company || ''
             break
           case 'job_title':
-            initialVariables[variable] = contact.job_title || ''
+            initialVariables[variable] = contact.position || ''
             break
           case 'industry':
-            initialVariables[variable] = contact.industry || ''
+            initialVariables[variable] = contact.custom_fields?.industry || ''
             break
           default:
             initialVariables[variable] = ''

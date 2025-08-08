@@ -1,4 +1,4 @@
-import { createServerSupabaseClient, supabase } from './supabase'
+import { createServerSupabaseClient, supabaseAdmin } from './supabase'
 import { User } from '@supabase/supabase-js'
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
@@ -20,7 +20,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, user }) {
       // Add user ID to session
       if (session.user) {
-        session.user.id = user.id
+        (session.user as any).id = user.id
       }
       return session
     },
@@ -44,7 +44,7 @@ export const authOptions: NextAuthOptions = {
 export const authHelpers = {
   // Sign up with email and password
   async signUp(email: string, password: string, userData?: { name?: string }) {
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabaseAdmin.auth.signUp({
       email,
       password,
       options: {
@@ -58,7 +58,7 @@ export const authHelpers = {
 
   // Sign in with email and password
   async signIn(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email,
       password,
     })
@@ -69,7 +69,7 @@ export const authHelpers = {
 
   // Sign in with Google OAuth
   async signInWithGoogle() {
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabaseAdmin.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
@@ -82,27 +82,27 @@ export const authHelpers = {
 
   // Sign out
   async signOut() {
-    const { error } = await supabase.auth.signOut()
+    const { error } = await supabaseAdmin.auth.signOut()
     if (error) throw error
   },
 
   // Get current session
   async getSession() {
-    const { data: { session }, error } = await supabase.auth.getSession()
+    const { data: { session }, error } = await supabaseAdmin.auth.getSession()
     if (error) throw error
     return session
   },
 
   // Get current user
   async getUser() {
-    const { data: { user }, error } = await supabase.auth.getUser()
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser()
     if (error) throw error
     return user
   },
 
   // Reset password
   async resetPassword(email: string) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`,
     })
     
@@ -111,7 +111,7 @@ export const authHelpers = {
 
   // Update password
   async updatePassword(password: string) {
-    const { error } = await supabase.auth.updateUser({
+    const { error } = await supabaseAdmin.auth.updateUser({
       password,
     })
     
@@ -120,7 +120,7 @@ export const authHelpers = {
 
   // Listen to auth state changes
   onAuthStateChange(callback: (event: string, session: any) => void) {
-    return supabase.auth.onAuthStateChange(callback)
+    return supabaseAdmin.auth.onAuthStateChange(callback)
   },
 }
 

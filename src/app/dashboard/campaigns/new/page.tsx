@@ -102,7 +102,7 @@ export default function NewCampaignPage() {
     },
     launchSettings: {
       launchType: 'now',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      timezone: ''
     }
   })
   const [contactSegments, setContactSegments] = useState<ContactSegment[]>([])
@@ -122,6 +122,17 @@ export default function NewCampaignPage() {
   useEffect(() => {
     fetchContactSegments()
     fetchContactLists()
+    
+    // Set default timezone after component mounts (client-side only)
+    if (typeof window !== 'undefined') {
+      setCampaignData(prev => ({
+        ...prev,
+        launchSettings: {
+          ...prev.launchSettings,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        }
+      }))
+    }
   }, [])
 
   const fetchContactSegments = async () => {
@@ -769,9 +780,11 @@ export default function NewCampaignPage() {
                         <option value="Asia/Tokyo">Tokyo (JST)</option>
                         <option value="Asia/Shanghai">Shanghai (CST)</option>
                         <option value="Australia/Sydney">Sydney (AEST)</option>
-                        <option value={Intl.DateTimeFormat().resolvedOptions().timeZone}>
-                          {Intl.DateTimeFormat().resolvedOptions().timeZone} (Auto-detected)
-                        </option>
+                        {typeof window !== 'undefined' && (
+                          <option value={Intl.DateTimeFormat().resolvedOptions().timeZone}>
+                            {Intl.DateTimeFormat().resolvedOptions().timeZone} (Auto-detected)
+                          </option>
+                        )}
                       </select>
                     </div>
 

@@ -199,6 +199,7 @@ export class PerformanceManager {
    * Get query statistics
    */
   getQueryStats(): {
+    total: number
     totalQueries: number
     avgDuration: number
     slowQueries: number
@@ -214,6 +215,7 @@ export class PerformanceManager {
     const cacheHitRate = total > 0 ? (cachedQueries / total) * 100 : 0
 
     return {
+      total,
       totalQueries: total,
       avgDuration: Math.round(avgDuration),
       slowQueries,
@@ -696,7 +698,7 @@ export class JobQueueOptimizer {
  * Resource pool manager for connections, etc.
  */
 export class ResourcePoolManager {
-  private pools: Map<string, ResourcePool> = new Map()
+  private pools: Map<string, ResourcePool<any>> = new Map()
   private performanceManager: PerformanceManager
 
   constructor(performanceManager: PerformanceManager) {

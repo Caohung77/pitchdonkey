@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { border-color: #4CAF50; background-color: #f0fff0; }
+        .error { border-color: #f44336; background-color: #fff0f0; }
+        .warning { border-color: #ff9800; background-color: #fff8f0; }
+        button {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #005a87; }
+        .log {
+            background: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .status.success { background: #4CAF50; color: white; }
+        .status.error { background: #f44336; color: white; }
+        .status.loading { background: #2196F3; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Authentication Fix Test</h1>
+        <p>This page tests the authentication fixes implemented for ColdReach Pro.</p>
+
+        <div class="test-section">
+            <h3>📊 Test Results Summary</h3>
+            <div id="summary">
+                <div class="status loading">Running tests...</div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔍 API Authentication Tests</h3>
+            <button onclick="testUserProfile()">Test User Profile API</button>
+            <button onclick="testDashboardHealth()">Test Dashboard Health API</button>
+            <button onclick="testNotifications()">Test Notifications API</button>
+            <div id="api-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🏠 Dashboard Navigation Test</h3>
+            <button onclick="testDashboardNavigation()">Test Dashboard Access</button>
+            <div id="nav-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔄 Session Persistence Test</h3>
+            <button onclick="testSessionPersistence()">Test Session Persistence</button>
+            <div id="session-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📝 Test Log</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let testResults = {
+            userProfile: null,
+            dashboardHealth: null,
+            notifications: null,
+            dashboardAccess: null,
+            sessionPersistence: null
+        };
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function updateSummary() {
+            const results = Object.values(testResults);
+            const completed = results.filter(r => r !== null).length;
+            const passed = results.filter(r => r === true).length;
+            const failed = results.filter(r => r === false).length;
+
+            let statusClass = 'loading';
+            let statusText = `Running tests... (${completed}/5 completed)`;
+
+            if (completed === 5) {
+                if (failed === 0) {
+                    statusClass = 'success';
+                    statusText = `✅ All tests passed! (${passed}/5)`;
+                } else {
+                    statusClass = 'error';
+                    statusText = `❌ ${failed} test(s) failed, ${passed} passed`;
+                }
+            }
+
+            document.getElementById('summary').innerHTML = 
+                `<div class="status ${statusClass}">${statusText}</div>`;
+        }
+
+        async function testUserProfile() {
+            log('Testing User Profile API...');
+            const resultsDiv = document.getElementById('api-results');
+            
+            try {
+                const response = await fetch('/api/user/profile');
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    log('✅ User Profile API: SUCCESS');
+                    log(`User data: ${JSON.stringify(data.data, null, 2)}`);
+                    resultsDiv.innerHTML += '<div class="success">✅ User Profile API working correctly</div>';
+                    testResults.userProfile = true;
+                } else {
+                    log(`❌ User Profile API: FAILED - ${response.status} ${data.error || 'Unknown error'}`);
+                    resultsDiv.innerHTML += `<div class="error">❌ User Profile API failed: ${data.error || 'Unknown error'}</div>`;
+                    testResults.userProfile = false;
+                }
+            } catch (error) {
+                log(`❌ User Profile API: ERROR - ${error.message}`);
+                resultsDiv.innerHTML += `<div class="error">❌ User Profile API error: ${error.message}</div>`;
+                testResults.userProfile = false;
+            }
+            
+            updateSummary();
+        }
+
+        async function testDashboardHealth() {
+            log('Testing Dashboard Health API...');
+            const resultsDiv = document.getElementById('api-results');
+            
+            try {
+                const response = await fetch('/api/dashboard/health');
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    log('✅ Dashboard Health API: SUCCESS');
+                    log(`Health data: ${JSON.stringify(data.data, null, 2)}`);
+                    resultsDiv.innerHTML += '<div class="success">✅ Dashboard Health API working correctly</div>';
+                    testResults.dashboardHealth = true;
+                } else {
+                    log(`❌ Dashboard Health API: FAILED - ${response.status} ${data.error || 'Unknown error'}`);
+                    resultsDiv.innerHTML += `<div class="error">❌ Dashboard Health API failed: ${data.error || 'Unknown error'}</div>`;
+                    testResults.dashboardHealth = false;
+                }
+            } catch (error) {
+                log(`❌ Dashboard Health API: ERROR - ${error.message}`);
+                resultsDiv.innerHTML += `<div class="error">❌ Dashboard Health API error: ${error.message}</div>`;
+                testResults.dashboardHealth = false;
+            }
+            
+            updateSummary();
+        }
+
+        async function testNotifications() {
+            log('Testing Notifications API...');
+            const resultsDiv = document.getElementById('api-results');
+            
+            try {
+                const response = await fetch('/api/notifications');
+                const data = await response.json();
+                
+                if (response.ok && data.success && Array.isArray(data.data)) {
+                    log('✅ Notifications API: SUCCESS');
+                    log(`Notifications count: ${data.data.length}`);
+                    resultsDiv.innerHTML += '<div class="success">✅ Notifications API working correctly</div>';
+                    testResults.notifications = true;
+                } else {
+                    log(`❌ Notifications API: FAILED - ${response.status} ${data.error || 'Invalid response format'}`);
+                    resultsDiv.innerHTML += `<div class="error">❌ Notifications API failed: ${data.error || 'Invalid response format'}</div>`;
+                    testResults.notifications = false;
+                }
+            } catch (error) {
+                log(`❌ Notifications API: ERROR - ${error.message}`);
+                resultsDiv.innerHTML += `<div class="error">❌ Notifications API error: ${error.message}</div>`;
+                testResults.notifications = false;
+            }
+            
+            updateSummary();
+        }
+
+        async function testDashboardNavigation() {
+            log('Testing Dashboard Navigation...');
+            const resultsDiv = document.getElementById('nav-results');
+            
+            try {
+                const response = await fetch('/dashboard');
+                
+                if (response.ok) {
+                    log('✅ Dashboard Navigation: SUCCESS - Dashboard accessible');
+                    resultsDiv.innerHTML = '<div class="success">✅ Dashboard is accessible without redirect</div>';
+                    testResults.dashboardAccess = true;
+                } else if (response.status === 302 || response.status === 307) {
+                    log('❌ Dashboard Navigation: FAILED - Redirected to sign-in');
+                    resultsDiv.innerHTML = '<div class="error">❌ Dashboard redirected to sign-in (authentication issue)</div>';
+                    testResults.dashboardAccess = false;
+                } else {
+                    log(`⚠️ Dashboard Navigation: UNEXPECTED - ${response.status}`);
+                    resultsDiv.innerHTML = `<div class="warning">⚠️ Dashboard returned unexpected status: ${response.status}</div>`;
+                    testResults.dashboardAccess = false;
+                }
+            } catch (error) {
+                log(`❌ Dashboard Navigation: ERROR - ${error.message}`);
+                resultsDiv.innerHTML = `<div class="error">❌ Dashboard navigation error: ${error.message}</div>`;
+                testResults.dashboardAccess = false;
+            }
+            
+            updateSummary();
+        }
+
+        async function testSessionPersistence() {
+            log('Testing Session Persistence...');
+            const resultsDiv = document.getElementById('session-results');
+            
+            try {
+                // Test multiple API calls in sequence to check session consistency
+                const calls = [
+                    fetch('/api/user/profile'),
+                    fetch('/api/dashboard/health'),
+                    fetch('/api/notifications')
+                ];
+                
+                const responses = await Promise.all(calls);
+                const allSuccessful = responses.every(r => r.ok);
+                
+                if (allSuccessful) {
+                    log('✅ Session Persistence: SUCCESS - All API calls authenticated');
+                    resultsDiv.innerHTML = '<div class="success">✅ Session persists across multiple API calls</div>';
+                    testResults.sessionPersistence = true;
+                } else {
+                    const failedCalls = responses.filter(r => !r.ok).length;
+                    log(`❌ Session Persistence: FAILED - ${failedCalls} API calls failed`);
+                    resultsDiv.innerHTML = `<div class="error">❌ Session persistence issue: ${failedCalls} API calls failed</div>`;
+                    testResults.sessionPersistence = false;
+                }
+            } catch (error) {
+                log(`❌ Session Persistence: ERROR - ${error.message}`);
+                resultsDiv.innerHTML = `<div class="error">❌ Session persistence error: ${error.message}</div>`;
+                testResults.sessionPersistence = false;
+            }
+            
+            updateSummary();
+        }
+
+        // Auto-run all tests on page load
+        window.onload = function() {
+            log('🚀 Starting authentication fix tests...');
+            setTimeout(() => {
+                testUserProfile();
+                setTimeout(() => testDashboardHealth(), 500);
+                setTimeout(() => testNotifications(), 1000);
+                setTimeout(() => testDashboardNavigation(), 1500);
+                setTimeout(() => testSessionPersistence(), 2000);
+            }, 1000);
+        };
+    </script>
+</body>
+</html>

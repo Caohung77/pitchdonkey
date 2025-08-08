@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
-import { createClient } from '@supabase/supabase-js'
-import { createClient } from '@supabase/supabase-js'
 
 export async function GET(
   request: NextRequest,
@@ -47,25 +45,37 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = createServerSupabaseClient()
     
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
+      console.error('Authentication error:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    console.log('PATCH request body:', body)
+    
     const updates: any = {}
 
     // Handle status changes
     if (body.status) {
-      updates.status = body.status
+      // Map frontend status to database status
+      let dbStatus = body.status
+      if (body.status === 'active') {
+        dbStatus = 'running' // Database uses 'running' instead of 'active'
+      }
       
-      if (body.status === 'active' && !updates.launched_at) {
-        updates.launched_at = new Date().toISOString()
-      } else if (body.status === 'completed') {
-        updates.completed_at = new Date().toISOString()
+      updates.status = dbStatus
+      
+      // Set timestamps based on status changes
+      if (dbStatus === 'running' && !updates.start_date) {
+        updates.start_date = new Date().toISOString()
+      } else if (dbStatus === 'completed' && !updates.end_date) {
+        updates.end_date = new Date().toISOString()
+      } else if (dbStatus === 'stopped') {
+        updates.stopped_at = new Date().toISOString()
       }
     }
 
@@ -76,6 +86,8 @@ export async function PATCH(
     if (body.aiSettings) updates.ai_settings = body.aiSettings
     if (body.scheduleSettings) updates.schedule_settings = body.scheduleSettings
 
+    console.log('Campaign updates:', updates)
+
     const { data: campaign, error } = await supabase
       .from('campaigns')
       .update(updates)
@@ -85,20 +97,35 @@ export async function PATCH(
       .single()
 
     if (error) {
+      console.error('Database error updating campaign:', error)
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
       }
-      console.error('Error updating campaign:', error)
       return NextResponse.json({ error: 'Failed to update campaign' }, { status: 500 })
     }
 
     // Handle campaign state changes
-    if (body.status === 'active') {
-      // TODO: Start campaign execution
-      console.log(`Starting campaign ${params.id}`)
-    } else if (body.status === 'paused') {
-      // TODO: Pause campaign execution
-      console.log(`Pausing campaign ${params.id}`)
+    try {
+      if (body.status === 'active' || body.status === 'running') {
+        // Resume campaign execution
+        const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
+        await CampaignExecutionEngine.resumeCampaign(params.id, supabase)
+        console.log(`Resumed campaign ${params.id}`)
+      } else if (body.status === 'paused') {
+        // Pause campaign execution
+        const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
+        await CampaignExecutionEngine.pauseCampaign(params.id, supabase)
+        console.log(`Paused campaign ${params.id}`)
+      } else if (body.status === 'stopped') {
+        // Stop campaign execution permanently
+        const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
+        await CampaignExecutionEngine.stopCampaign(params.id, supabase)
+        console.log(`Stopped campaign ${params.id}`)
+      }
+    } catch (executionError) {
+      console.error('Campaign execution error:', executionError)
+      // Don't fail the entire request if execution management fails
+      // The status update was successful, just log the execution error
     }
 
     return NextResponse.json(campaign)
@@ -106,7 +133,7 @@ export async function PATCH(
   } catch (error) {
     console.error('Error updating campaign:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
@@ -117,7 +144,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = createServerSupabaseClient()
     
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()

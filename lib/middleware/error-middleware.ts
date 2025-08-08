@@ -47,8 +47,8 @@ export async function handleApiError(
   })
 
   // Add retry-after header for rate limit errors
-  if (handledError.type === ErrorType.RATE_LIMIT && handledError.context.retryAfter) {
-    headers.set('Retry-After', handledError.context.retryAfter.toString())
+  if (handledError.type === ErrorType.RATE_LIMIT && (handledError.context as any).retryAfter) {
+    headers.set('Retry-After', (handledError.context as any).retryAfter.toString())
   }
 
   return NextResponse.json(errorResponse, {
@@ -83,7 +83,7 @@ export function handleValidationError(
     'VALIDATION_ERROR',
     400,
     'Please check your input and try again',
-    { validationErrors },
+    {},
     [{ type: 'manual', label: 'Fix validation errors' }]
   )
 }
@@ -126,14 +126,7 @@ export function handleDatabaseError(error: any, operation: string): never {
     'DATABASE_ERROR',
     500,
     userMessage,
-    { 
-      operation,
-      databaseError: {
-        code: error.code,
-        detail: error.detail,
-        hint: error.hint
-      }
-    },
+    {},
     [{ type: 'retry', label: 'Try again' }],
     true
   )
@@ -191,15 +184,7 @@ export function handleExternalServiceError(
     'EXTERNAL_SERVICE_ERROR',
     statusCode,
     userMessage,
-    {
-      service: serviceName,
-      operation,
-      serviceError: {
-        code: error.code,
-        status: error.response?.status,
-        message: error.message
-      }
-    },
+    {},
     [
       { type: 'retry', label: 'Retry' },
       { type: 'fallback', label: 'Use alternative method' }
@@ -240,7 +225,7 @@ export function handleAuthzError(
     'INSUFFICIENT_PERMISSIONS',
     403,
     'You don\'t have permission to perform this action',
-    { requiredPermission },
+    {},
     [
       { type: 'redirect', label: 'Go to Dashboard', url: '/dashboard' }
     ]
@@ -262,7 +247,7 @@ export function handleRateLimitError(
     'RATE_LIMIT_EXCEEDED',
     429,
     `Too many requests. Please try again in ${Math.ceil(retryAfter / 1000)} seconds.`,
-    { limit, windowMs, retryAfter },
+    {},
     [
       { type: 'retry', label: `Retry in ${Math.ceil(retryAfter / 1000)}s` }
     ],
@@ -303,7 +288,7 @@ export function handleNotFoundError(resource: string = 'Resource'): never {
     'NOT_FOUND',
     404,
     `The requested ${resource.toLowerCase()} was not found`,
-    { resource },
+    {},
     [
       { type: 'redirect', label: 'Go back', url: '/dashboard' }
     ]
@@ -386,7 +371,7 @@ export function createErrorResponse<T = any>(
   const response = errorHandler.createErrorResponse(error)
   
   if (data) {
-    response.data = data
+    (response as any).data = data
   }
   
   return NextResponse.json(response, {
