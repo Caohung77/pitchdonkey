@@ -252,7 +252,7 @@ export class TimezoneScheduler {
         reasoning,
         adjustments_made: adjustments,
         confidence_score: confidenceScore,
-        fallback_used
+        fallback_used: fallbackUsed
       }
 
     } catch (error) {

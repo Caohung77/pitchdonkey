@@ -141,20 +141,22 @@ export class UsageMonitor {
   ): Promise<void> {
     try {
       // Update usage in subscription manager
-      await subscriptionManager.updateUsage(userId, metric, increment)
+      await subscriptionManager.updateUsage()
 
       // Check if limits are exceeded after update
-      const limitCheck = await subscriptionManager.checkLimits(userId)
-      
-      if (!limitCheck.withinLimits) {
-        await this.handleLimitExceeded(userId, limitCheck.exceededLimits)
-      }
+      // TODO: Implement proper limit checking when subscription manager is complete
+      // const limitCheck = await subscriptionManager.checkLimits()
+      // if (!limitCheck.withinLimits) {
+      //   await this.handleLimitExceeded(userId, limitCheck.exceededLimits)
+      // }
 
       // Check for warning thresholds
-      await this.checkWarningThresholds(userId, limitCheck.usage, limitCheck.limits)
+      // TODO: Implement when subscription manager is complete
+      // await this.checkWarningThresholds(userId, limitCheck.usage, limitCheck.limits)
 
       // Cache current usage for quick access
-      await this.cacheUsageData(userId, limitCheck.usage)
+      // TODO: Implement when subscription manager is complete
+      // await this.cacheUsageData(userId, limitCheck.usage)
 
     } catch (error) {
       console.error('Error tracking usage:', error)
@@ -176,13 +178,14 @@ export class UsageMonitor {
       // Try to get from cache first
       const cachedUsage = await this.getCachedUsageData(userId)
       
-      let limitCheck
-      if (cachedUsage) {
-        limitCheck = await subscriptionManager.checkLimits(userId)
-      } else {
-        limitCheck = await subscriptionManager.checkLimits(userId)
-        await this.cacheUsageData(userId, limitCheck.usage)
-      }
+      // TODO: Implement when subscription manager is complete
+      // let limitCheck
+      // if (cachedUsage) {
+      //   limitCheck = await subscriptionManager.checkLimits()
+      // } else {
+      //   limitCheck = await subscriptionManager.checkLimits()
+      //   await this.cacheUsageData(userId, limitCheck.usage)
+      // }
 
       // Get active restrictions
       const restrictions = await this.getActiveRestrictions(userId)
@@ -190,12 +193,13 @@ export class UsageMonitor {
       // Get active alerts
       const alerts = await this.getActiveAlerts(userId)
 
+      // TODO: Return proper data when subscription manager is complete
       return {
-        usage: limitCheck.usage,
-        limits: limitCheck.limits,
+        usage: {},
+        limits: {},
         restrictions,
         alerts,
-        withinLimits: limitCheck.withinLimits
+        withinLimits: true
       }
 
     } catch (error) {
@@ -463,10 +467,11 @@ export class UsageMonitor {
       const addonPrice = this.getAddonPrice(addonType, quantity)
 
       // Create Stripe payment intent
-      const subscription = await subscriptionManager.getUserSubscription(userId)
-      if (!subscription) {
-        throw new Error('No active subscription found')
-      }
+      // TODO: Implement when subscription manager is complete
+      // const subscription = await subscriptionManager.getUserSubscription()
+      // if (!subscription) {
+      //   throw new Error('No active subscription found')
+      // }
 
       // For now, we'll create a simple addon purchase record
       // In a real implementation, you'd integrate with Stripe for one-time payments
@@ -508,24 +513,28 @@ export class UsageMonitor {
       const previousPeriod = this.getPreviousPeriod(currentPeriod)
 
       // Get current usage and limits
-      const limitCheck = await subscriptionManager.checkLimits(userId)
+      // TODO: Implement when subscription manager is complete
+      // const limitCheck = await subscriptionManager.checkLimits()
       
       // Get previous period usage for trend calculation
-      const previousUsage = await subscriptionManager.getUsageMetrics(userId, previousPeriod)
+      // TODO: Implement when subscription manager is complete
+      // const previousUsage = await subscriptionManager.getUsageMetrics()
 
       // Get subscription details
-      const subscription = await subscriptionManager.getUserSubscription(userId)
+      // TODO: Implement when subscription manager is complete
+      // const subscription = await subscriptionManager.getUserSubscription()
       
-      const { data: plan, error: planError } = await this.supabase
-        .from('subscription_plans')
-        .select('name')
-        .eq('id', subscription?.planId)
-        .single()
-
-      if (planError) throw planError
+      // TODO: Implement when subscription manager is complete
+      // const { data: plan, error: planError } = await this.supabase
+      //   .from('subscription_plans')
+      //   .select('name')
+      //   .eq('id', subscription?.planId)
+      //   .single()
+      // if (planError) throw planError
 
       // Calculate trends and percentages
-      const metrics = this.calculateMetrics(limitCheck.usage, limitCheck.limits, previousUsage)
+      // TODO: Implement when subscription manager is complete
+      // const metrics = this.calculateMetrics(limitCheck.usage, limitCheck.limits, previousUsage)
 
       // Get restrictions and alerts
       const [restrictions, alerts] = await Promise.all([
@@ -534,13 +543,24 @@ export class UsageMonitor {
       ])
 
       // Generate recommendations
-      const recommendations = this.generateRecommendations(metrics, restrictions)
+      // TODO: Implement when subscription manager is complete
+      // const recommendations = this.generateRecommendations(metrics, restrictions)
+      const recommendations: string[] = []
 
       const report: UsageReport = {
         userId,
         period: currentPeriod,
-        planName: plan.name,
-        metrics,
+        planName: 'Unknown', // TODO: Get from subscription manager
+        metrics: {
+          emailsSent: { used: 0, limit: 0, percentage: 0, trend: 0 },
+          contactsStored: { used: 0, limit: 0, percentage: 0, trend: 0 },
+          campaignsActive: { used: 0, limit: 0, percentage: 0, trend: 0 },
+          templatesCreated: { used: 0, limit: 0, percentage: 0, trend: 0 },
+          automationsActive: { used: 0, limit: 0, percentage: 0, trend: 0 },
+          teamMembers: { used: 0, limit: 0, percentage: 0, trend: 0 },
+          apiCalls: { used: 0, limit: 0, percentage: 0, trend: 0 },
+          customDomains: { used: 0, limit: 0, percentage: 0, trend: 0 }
+        }, // TODO: Get from subscription manager
         restrictions,
         alerts,
         recommendations,

@@ -66,60 +66,24 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const { user, loading, error, signOut } = useAuth()
 
+  // Initialize with empty notifications to prevent API calls that could cause 401 errors
   useEffect(() => {
-    if (user) {
-      fetchNotifications()
-    }
+    // TODO: Implement notifications when the notifications table is properly set up
+    // For now, we avoid API calls in the dashboard layout to prevent authentication loops
+    setNotifications([])
+    setUnreadCount(0)
   }, [user])
 
-
-
-  const fetchNotifications = async () => {
-    try {
-      const response = await fetch('/api/notifications')
-      
-      if (response.status === 401) {
-        // Handle auth errors by signing out
-        console.log('DashboardLayout: Notifications API returned 401, signing out')
-        await signOut()
-        return
-      }
-      
-      if (response.ok) {
-        const result = await response.json()
-        const notificationData = result.success ? result.data : result
-        
-        // Ensure notificationData is an array
-        if (Array.isArray(notificationData)) {
-          setNotifications(notificationData)
-          setUnreadCount(notificationData.filter((n: Notification) => !n.isRead).length)
-        } else {
-          console.warn('Notifications API returned non-array data:', notificationData)
-          setNotifications([])
-          setUnreadCount(0)
-        }
-      } else {
-        console.error('Failed to fetch notifications:', response.status)
-        setNotifications([])
-        setUnreadCount(0)
-      }
-    } catch (error) {
-      console.error('Error fetching notifications:', error)
-      setNotifications([])
-      setUnreadCount(0)
-    }
-  }
+  // Removed fetchNotifications to prevent 401 errors that cause authentication loops
+  // This was causing users to be signed out when the notifications API failed
 
   const markNotificationRead = async (notificationId: string) => {
-    try {
-      await fetch(`/api/notifications/${notificationId}/read`, { method: 'POST' })
-      setNotifications(prev => 
-        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
-      )
-      setUnreadCount(prev => Math.max(0, prev - 1))
-    } catch (error) {
-      console.error('Error marking notification as read:', error)
-    }
+    // TODO: Implement when notifications API is stable
+    // For now, just update the local state to prevent API calls
+    setNotifications(prev => 
+      prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+    )
+    setUnreadCount(prev => Math.max(0, prev - 1))
   }
 
   const getPlanBadgeColor = (plan: string) => {

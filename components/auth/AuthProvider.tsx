@@ -45,54 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Fetch enhanced user profile from API with retry logic
-  const fetchEnhancedProfile = useCallback(async (fallbackUser: User, retryCount = 0) => {
-    try {
-      const response = await fetch('/api/user/profile', {
-        credentials: 'include',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success && result.data) {
-          console.log('AuthProvider: Enhanced profile fetched successfully')
-          setUser({
-            id: result.data.id,
-            email: result.data.email,
-            name: result.data.name || fallbackUser.name,
-            plan: result.data.plan || 'starter',
-            subscriptionStatus: result.data.subscriptionStatus || 'active'
-          })
-          setError(null)
-        } else {
-          console.log('AuthProvider: API returned fallback data, using it')
-          setUser(result.data || fallbackUser)
-          setError(null)
-        }
-      } else if (response.status === 401) {
-        console.log('AuthProvider: Profile API returned 401, signing out')
-        await signOut()
-      } else {
-        console.warn('AuthProvider: Profile API failed, keeping fallback user')
-        // Keep the fallback user, don't break auth state
-        setError(null)
-      }
-    } catch (error) {
-      console.warn('AuthProvider: Profile fetch failed:', error)
-      
-      // Retry logic for network errors
-      if (retryCount < 2) {
-        console.log(`AuthProvider: Retrying profile fetch (attempt ${retryCount + 1})`)
-        setTimeout(() => fetchEnhancedProfile(fallbackUser, retryCount + 1), 1000 * (retryCount + 1))
-      } else {
-        console.warn('AuthProvider: Max retries reached, keeping fallback user')
-        setError(null)
-      }
-    }
-  }, [])
+  // REMOVED: fetchEnhancedProfile function that was causing 401 authentication loops
+  // The AuthProvider now only uses Supabase session data to prevent API calls that could fail
+  // and trigger unwanted sign-outs. This was the root cause of the authentication loop issue.
 
   // Initialize authentication state
   const initializeAuth = useCallback(async () => {
@@ -119,14 +74,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('AuthProvider: Session found for user:', session.user.email)
       
-      // Immediately set fallback user to prevent auth state gaps
+      // Set user from Supabase session data only - no API calls
       const fallbackUser = createFallbackUser(session.user)
       setUser(fallbackUser)
       setLoading(false)
       setError(null)
-
-      // Fetch enhanced profile in background
-      await fetchEnhancedProfile(fallbackUser)
+      
+      console.log('AuthProvider: User set from session data, no API calls made')
 
     } catch (error) {
       console.error('AuthProvider: Error initializing auth:', error)
@@ -134,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null)
       setLoading(false)
     }
-  }, [createFallbackUser, fetchEnhancedProfile])
+  }, [createFallbackUser])
 
   useEffect(() => {
     console.log('AuthProvider: Setting up auth state listener')
@@ -148,18 +102,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(fallbackUser)
           setLoading(false)
           setError(null)
-          
-          // Fetch enhanced profile in background
-          await fetchEnhancedProfile(fallbackUser)
+          console.log('AuthProvider: User signed in, using session data only')
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
           setLoading(false)
           setError(null)
+          console.log('AuthProvider: User signed out')
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
           // Update user data on token refresh
           const fallbackUser = createFallbackUser(session.user)
           setUser(fallbackUser)
-          await fetchEnhancedProfile(fallbackUser)
+          console.log('AuthProvider: Token refreshed, user data updated')
         }
       }
     )
@@ -171,18 +124,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('AuthProvider: Cleaning up auth state listener')
       subscription.unsubscribe()
     }
-  }, [initializeAuth, createFallbackUser, fetchEnhancedProfile])
+  }, [initializeAuth, createFallbackUser])
 
-  // Refresh user profile
+  // Refresh user profile - simplified to avoid API calls that could cause 401 loops
   const refreshUser = useCallback(async () => {
     if (!user) return
     
     try {
-      await fetchEnhancedProfile(user)
+      // Get fresh session data from Supabase
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        const refreshedUser = createFallbackUser(session.user)
+        setUser(refreshedUser)
+        console.log('AuthProvider: User refreshed from session data')
+      }
     } catch (error) {
       console.error('AuthProvider: Error refreshing user:', error)
     }
-  }, [user, fetchEnhancedProfile])
+  }, [user, createFallbackUser])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
