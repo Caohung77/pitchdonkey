@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from './database.types'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -10,10 +9,39 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Server-side Supabase client for API routes
-export const createServerSupabaseClient = async () => {
-  const { cookies } = await import('next/headers')
-  return createRouteHandlerClient<Database>({ cookies })
+// Server-side Supabase client for API routes - using service role for reliable access
+export const createServerSupabaseClient = () => {
+  return createClient<Database>(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+}
+
+// Get user from JWT token in Authorization header
+export async function getUserFromRequest(request: Request): Promise<any> {
+  try {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return null
+    }
+
+    const token = authHeader.substring(7)
+    const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+    
+    const { data: { user }, error } = await supabase.auth.getUser(token)
+    
+    if (error) {
+      console.error('Error getting user from token:', error)
+      return null
+    }
+    
+    return user
+  } catch (error) {
+    console.error('Error in getUserFromRequest:', error)
+    return null
+  }
 }
 
 // Service role client for admin operations

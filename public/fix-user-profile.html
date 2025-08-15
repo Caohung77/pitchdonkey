@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix User Profile</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix User Profile</h1>
+    
+    <div class="result warning">
+        <strong>Issue:</strong> User profile missing from database
+        <br><strong>Solution:</strong> Create user profile manually
+        <br><strong>This will fix the 500 error on stats endpoint</strong>
+    </div>
+
+    <button onclick="checkUserProfile()">1. Check User Profile</button>
+    <button onclick="createUserProfile()">2. Create User Profile</button>
+    <button onclick="testStatsAfterFix()">3. Test Stats After Fix</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function checkUserProfile() {
+            try {
+                log('🔄 Checking user profile...', 'info')
+                const { data: { session }, error: authError } = await supabase.auth.getSession()
+                
+                if (authError || !session) {
+                    log('❌ Not authenticated - please sign in first', 'error')
+                    return null
+                }
+                
+                log(`✅ Authenticated as: ${session.user.email}`, 'success')
+                log(`🎫 User ID: ${session.user.id}`, 'info')
+                
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .single()
+                
+                if (error) {
+                    if (error.code === 'PGRST116') {
+                        log('❌ User profile NOT FOUND in database', 'error')
+                        log('💡 This is why the stats API returns 500 error', 'warning')
+                        return { session, exists: false }
+                    } else {
+                        log(`❌ Database error: ${error.message}`, 'error')
+                        return null
+                    }
+                } else {
+                    log('✅ User profile EXISTS in database', 'success')
+                    log(`👤 Profile: ${JSON.stringify(data, null, 2)}`, 'info')
+                    return { session, exists: true, profile: data }
+                }
+            } catch (error) {
+                log(`❌ Check failed: ${error.message}`, 'error')
+                return null
+            }
+        }
+
+        async function createUserProfile() {
+            try {
+                const result = await checkUserProfile()
+                if (!result) return
+                
+                if (result.exists) {
+                    log('✅ User profile already exists - no need to create', 'success')
+                    return
+                }
+                
+                log('🔄 Creating user profile...', 'info')
+                const { session } = result
+                
+                const profileData = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    full_name: session.user.user_metadata?.full_name || 
+                              session.user.user_metadata?.name || 
+                              session.user.email.split('@')[0],
+                    avatar_url: session.user.user_metadata?.avatar_url,
+                    subscription_tier: 'free',
+                    subscription_status: 'active'
+                }
+                
+                log(`📤 Creating profile: ${JSON.stringify(profileData, null, 2)}`, 'info')
+                
+                const { data, error } = await supabase
+                    .from('users')
+                    .insert(profileData)
+                    .select()
+                    .single()
+                
+                if (error) {
+                    log(`❌ Failed to create profile: ${error.message}`, 'error')
+                    log(`🔍 Error details: ${JSON.stringify(error, null, 2)}`, 'error')
+                } else {
+                    log('🎉 User profile created successfully!', 'success')
+                    log(`👤 Created profile: ${JSON.stringify(data, null, 2)}`, 'success')
+                    log('💡 The stats API should now work', 'info')
+                }
+                
+            } catch (error) {
+                log(`❌ Create profile failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testStatsAfterFix() {
+            try {
+                log('🔄 Testing stats API after fix...', 'info')
+                
+                const response = await fetch('/api/contacts/stats')
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log('🎉 SUCCESS! Stats API now working!', 'success')
+                    log(`📊 Stats: ${JSON.stringify(responseData, null, 2)}`, 'success')
+                } else {
+                    log(`❌ Still failing: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                }
+                
+            } catch (error) {
+                log(`❌ Test failed: ${error.message}`, 'error')
+            }
+        }
+
+        // Auto-check on load
+        setTimeout(checkUserProfile, 1000)
+    </script>
+</body>
+</html>

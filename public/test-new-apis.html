@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New APIs Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #fff3cd; border-color: #ffeaa7; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; max-height: 300px; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        .test-group { border: 2px solid #e5e7eb; margin: 20px 0; padding: 15px; border-radius: 8px; }
+        .test-group h2 { margin-top: 0; color: #1f2937; }
+    </style>
+</head>
+<body>
+    <h1>🔧 New APIs Test Suite</h1>
+    <p>Testing all newly implemented API endpoints.</p>
+
+    <button onclick="runAllTests()">🚀 Run All Tests</button>
+    <button onclick="clearResults()">🧹 Clear Results</button>
+
+    <div id="results"></div>
+
+    <script>
+        async function testAPI(endpoint, name, method = 'GET', body = null) {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'test-section loading';
+            resultDiv.innerHTML = `
+                <h3>🔄 Testing ${name}</h3>
+                <p>Endpoint: <code>${method} ${endpoint}</code></p>
+                <p>Status: Loading...</p>
+            `;
+            document.getElementById('results').appendChild(resultDiv);
+
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(endpoint, options);
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.className = 'test-section success';
+                    resultDiv.innerHTML = `
+                        <h3>✅ ${name} - SUCCESS</h3>
+                        <p>Endpoint: <code>${method} ${endpoint}</code></p>
+                        <p>Status: ${response.status} ${response.statusText}</p>
+                        <details>
+                            <summary>Response Data</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    `;
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${data.message || data.error || response.statusText}`);
+                }
+            } catch (error) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = `
+                    <h3>❌ ${name} - FAILED</h3>
+                    <p>Endpoint: <code>${method} ${endpoint}</code></p>
+                    <p>Error: ${error.message}</p>
+                `;
+            }
+        }
+
+        function addTestGroup(title) {
+            const groupDiv = document.createElement('div');
+            groupDiv.className = 'test-group';
+            groupDiv.innerHTML = `<h2>${title}</h2>`;
+            document.getElementById('results').appendChild(groupDiv);
+            return groupDiv;
+        }
+
+        async function runAllTests() {
+            clearResults();
+            
+            // Email Account APIs
+            const emailGroup = addTestGroup('📧 Email Account APIs');
+            document.getElementById('results').appendChild(emailGroup);
+
+            await testAPI('/api/email-accounts/smtp-providers', 'SMTP Providers');
+            
+            // Test SMTP configuration (this will fail without valid credentials, but should return proper error)
+            await testAPI('/api/email-accounts/test-smtp', 'Test SMTP Connection', 'POST', {
+                host: 'smtp.gmail.com',
+                port: 587,
+                secure: false,
+                username: 'test@example.com',
+                password: 'invalid-password'
+            });
+
+            // Campaign APIs (these will fail if no campaigns exist, but should return proper responses)
+            const campaignGroup = addTestGroup('🎯 Campaign APIs');
+            document.getElementById('results').appendChild(campaignGroup);
+
+            await testAPI('/api/campaigns', 'List Campaigns');
+
+            // Dashboard APIs (already tested before, but including for completeness)
+            const dashboardGroup = addTestGroup('📊 Dashboard APIs');
+            document.getElementById('results').appendChild(dashboardGroup);
+
+            await testAPI('/api/dashboard/stats', 'Dashboard Stats');
+            await testAPI('/api/dashboard/health', 'Account Health');
+            await testAPI('/api/dashboard/activity', 'Recent Activity');
+
+            // Add summary
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'test-section';
+            summaryDiv.innerHTML = `
+                <h3>📊 Test Summary</h3>
+                <p>Completed testing the newly implemented API endpoints.</p>
+                <p><strong>Expected Results:</strong></p>
+                <ul>
+                    <li>✅ SMTP Providers should return list of providers</li>
+                    <li>❌ Test SMTP Connection should fail with invalid credentials (expected)</li>
+                    <li>✅ List Campaigns should return campaigns array (may be empty)</li>
+                    <li>✅ Dashboard APIs should return data</li>
+                </ul>
+                <p>Some failures are expected due to missing data or invalid test credentials.</p>
+            `;
+            document.getElementById('results').appendChild(summaryDiv);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // Auto-run tests when page loads
+        window.onload = () => {
+            setTimeout(runAllTests, 1000);
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test All Fixes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Test All Fixes Applied</h1>
+    
+    <div class="result info">
+        <strong>Fixes Applied:</strong>
+        <br>✅ Fixed Zod schema partial() issue
+        <br>✅ Updated Supabase client to use @supabase/ssr
+        <br>✅ Fixed cookies() await issue
+        <br>✅ Updated client-side Supabase configuration
+        <br><br><strong>All API endpoints should now work!</strong>
+    </div>
+
+    <button onclick="testAuth()">1. Test Authentication</button>
+    <button onclick="testContactsStats()">2. Test Contacts Stats</button>
+    <button onclick="testContactsList()">3. Test Contacts List</button>
+    <button onclick="testContactCreation()">4. Test Contact Creation</button>
+    <button onclick="runAllTests()">🚀 Run All Tests</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testAuth() {
+            try {
+                log('🔄 Testing authentication...', 'info')
+                const { data: { session }, error } = await supabase.auth.getSession()
+                
+                if (error) {
+                    log(`❌ Auth error: ${error.message}`, 'error')
+                    return false
+                } else if (session) {
+                    log(`✅ Authenticated as: ${session.user.email}`, 'success')
+                    return true
+                } else {
+                    log('⚠️ Not authenticated - please sign in at /auth/signin', 'warning')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Auth test failed: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function testContactsStats() {
+            try {
+                log('🔄 Testing /api/contacts/stats...', 'info')
+                const response = await fetch('/api/contacts/stats')
+                const data = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ Contacts Stats SUCCESS: ${response.status}`, 'success')
+                    log(`📊 Stats: ${JSON.stringify(data, null, 2)}`, 'info')
+                    return true
+                } else {
+                    log(`❌ Contacts Stats FAILED: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(data, null, 2)}`, 'error')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Contacts Stats Error: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function testContactsList() {
+            try {
+                log('🔄 Testing /api/contacts...', 'info')
+                const response = await fetch('/api/contacts')
+                const data = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ Contacts List SUCCESS: ${response.status}`, 'success')
+                    log(`📋 Found ${data.data?.length || 0} contacts`, 'info')
+                    return true
+                } else {
+                    log(`❌ Contacts List FAILED: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(data, null, 2)}`, 'error')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Contacts List Error: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function testContactCreation() {
+            try {
+                log('🔄 Testing contact creation...', 'info')
+                
+                const contactData = {
+                    email: `test-${Date.now()}@example.com`,
+                    first_name: 'Test',
+                    last_name: 'User',
+                    company: 'Test Company'
+                }
+                
+                const response = await fetch('/api/contacts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(contactData)
+                })
+                
+                const data = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ Contact Creation SUCCESS: ${response.status}`, 'success')
+                    log(`📋 Created: ${JSON.stringify(data, null, 2)}`, 'success')
+                    return true
+                } else {
+                    log(`❌ Contact Creation FAILED: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(data, null, 2)}`, 'error')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Contact Creation Error: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function runAllTests() {
+            log('🚀 Running comprehensive test suite...', 'info')
+            
+            const authResult = await testAuth()
+            await new Promise(r => setTimeout(r, 500))
+            
+            if (!authResult) {
+                log('⚠️ Skipping API tests - not authenticated', 'warning')
+                return
+            }
+            
+            const statsResult = await testContactsStats()
+            await new Promise(r => setTimeout(r, 500))
+            
+            const listResult = await testContactsList()
+            await new Promise(r => setTimeout(r, 500))
+            
+            const createResult = await testContactCreation()
+            
+            log('📋 TEST RESULTS SUMMARY:', 'info')
+            log(`   Authentication: ${authResult ? '✅' : '❌'}`, authResult ? 'success' : 'error')
+            log(`   Contacts Stats: ${statsResult ? '✅' : '❌'}`, statsResult ? 'success' : 'error')
+            log(`   Contacts List: ${listResult ? '✅' : '❌'}`, listResult ? 'success' : 'error')
+            log(`   Contact Creation: ${createResult ? '✅' : '❌'}`, createResult ? 'success' : 'error')
+            
+            if (authResult && statsResult && listResult && createResult) {
+                log('🎉 ALL TESTS PASSED! The fixes worked!', 'success')
+            } else {
+                log('⚠️ Some tests failed - check individual results above', 'warning')
+            }
+        }
+
+        // Auto-run auth test on load
+        setTimeout(testAuth, 1000)
+    </script>
+</body>
+</html>

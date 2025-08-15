@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test and Fix Auth</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .auth-form {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        input {
+            width: 200px;
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Test and Fix Authentication</h1>
+    
+    <div class="result warning">
+        <strong>Current Issue:</strong> Auth session missing! (401 errors)
+        <br><strong>Solution:</strong> Sign in and test with proper headers
+    </div>
+
+    <div class="auth-form">
+        <h3>Quick Sign In</h3>
+        <input type="email" id="email" placeholder="Email" value="banbau@gmx.net">
+        <input type="password" id="password" placeholder="Password" value="">
+        <button onclick="signIn()">Sign In</button>
+    </div>
+
+    <button onclick="testCurrentAuth()">1. Test Current Auth</button>
+    <button onclick="testWithHeaders()">2. Test With Headers</button>
+    <button onclick="testContactsAPI()">3. Test Contacts API</button>
+    <button onclick="fixAndTest()">🚀 Fix and Test All</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        let currentSession = null
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function signIn() {
+            try {
+                const email = document.getElementById('email').value
+                const password = document.getElementById('password').value
+                
+                if (!email || !password) {
+                    log('❌ Please enter email and password', 'error')
+                    return
+                }
+                
+                log('🔄 Signing in...', 'info')
+                
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                })
+                
+                if (error) {
+                    log(`❌ Sign in failed: ${error.message}`, 'error')
+                } else {
+                    log(`✅ Sign in successful!`, 'success')
+                    log(`👤 User: ${data.user.email}`, 'info')
+                    currentSession = data.session
+                    
+                    // Test API immediately after sign in
+                    setTimeout(testContactsAPI, 1000)
+                }
+            } catch (error) {
+                log(`❌ Sign in error: ${error.message}`, 'error')
+            }
+        }
+
+        async function testCurrentAuth() {
+            try {
+                log('🔄 Testing current authentication...', 'info')
+                const { data: { session }, error } = await supabase.auth.getSession()
+                
+                if (error) {
+                    log(`❌ Auth error: ${error.message}`, 'error')
+                } else if (session) {
+                    log(`✅ Session found!`, 'success')
+                    log(`👤 User: ${session.user.email}`, 'info')
+                    log(`🎫 Token: ${session.access_token.substring(0, 20)}...`, 'info')
+                    currentSession = session
+                } else {
+                    log('❌ No session found', 'error')
+                }
+            } catch (error) {
+                log(`❌ Auth test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testWithHeaders() {
+            try {
+                if (!currentSession) {
+                    log('⚠️ No session - run auth test first', 'warning')
+                    return
+                }
+
+                log('🔄 Testing API with Authorization header...', 'info')
+                
+                const response = await fetch('/api/contacts/stats', {
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                
+                if (response.ok) {
+                    log(`✅ Header auth SUCCESS: ${response.status}`, 'success')
+                    const data = await response.json()
+                    log(`📊 Data: ${JSON.stringify(data, null, 2)}`, 'info')
+                } else {
+                    log(`❌ Header auth FAILED: ${response.status}`, 'error')
+                    const errorData = await response.json()
+                    log(`💥 Error: ${JSON.stringify(errorData, null, 2)}`, 'error')
+                }
+            } catch (error) {
+                log(`❌ Header auth test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testContactsAPI() {
+            try {
+                log('🔄 Testing contacts API (cookies)...', 'info')
+                
+                const response = await fetch('/api/contacts/stats')
+                
+                if (response.ok) {
+                    log(`✅ Contacts API SUCCESS: ${response.status}`, 'success')
+                    const data = await response.json()
+                    log(`📊 Data: ${JSON.stringify(data, null, 2)}`, 'info')
+                } else {
+                    log(`❌ Contacts API FAILED: ${response.status}`, 'error')
+                    const errorData = await response.json()
+                    log(`💥 Error: ${JSON.stringify(errorData, null, 2)}`, 'error')
+                }
+            } catch (error) {
+                log(`❌ Contacts API test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function fixAndTest() {
+            log('🚀 Running complete fix and test...', 'info')
+            
+            // Step 1: Check current auth
+            await testCurrentAuth()
+            await new Promise(r => setTimeout(r, 500))
+            
+            // Step 2: If no session, try to sign in
+            if (!currentSession) {
+                log('⚠️ No session found, attempting sign in...', 'warning')
+                await signIn()
+                await new Promise(r => setTimeout(r, 1000))
+            }
+            
+            // Step 3: Test both auth methods
+            if (currentSession) {
+                await testWithHeaders()
+                await new Promise(r => setTimeout(r, 500))
+                await testContactsAPI()
+            }
+            
+            log('🏁 Fix and test complete!', 'info')
+        }
+
+        // Auto-check auth on load
+        setTimeout(testCurrentAuth, 1000)
+    </script>
+</body>
+</html>

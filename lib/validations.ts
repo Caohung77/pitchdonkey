@@ -47,17 +47,24 @@ export const updateEmailAccountSchema = z.object({
   is_active: z.boolean().optional(),
 })
 
-// Contact validation schemas
-export const contactSchema = z.object({
+// Helper function to validate URL or empty string
+const urlOrEmpty = z.union([
+  z.string().url(),
+  z.literal(''),
+  z.undefined()
+]).optional()
+
+// Base contact schema without refinement
+const baseContactSchema = z.object({
   email: z.string().email(),
-  first_name: z.string().min(1, 'First name is required'),
-  last_name: z.string().min(1, 'Last name is required'),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
   company: z.string().optional(),
   position: z.string().optional(),
-  website: z.string().url().optional().or(z.literal('')),
+  website: urlOrEmpty,
   phone: z.string().optional(),
-  linkedin_url: z.string().url().optional().or(z.literal('')),
-  twitter_url: z.string().url().optional().or(z.literal('')),
+  linkedin_url: urlOrEmpty,
+  twitter_url: urlOrEmpty,
   country: z.string().optional(),
   city: z.string().optional(),
   timezone: z.string().optional(),
@@ -65,7 +72,14 @@ export const contactSchema = z.object({
   tags: z.array(z.string()).default([]),
 })
 
-export const updateContactSchema = contactSchema.partial()
+// Contact validation schema with refinement
+export const contactSchema = baseContactSchema.refine(data => data.first_name || data.last_name, {
+  message: "Either first name or last name is required",
+  path: ["first_name"]
+})
+
+// Update schema using base schema
+export const updateContactSchema = baseContactSchema.partial()
 
 export const bulkContactsSchema = z.object({
   contacts: z.array(contactSchema),

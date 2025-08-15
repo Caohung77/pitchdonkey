@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       await upsertUserProfile({
         id: data.user.id,
         email: data.user.email!,
-        name: name || data.user.email?.split('@')[0],
+        full_name: name || data.user.email?.split('@')[0],
         avatar_url: data.user.user_metadata?.avatar_url
       })
     } catch (profileError) {

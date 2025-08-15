@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Final Contact Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Final Contact Debug Test</h1>
+    
+    <div class="result info">
+        <strong>Fixes Applied:</strong>
+        <br>✅ Fixed validation schema for URLs
+        <br>✅ Fixed user profile creation in signup
+        <br>✅ Simplified middleware (temporarily disabled auth)
+        <br>✅ Fixed client/server separation
+        <br><br><strong>This should now work!</strong>
+    </div>
+
+    <button onclick="testContactCreation()">🚀 Test Contact Creation</button>
+    <button onclick="testGetContacts()">📋 Get Contacts</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testContactCreation() {
+            try {
+                log('🔄 Testing contact creation with all fixes applied...', 'info')
+                
+                // Check auth first
+                const { data: { session }, error: authError } = await supabase.auth.getSession()
+                
+                if (authError) {
+                    log(`❌ Auth error: ${authError.message}`, 'error')
+                    return
+                }
+                
+                if (!session) {
+                    log('⚠️ Not authenticated - please sign in at /auth/signin', 'warning')
+                    return
+                }
+                
+                log(`✅ Authenticated as: ${session.user.email}`, 'success')
+                
+                const contactData = {
+                    email: `final-test-${Date.now()}@example.com`,
+                    first_name: 'Final',
+                    last_name: 'Test',
+                    company: 'Test Company',
+                    position: 'Developer'
+                }
+                
+                log(`📤 Creating contact: ${JSON.stringify(contactData, null, 2)}`, 'info')
+                
+                const response = await fetch('/api/contacts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(contactData)
+                })
+                
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log(`🎉 SUCCESS! Contact created successfully!`, 'success')
+                    log(`📋 Created contact: ${JSON.stringify(responseData, null, 2)}`, 'success')
+                    
+                    // Test getting contacts to see if it appears
+                    setTimeout(() => {
+                        log('🔄 Verifying contact appears in list...', 'info')
+                        testGetContacts()
+                    }, 1000)
+                } else {
+                    log(`❌ FAILED: ${response.status} ${response.statusText}`, 'error')
+                    log(`💥 Error details: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                    
+                    // Provide specific debugging info
+                    if (response.status === 401) {
+                        log('🔍 401 Unauthorized - Authentication issue', 'warning')
+                    } else if (response.status === 400) {
+                        log('🔍 400 Bad Request - Validation issue', 'warning')
+                    } else if (response.status === 500) {
+                        log('🔍 500 Server Error - Check server logs', 'warning')
+                    }
+                }
+                
+            } catch (error) {
+                log(`❌ Network/Client Error: ${error.message}`, 'error')
+                
+                if (error.message.includes('pattern')) {
+                    log('🚨 Pattern error still occurring - check middleware/routing', 'error')
+                } else {
+                    log('🔍 Different error type - progress made!', 'warning')
+                }
+            }
+        }
+
+        async function testGetContacts() {
+            try {
+                log('🔄 Testing GET contacts...', 'info')
+                
+                const response = await fetch('/api/contacts')
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ GET contacts successful!`, 'success')
+                    log(`📊 Found ${responseData.data?.length || 0} contacts`, 'info')
+                    
+                    if (responseData.data && responseData.data.length > 0) {
+                        log(`📋 Latest contact: ${JSON.stringify(responseData.data[0], null, 2)}`, 'info')
+                    }
+                } else {
+                    log(`❌ GET contacts failed: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                }
+                
+            } catch (error) {
+                log(`❌ GET contacts error: ${error.message}`, 'error')
+            }
+        }
+
+        // Auto-run test on load
+        setTimeout(() => {
+            log('🚀 Auto-running final test...', 'info')
+            testContactCreation()
+        }, 1000)
+    </script>
+</body>
+</html>

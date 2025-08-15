@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Complete Contact Creation Flow</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 8px 16px;
+            margin: 3px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .test-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .form-section {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        input {
+            width: 200px;
+            padding: 4px;
+            margin: 2px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Complete Contact Creation Flow Test</h1>
+    
+    <div class="result info">
+        <strong>Testing Complete Flow:</strong>
+        <br>1. Authentication check
+        <br>2. Database connection test
+        <br>3. User profile verification
+        <br>4. Contact validation test
+        <br>5. API endpoint test
+        <br>6. Direct database insert test
+    </div>
+
+    <div class="test-section">
+        <h3>🔐 Step 1: Authentication</h3>
+        <button onclick="testAuthentication()">Check Authentication</button>
+        <button onclick="testUserProfile()">Check User Profile</button>
+    </div>
+
+    <div class="test-section">
+        <h3>🗄️ Step 2: Database Tests</h3>
+        <button onclick="testDatabaseConnection()">Test Database</button>
+        <button onclick="testContactsTable()">Test Contacts Table</button>
+        <button onclick="testDirectInsert()">Test Direct Insert</button>
+    </div>
+
+    <div class="test-section">
+        <h3>🌐 Step 3: API Tests</h3>
+        <div class="form-section">
+            <strong>Test Contact Data:</strong><br>
+            <input type="email" id="email" placeholder="Email" value="test@example.com">
+            <input type="text" id="firstName" placeholder="First Name" value="John">
+            <input type="text" id="lastName" placeholder="Last Name" value="Doe"><br>
+            <input type="text" id="company" placeholder="Company" value="Test Co">
+            <input type="text" id="position" placeholder="Position" value="Developer">
+        </div>
+        <button onclick="testValidation()">Test Validation</button>
+        <button onclick="testAPIEndpoint()">Test API Endpoint</button>
+        <button onclick="testGetContacts()">Get Contacts</button>
+    </div>
+
+    <div class="test-section">
+        <h3>🚀 Step 4: Full Flow Test</h3>
+        <button onclick="runCompleteTest()">Run Complete Test</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `<div class="result ${type}">[${timestamp}] ${message}</div>`
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testAuthentication() {
+            try {
+                log('🔄 Testing authentication...', 'info')
+                const { data: { session }, error } = await supabase.auth.getSession()
+                
+                if (error) {
+                    log(`❌ Auth error: ${error.message}`, 'error')
+                    return null
+                } else if (session) {
+                    log(`✅ Authenticated as: ${session.user.email}`, 'success')
+                    log(`🎫 User ID: ${session.user.id}`, 'info')
+                    return session
+                } else {
+                    log('⚠️ Not authenticated - please sign in at /auth/signin', 'warning')
+                    return null
+                }
+            } catch (error) {
+                log(`❌ Auth test failed: ${error.message}`, 'error')
+                return null
+            }
+        }
+
+        async function testUserProfile() {
+            try {
+                const session = await testAuthentication()
+                if (!session) return
+
+                log('🔄 Testing user profile...', 'info')
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .single()
+                
+                if (error) {
+                    log(`❌ User profile error: ${error.message}`, 'error')
+                    if (error.code === 'PGRST116') {
+                        log('🔍 User profile not found - this might be the issue!', 'warning')
+                    }
+                } else {
+                    log(`✅ User profile found!`, 'success')
+                    log(`👤 Profile: ${JSON.stringify(data, null, 2)}`, 'info')
+                }
+            } catch (error) {
+                log(`❌ User profile test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testDatabaseConnection() {
+            try {
+                const session = await testAuthentication()
+                if (!session) return
+
+                log('🔄 Testing database connection...', 'info')
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('count')
+                    .single()
+                
+                if (error) {
+                    log(`❌ Database error: ${error.message}`, 'error')
+                } else {
+                    log(`✅ Database connection successful!`, 'success')
+                }
+            } catch (error) {
+                log(`❌ Database test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testContactsTable() {
+            try {
+                const session = await testAuthentication()
+                if (!session) return
+
+                log('🔄 Testing contacts table access...', 'info')
+                const { data, error, count } = await supabase
+                    .from('contacts')
+                    .select('*', { count: 'exact' })
+                    .eq('user_id', session.user.id)
+                
+                if (error) {
+                    log(`❌ Contacts table error: ${error.message}`, 'error')
+                    log(`🔍 Error code: ${error.code}`, 'error')
+                } else {
+                    log(`✅ Contacts table accessible!`, 'success')
+                    log(`📊 Found ${count} existing contacts`, 'info')
+                }
+            } catch (error) {
+                log(`❌ Contacts table test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testDirectInsert() {
+            try {
+                const session = await testAuthentication()
+                if (!session) return
+
+                log('🔄 Testing direct database insert...', 'info')
+                const testContact = {
+                    user_id: session.user.id,
+                    email: `direct-test-${Date.now()}@example.com`,
+                    first_name: 'Direct',
+                    last_name: 'Test',
+                    status: 'active'
+                }
+                
+                const { data, error } = await supabase
+                    .from('contacts')
+                    .insert(testContact)
+                    .select()
+                    .single()
+                
+                if (error) {
+                    log(`❌ Direct insert failed: ${error.message}`, 'error')
+                    log(`🔍 Error code: ${error.code}`, 'error')
+                } else {
+                    log(`✅ Direct insert successful!`, 'success')
+                    log(`📋 Created: ${JSON.stringify(data, null, 2)}`, 'success')
+                    
+                    // Clean up
+                    setTimeout(async () => {
+                        await supabase.from('contacts').delete().eq('id', data.id)
+                        log(`🧹 Test contact cleaned up`, 'info')
+                    }, 1000)
+                }
+            } catch (error) {
+                log(`❌ Direct insert test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testValidation() {
+            try {
+                log('🔄 Testing contact validation...', 'info')
+                const contactData = {
+                    email: document.getElementById('email').value,
+                    first_name: document.getElementById('firstName').value,
+                    last_name: document.getElementById('lastName').value,
+                    company: document.getElementById('company').value,
+                    position: document.getElementById('position').value
+                }
+                
+                log(`📤 Validating: ${JSON.stringify(contactData, null, 2)}`, 'info')
+                
+                // Basic validation
+                if (!contactData.email || !contactData.email.includes('@')) {
+                    log(`❌ Invalid email: ${contactData.email}`, 'error')
+                    return false
+                }
+                
+                if (!contactData.first_name && !contactData.last_name) {
+                    log(`❌ Missing both first and last name`, 'error')
+                    return false
+                }
+                
+                log(`✅ Validation passed!`, 'success')
+                return true
+            } catch (error) {
+                log(`❌ Validation test failed: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function testAPIEndpoint() {
+            try {
+                const session = await testAuthentication()
+                if (!session) return
+
+                const isValid = await testValidation()
+                if (!isValid) return
+
+                log('🔄 Testing API endpoint...', 'info')
+                const contactData = {
+                    email: document.getElementById('email').value,
+                    first_name: document.getElementById('firstName').value,
+                    last_name: document.getElementById('lastName').value,
+                    company: document.getElementById('company').value,
+                    position: document.getElementById('position').value
+                }
+                
+                const response = await fetch('/api/contacts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(contactData)
+                })
+                
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ API Success: ${response.status}`, 'success')
+                    log(`📋 Created: ${JSON.stringify(responseData, null, 2)}`, 'success')
+                } else {
+                    log(`❌ API Failed: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                }
+            } catch (error) {
+                log(`❌ API test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testGetContacts() {
+            try {
+                log('🔄 Testing GET contacts...', 'info')
+                const response = await fetch('/api/contacts')
+                const data = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ GET Success: ${response.status}`, 'success')
+                    log(`📊 Response: ${JSON.stringify(data, null, 2)}`, 'info')
+                } else {
+                    log(`❌ GET Failed: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(data, null, 2)}`, 'error')
+                }
+            } catch (error) {
+                log(`❌ GET test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function runCompleteTest() {
+            log('🚀 Starting complete contact creation flow test...', 'info')
+            
+            await testAuthentication()
+            await new Promise(r => setTimeout(r, 500))
+            
+            await testUserProfile()
+            await new Promise(r => setTimeout(r, 500))
+            
+            await testDatabaseConnection()
+            await new Promise(r => setTimeout(r, 500))
+            
+            await testContactsTable()
+            await new Promise(r => setTimeout(r, 500))
+            
+            await testDirectInsert()
+            await new Promise(r => setTimeout(r, 500))
+            
+            await testValidation()
+            await new Promise(r => setTimeout(r, 500))
+            
+            await testAPIEndpoint()
+            await new Promise(r => setTimeout(r, 500))
+            
+            await testGetContacts()
+            
+            log('🎉 Complete test finished!', 'success')
+        }
+
+        // Auto-run auth test on load
+        setTimeout(testAuthentication, 1000)
+    </script>
+</body>
+</html>

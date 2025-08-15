@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Add Contact Issue</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .form-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐛 Debug Add Contact Issue</h1>
+    
+    <div class="result info">
+        <strong>Debugging Contact Creation:</strong>
+        <br>• Check authentication status
+        <br>• Test API endpoint directly
+        <br>• Verify database connection
+        <br>• Check for validation errors
+    </div>
+
+    <div class="form-section">
+        <h3>Test Contact Data</h3>
+        <input type="email" id="email" placeholder="Email" value="test@example.com">
+        <input type="text" id="firstName" placeholder="First Name" value="John">
+        <input type="text" id="lastName" placeholder="Last Name" value="Doe">
+        <input type="text" id="company" placeholder="Company" value="Test Company">
+        <input type="text" id="position" placeholder="Position" value="Developer">
+        
+        <button onclick="testAddContact()">Test Add Contact</button>
+        <button onclick="testAuthFirst()">Check Auth First</button>
+        <button onclick="testGetContacts()">Get Existing Contacts</button>
+    </div>
+
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // Initialize Supabase client
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testAuthFirst() {
+            try {
+                log('🔄 Checking authentication status...', 'info')
+                const { data: { session }, error } = await supabase.auth.getSession()
+                
+                if (error) {
+                    log(`❌ Auth error: ${error.message}`, 'error')
+                    return false
+                } else if (session) {
+                    log(`✅ Authenticated as: ${session.user.email}`, 'success')
+                    log(`🎫 User ID: ${session.user.id}`, 'info')
+                    log(`🎫 Session expires: ${new Date(session.expires_at * 1000).toLocaleString()}`, 'info')
+                    return true
+                } else {
+                    log('⚠️ Not authenticated - please sign in first', 'warning')
+                    log('💡 Go to /auth/signin to sign in', 'info')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Auth check failed: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function testGetContacts() {
+            try {
+                log('🔄 Testing GET /api/contacts...', 'info')
+                const response = await fetch('/api/contacts')
+                const data = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ GET Contacts Success: ${response.status}`, 'success')
+                    log(`📊 Response: ${JSON.stringify(data, null, 2)}`, 'info')
+                } else {
+                    log(`❌ GET Contacts Failed: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(data, null, 2)}`, 'error')
+                }
+            } catch (error) {
+                log(`❌ GET Contacts Network Error: ${error.message}`, 'error')
+            }
+        }
+
+        async function testAddContact() {
+            // First check auth
+            const isAuthenticated = await testAuthFirst()
+            if (!isAuthenticated) {
+                log('⚠️ Skipping contact creation - not authenticated', 'warning')
+                return
+            }
+
+            try {
+                log('🔄 Testing POST /api/contacts...', 'info')
+                
+                const contactData = {
+                    email: document.getElementById('email').value,
+                    first_name: document.getElementById('firstName').value,
+                    last_name: document.getElementById('lastName').value,
+                    company: document.getElementById('company').value,
+                    position: document.getElementById('position').value
+                }
+                
+                log(`📤 Sending data: ${JSON.stringify(contactData, null, 2)}`, 'info')
+                
+                const response = await fetch('/api/contacts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(contactData)
+                })
+                
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ Contact Created Successfully: ${response.status}`, 'success')
+                    log(`📊 Created Contact: ${JSON.stringify(responseData, null, 2)}`, 'success')
+                    
+                    // Test getting contacts again to see if it appears
+                    setTimeout(() => {
+                        log('🔄 Checking if contact appears in list...', 'info')
+                        testGetContacts()
+                    }, 1000)
+                } else {
+                    log(`❌ Contact Creation Failed: ${response.status}`, 'error')
+                    log(`💥 Error Response: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                    
+                    // Check specific error types
+                    if (response.status === 401) {
+                        log('🔍 401 Error - Authentication issue detected', 'warning')
+                    } else if (response.status === 400) {
+                        log('🔍 400 Error - Validation issue detected', 'warning')
+                    } else if (response.status === 409) {
+                        log('🔍 409 Error - Duplicate contact detected', 'warning')
+                    }
+                }
+            } catch (error) {
+                log(`❌ Contact Creation Network Error: ${error.message}`, 'error')
+                log(`🔍 Full error: ${error.stack}`, 'error')
+            }
+        }
+
+        // Auto-check auth status on load
+        setTimeout(() => {
+            log('🔄 Auto-checking authentication...', 'info')
+            testAuthFirst()
+        }, 1000)
+    </script>
+</body>
+</html>

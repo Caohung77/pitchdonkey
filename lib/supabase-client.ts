@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from './database.types'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -10,7 +10,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Client-side Supabase client (for React components)
-export const createClientSupabase = () => createClientComponentClient<Database>()
+export const createClientSupabase = () => createBrowserClient<Database>(
+  supabaseUrl,
+  supabaseAnonKey
+)
 
 // Browser client for direct usage
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Auth Fix Final</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Final Auth Fix Test</h1>
+    
+    <div class="result info">
+        <strong>New Approach:</strong>
+        <br>• Server uses service role for database access
+        <br>• Authentication via cookies and Authorization header
+        <br>• Should resolve "Auth session missing!" errors
+    </div>
+
+    <button onclick="testAuth()">1. Test Authentication</button>
+    <button onclick="testWithAuthHeader()">2. Test With Auth Header</button>
+    <button onclick="testContactsAPI()">3. Test Contacts API</button>
+    <button onclick="runFullTest()">🚀 Run Full Test</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        let currentSession = null
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testAuth() {
+            try {
+                log('🔄 Testing client authentication...', 'info')
+                const { data: { session }, error } = await supabase.auth.getSession()
+                
+                if (error) {
+                    log(`❌ Auth error: ${error.message}`, 'error')
+                    return false
+                } else if (session) {
+                    log(`✅ Client session found!`, 'success')
+                    log(`👤 User: ${session.user.email}`, 'info')
+                    log(`🎫 Token: ${session.access_token.substring(0, 20)}...`, 'info')
+                    currentSession = session
+                    return true
+                } else {
+                    log('❌ No client session - please sign in at /auth/signin', 'error')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Auth test failed: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function testWithAuthHeader() {
+            try {
+                if (!currentSession) {
+                    log('⚠️ No session available - run auth test first', 'warning')
+                    return false
+                }
+
+                log('🔄 Testing API with Authorization header...', 'info')
+                
+                const response = await fetch('/api/contacts/stats', {
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                
+                if (response.ok) {
+                    log(`✅ Auth header test SUCCESS: ${response.status}`, 'success')
+                    const data = await response.json()
+                    log(`📊 Data: ${JSON.stringify(data, null, 2)}`, 'info')
+                    return true
+                } else {
+                    log(`❌ Auth header test FAILED: ${response.status}`, 'error')
+                    const errorData = await response.json()
+                    log(`💥 Error: ${JSON.stringify(errorData, null, 2)}`, 'error')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Auth header test failed: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function testContactsAPI() {
+            try {
+                log('🔄 Testing contacts API (cookie-based)...', 'info')
+                
+                const response = await fetch('/api/contacts/stats')
+                
+                if (response.ok) {
+                    log(`✅ Contacts API SUCCESS: ${response.status}`, 'success')
+                    const data = await response.json()
+                    log(`📊 Data: ${JSON.stringify(data, null, 2)}`, 'info')
+                    return true
+                } else {
+                    log(`❌ Contacts API FAILED: ${response.status}`, 'error')
+                    const errorData = await response.json()
+                    log(`💥 Error: ${JSON.stringify(errorData, null, 2)}`, 'error')
+                    return false
+                }
+            } catch (error) {
+                log(`❌ Contacts API test failed: ${error.message}`, 'error')
+                return false
+            }
+        }
+
+        async function runFullTest() {
+            log('🚀 Running comprehensive auth fix test...', 'info')
+            
+            const authResult = await testAuth()
+            await new Promise(r => setTimeout(r, 500))
+            
+            if (!authResult) {
+                log('⚠️ Skipping API tests - not authenticated', 'warning')
+                return
+            }
+            
+            const headerResult = await testWithAuthHeader()
+            await new Promise(r => setTimeout(r, 500))
+            
+            const cookieResult = await testContactsAPI()
+            
+            log('📋 TEST RESULTS SUMMARY:', 'info')
+            log(`   Client Auth: ${authResult ? '✅' : '❌'}`, authResult ? 'success' : 'error')
+            log(`   Auth Header: ${headerResult ? '✅' : '❌'}`, headerResult ? 'success' : 'error')
+            log(`   Cookie Auth: ${cookieResult ? '✅' : '❌'}`, cookieResult ? 'success' : 'error')
+            
+            if (authResult && (headerResult || cookieResult)) {
+                log('🎉 AUTH FIX SUCCESSFUL! At least one method works!', 'success')
+            } else {
+                log('⚠️ Auth fix needs more work - check server logs', 'warning')
+            }
+        }
+
+        // Auto-run auth test on load
+        setTimeout(testAuth, 1000)
+    </script>
+</body>
+</html>

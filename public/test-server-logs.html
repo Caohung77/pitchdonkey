@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Server Logs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Server Logs Test</h1>
+    
+    <div class="result info">
+        <strong>Instructions:</strong>
+        <br>1. Open your terminal/console where the Next.js server is running
+        <br>2. Click the test button below
+        <br>3. Watch the server logs for any error messages
+        <br>4. Compare client-side error with server-side logs
+    </div>
+
+    <button onclick="testWithLogging()">Test Contact Creation (Watch Server Logs)</button>
+    <button onclick="testSimpleGet()">Test Simple GET</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testWithLogging() {
+            try {
+                log('🔄 Starting contact creation test...', 'info')
+                log('👀 WATCH YOUR SERVER CONSOLE FOR LOGS!', 'warning')
+                
+                const contactData = {
+                    email: 'serverlog@test.com',
+                    first_name: 'Server',
+                    last_name: 'Log'
+                }
+                
+                log(`📤 Sending to server: ${JSON.stringify(contactData, null, 2)}`, 'info')
+                
+                // Add a unique identifier to track this request in logs
+                const requestId = Date.now()
+                log(`🔍 Request ID: ${requestId} (look for this in server logs)`, 'info')
+                
+                const response = await fetch('/api/contacts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Request-ID': requestId.toString()
+                    },
+                    body: JSON.stringify(contactData)
+                })
+                
+                log(`📥 Response received: ${response.status} ${response.statusText}`, 'info')
+                
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ SUCCESS on client side!`, 'success')
+                    log(`📋 Response: ${JSON.stringify(responseData, null, 2)}`, 'success')
+                } else {
+                    log(`❌ FAILED on client side: ${response.status}`, 'error')
+                    log(`💥 Client Error: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                }
+                
+                log('👀 Check your server console for detailed error logs!', 'warning')
+                
+            } catch (error) {
+                log(`❌ Client-side Network Error: ${error.message}`, 'error')
+                log(`🔍 Error type: ${error.constructor.name}`, 'error')
+                log(`🔍 Error stack: ${error.stack}`, 'error')
+                
+                // Check if it's a specific type of error
+                if (error.message.includes('pattern')) {
+                    log('🚨 PATTERN ERROR DETECTED - This is likely a URL/fetch issue', 'error')
+                    log('💡 Possible causes:', 'info')
+                    log('   - Invalid characters in URL', 'info')
+                    log('   - Middleware blocking request', 'info')
+                    log('   - CORS issues', 'info')
+                    log('   - Next.js routing problems', 'info')
+                }
+            }
+        }
+
+        async function testSimpleGet() {
+            try {
+                log('🔄 Testing simple GET request...', 'info')
+                
+                const response = await fetch('/api/contacts')
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ GET request successful!`, 'success')
+                    log(`📊 Data: ${JSON.stringify(responseData, null, 2)}`, 'info')
+                } else {
+                    log(`❌ GET request failed: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                }
+                
+            } catch (error) {
+                log(`❌ GET request error: ${error.message}`, 'error')
+                
+                if (error.message.includes('pattern')) {
+                    log('🚨 Pattern error on GET too - this confirms it\'s a routing/URL issue', 'error')
+                }
+            }
+        }
+
+        // Auto-test GET on load
+        setTimeout(testSimpleGet, 1000)
+    </script>
+</body>
+</html>

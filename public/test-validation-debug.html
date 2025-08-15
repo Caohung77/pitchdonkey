@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Validation Issue</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .form-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Validation Issue</h1>
+    
+    <div class="result error">
+        <strong>Error Found:</strong> "The string did not match the expected pattern"
+        <br><strong>Likely Cause:</strong> URL validation failing on empty strings
+        <br><strong>Fix Applied:</strong> Updated validation schema to handle empty URLs
+    </div>
+
+    <div class="form-section">
+        <h3>Test Different Contact Data Combinations</h3>
+        <input type="email" id="email" placeholder="Email" value="test@example.com">
+        <input type="text" id="firstName" placeholder="First Name" value="John">
+        <input type="text" id="lastName" placeholder="Last Name" value="Doe">
+        <input type="text" id="company" placeholder="Company" value="Test Company">
+        <input type="text" id="position" placeholder="Position" value="Developer">
+        <input type="text" id="website" placeholder="Website (leave empty to test)" value="">
+        <input type="text" id="linkedin" placeholder="LinkedIn URL (leave empty to test)" value="">
+        <input type="text" id="phone" placeholder="Phone" value="">
+        
+        <button onclick="testMinimalData()">Test Minimal Data</button>
+        <button onclick="testWithEmptyUrls()">Test With Empty URLs</button>
+        <button onclick="testWithValidUrls()">Test With Valid URLs</button>
+        <button onclick="testWithInvalidUrls()">Test With Invalid URLs</button>
+    </div>
+
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function checkAuth() {
+            const { data: { session }, error } = await supabase.auth.getSession()
+            if (error || !session) {
+                log('⚠️ Not authenticated - please sign in first', 'warning')
+                return false
+            }
+            log(`✅ Authenticated as: ${session.user.email}`, 'success')
+            return true
+        }
+
+        async function testContactCreation(contactData, testName) {
+            try {
+                log(`🔄 Testing ${testName}...`, 'info')
+                log(`📤 Data: ${JSON.stringify(contactData, null, 2)}`, 'info')
+                
+                const response = await fetch('/api/contacts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(contactData)
+                })
+                
+                const responseData = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ ${testName} SUCCESS: ${response.status}`, 'success')
+                    log(`📋 Created: ${JSON.stringify(responseData, null, 2)}`, 'success')
+                } else {
+                    log(`❌ ${testName} FAILED: ${response.status}`, 'error')
+                    log(`💥 Error: ${JSON.stringify(responseData, null, 2)}`, 'error')
+                    
+                    // Try to identify the specific validation error
+                    if (responseData.error && responseData.error.includes('pattern')) {
+                        log('🔍 Pattern validation error detected - likely URL field issue', 'warning')
+                    }
+                    if (responseData.error && responseData.error.includes('first name')) {
+                        log('🔍 Name validation error detected', 'warning')
+                    }
+                }
+            } catch (error) {
+                log(`❌ ${testName} Network Error: ${error.message}`, 'error')
+                if (error.message.includes('pattern')) {
+                    log('🔍 Client-side pattern error - likely fetch URL issue', 'warning')
+                }
+            }
+        }
+
+        async function testMinimalData() {
+            if (!await checkAuth()) return
+            
+            const contactData = {
+                email: document.getElementById('email').value,
+                first_name: document.getElementById('firstName').value,
+                last_name: document.getElementById('lastName').value
+            }
+            
+            await testContactCreation(contactData, 'Minimal Data')
+        }
+
+        async function testWithEmptyUrls() {
+            if (!await checkAuth()) return
+            
+            const contactData = {
+                email: document.getElementById('email').value,
+                first_name: document.getElementById('firstName').value,
+                last_name: document.getElementById('lastName').value,
+                company: document.getElementById('company').value,
+                position: document.getElementById('position').value,
+                website: '',
+                linkedin_url: '',
+                twitter_url: '',
+                phone: ''
+            }
+            
+            await testContactCreation(contactData, 'With Empty URLs')
+        }
+
+        async function testWithValidUrls() {
+            if (!await checkAuth()) return
+            
+            const contactData = {
+                email: document.getElementById('email').value,
+                first_name: document.getElementById('firstName').value,
+                last_name: document.getElementById('lastName').value,
+                company: document.getElementById('company').value,
+                position: document.getElementById('position').value,
+                website: 'https://example.com',
+                linkedin_url: 'https://linkedin.com/in/johndoe',
+                twitter_url: 'https://twitter.com/johndoe'
+            }
+            
+            await testContactCreation(contactData, 'With Valid URLs')
+        }
+
+        async function testWithInvalidUrls() {
+            if (!await checkAuth()) return
+            
+            const contactData = {
+                email: document.getElementById('email').value,
+                first_name: document.getElementById('firstName').value,
+                last_name: document.getElementById('lastName').value,
+                company: document.getElementById('company').value,
+                position: document.getElementById('position').value,
+                website: 'not-a-url',
+                linkedin_url: 'also-not-a-url',
+                twitter_url: 'definitely-not-a-url'
+            }
+            
+            await testContactCreation(contactData, 'With Invalid URLs (should fail)')
+        }
+
+        // Auto-check auth on load
+        setTimeout(checkAuth, 1000)
+    </script>
+</body>
+</html>

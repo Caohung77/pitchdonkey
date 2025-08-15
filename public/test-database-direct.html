@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Database Direct Connection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗄️ Test Database Direct Connection</h1>
+    
+    <div class="result info">
+        <strong>Testing Direct Database Access:</strong>
+        <br>• Check if contacts table exists
+        <br>• Test direct insert to contacts table
+        <br>• Verify RLS policies work correctly
+        <br>• Check user authentication with database
+    </div>
+
+    <button onclick="testDatabaseConnection()">Test Database Connection</button>
+    <button onclick="testContactsTable()">Test Contacts Table</button>
+    <button onclick="testDirectInsert()">Test Direct Insert</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // Initialize Supabase client
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+[${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testDatabaseConnection() {
+            try {
+                log('🔄 Testing database connection...', 'info')
+                
+                // First check auth
+                const { data: { session }, error: authError } = await supabase.auth.getSession()
+                
+                if (authError) {
+                    log(`❌ Auth error: ${authError.message}`, 'error')
+                    return
+                }
+                
+                if (!session) {
+                    log('⚠️ Not authenticated - please sign in first', 'warning')
+                    return
+                }
+                
+                log(`✅ Authenticated as: ${session.user.email}`, 'success')
+                log(`🎫 User ID: ${session.user.id}`, 'info')
+                
+                // Test basic database connection
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('id, email')
+                    .eq('id', session.user.id)
+                    .single()
+                
+                if (error) {
+                    log(`❌ Database connection error: ${error.message}`, 'error')
+                    log(`🔍 Error details: ${JSON.stringify(error, null, 2)}`, 'error')
+                } else {
+                    log(`✅ Database connection successful!`, 'success')
+                    log(`👤 User data: ${JSON.stringify(data, null, 2)}`, 'info')
+                }
+                
+            } catch (error) {
+                log(`❌ Connection test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testContactsTable() {
+            try {
+                log('🔄 Testing contacts table...', 'info')
+                
+                // Check auth first
+                const { data: { session } } = await supabase.auth.getSession()
+                if (!session) {
+                    log('⚠️ Not authenticated', 'warning')
+                    return
+                }
+                
+                // Test selecting from contacts table
+                const { data, error, count } = await supabase
+                    .from('contacts')
+                    .select('*', { count: 'exact' })
+                    .eq('user_id', session.user.id)
+                
+                if (error) {
+                    log(`❌ Contacts table error: ${error.message}`, 'error')
+                    log(`🔍 Error details: ${JSON.stringify(error, null, 2)}`, 'error')
+                } else {
+                    log(`✅ Contacts table accessible!`, 'success')
+                    log(`📊 Found ${count} contacts for user`, 'info')
+                    if (data && data.length > 0) {
+                        log(`📋 Sample contact: ${JSON.stringify(data[0], null, 2)}`, 'info')
+                    }
+                }
+                
+            } catch (error) {
+                log(`❌ Contacts table test failed: ${error.message}`, 'error')
+            }
+        }
+
+        async function testDirectInsert() {
+            try {
+                log('🔄 Testing direct insert to contacts table...', 'info')
+                
+                // Check auth first
+                const { data: { session } } = await supabase.auth.getSession()
+                if (!session) {
+                    log('⚠️ Not authenticated', 'warning')
+                    return
+                }
+                
+                const testContact = {
+                    user_id: session.user.id,
+                    email: `test-${Date.now()}@example.com`,
+                    first_name: 'Test',
+                    last_name: 'User',
+                    company: 'Test Company',
+                    position: 'Tester',
+                    status: 'active',
+                    custom_fields: {},
+                    tags: []
+                }
+                
+                log(`📤 Inserting test contact: ${JSON.stringify(testContact, null, 2)}`, 'info')
+                
+                const { data, error } = await supabase
+                    .from('contacts')
+                    .insert(testContact)
+                    .select()
+                    .single()
+                
+                if (error) {
+                    log(`❌ Direct insert failed: ${error.message}`, 'error')
+                    log(`🔍 Error details: ${JSON.stringify(error, null, 2)}`, 'error')
+                    
+                    // Check specific error types
+                    if (error.code === '23505') {
+                        log('🔍 Duplicate key error - contact already exists', 'warning')
+                    } else if (error.code === '42501') {
+                        log('🔍 Permission denied - RLS policy issue', 'warning')
+                    }
+                } else {
+                    log(`✅ Direct insert successful!`, 'success')
+                    log(`📋 Created contact: ${JSON.stringify(data, null, 2)}`, 'success')
+                    
+                    // Clean up - delete the test contact
+                    setTimeout(async () => {
+                        const { error: deleteError } = await supabase
+                            .from('contacts')
+                            .delete()
+                            .eq('id', data.id)
+                        
+                        if (deleteError) {
+                            log(`⚠️ Failed to clean up test contact: ${deleteError.message}`, 'warning')
+                        } else {
+                            log(`🧹 Test contact cleaned up successfully`, 'info')
+                        }
+                    }, 2000)
+                }
+                
+            } catch (error) {
+                log(`❌ Direct insert test failed: ${error.message}`, 'error')
+            }
+        }
+
+        // Auto-run basic test on load
+        setTimeout(() => {
+            log('🔄 Auto-running database connection test...', 'info')
+            testDatabaseConnection()
+        }, 1000)
+    </script>
+</body>
+</html>
