@@ -1,15 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createServerSupabaseClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = await createServerSupabaseClient()
 
     // Get contact lists from database
     const { data: lists, error: listsError } = await supabase
@@ -43,36 +38,24 @@ export async function GET(request: NextRequest) {
       type: 'list' // To distinguish from segments
     }))
 
-    return NextResponse.json(formattedLists)
+    return createSuccessResponse(formattedLists)
 
   } catch (error) {
     console.error('Error fetching contact lists:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createServerSupabaseClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = await createServerSupabaseClient()
 
     const body = await request.json()
     const { name, description, contactIds, tags } = body
 
     // Validate required fields
     if (!name) {
-      return NextResponse.json(
-        { error: 'List name is required' },
-        { status: 400 }
-      )
+      throw new Error('List name is required')
     }
 
     // Save to database
@@ -93,20 +76,13 @@ export async function POST(request: NextRequest) {
       
       // More specific error handling
       if (listError.code === '23505') { // Unique constraint violation
-        return NextResponse.json({ error: 'A list with this name already exists' }, { status: 400 })
+        throw new Error('A list with this name already exists')
       }
       if (listError.code === '42P01') { // Table does not exist
-        return NextResponse.json({ 
-          error: 'Contact lists table does not exist. Please create the table first.',
-          details: 'Run the SQL from create-contact-lists-table.sql in your Supabase dashboard'
-        }, { status: 500 })
+        throw new Error('Contact lists table does not exist. Please create the table first.')
       }
       
-      return NextResponse.json({ 
-        error: 'Failed to create contact list',
-        details: listError.message,
-        code: listError.code
-      }, { status: 500 })
+      throw new Error(`Failed to create contact list: ${listError.message}`)
     }
 
     // Return the created list
@@ -121,13 +97,10 @@ export async function POST(request: NextRequest) {
       type: 'list'
     }
 
-    return NextResponse.json(responseList, { status: 201 })
+    return createSuccessResponse(responseList, 201)
 
   } catch (error) {
     console.error('Error creating contact list:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

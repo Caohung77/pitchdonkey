@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { z } from 'zod'
 import { EmailValidationService } from './email-validation'
 import { contactSchema, updateContactSchema } from './validations'
@@ -43,7 +43,9 @@ export interface ContactStats {
 }
 
 export class ContactService {
-  private supabase = createServerSupabaseClient()
+  private async getSupabase() {
+    return await createServerSupabaseClient()
+  }
 
   async createContact(userId: string, contactData: Partial<Contact>) {
     // Validate input data using Zod schema
@@ -65,7 +67,8 @@ export class ContactService {
       console.warn('Email validation failed:', error)
     }
 
-    const { data, error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data, error } = await supabase
       .from('contacts')
       .insert({
         user_id: userId,
@@ -103,7 +106,8 @@ export class ContactService {
       }
     }
 
-    const { data, error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data, error } = await supabase
       .from('contacts')
       .update({
         ...validatedUpdates,
@@ -119,7 +123,8 @@ export class ContactService {
   }
 
   async deleteContact(contactId: string, userId: string) {
-    const { error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { error } = await supabase
       .from('contacts')
       .update({
         status: 'deleted',
@@ -132,7 +137,8 @@ export class ContactService {
   }
 
   async getContact(contactId: string, userId: string) {
-    const { data, error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data, error } = await supabase
       .from('contacts')
       .select('*')
       .eq('id', contactId)
@@ -166,7 +172,8 @@ export class ContactService {
       sortOrder = 'desc'
     } = options
 
-    let query = this.supabase
+    const supabase = await this.getSupabase()
+    let query = supabase
       .from('contacts')
       .select('*', { count: 'exact' })
       .eq('user_id', userId)
@@ -209,7 +216,8 @@ export class ContactService {
   }
 
   async getContactStats(userId: string) {
-    const { data, error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data, error } = await supabase
       .from('contacts')
       .select('status, tags')
       .eq('user_id', userId)
@@ -264,7 +272,8 @@ export class ContactService {
     // Get existing emails if skipDuplicates is true
     let existingEmails: string[] = []
     if (skipDuplicates) {
-      const { data } = await this.supabase
+      const supabase = await this.getSupabase()
+      const { data } = await supabase
         .from('contacts')
         .select('email')
         .eq('user_id', userId)
@@ -346,7 +355,8 @@ export class ContactService {
       for (let i = 0; i < contactsToInsert.length; i += batchSize) {
         const batch = contactsToInsert.slice(i, i + batchSize)
         
-        const { error } = await this.supabase
+        const supabase = await this.getSupabase()
+        const { error } = await supabase
           .from('contacts')
           .insert(batch)
 
@@ -376,7 +386,8 @@ export class ContactService {
 
   async addTagsToContacts(contactIds: string[], userId: string, tags: string[]) {
     // Get current contacts
-    const { data: contacts } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data: contacts } = await supabase
       .from('contacts')
       .select('id, tags')
       .in('id', contactIds)
@@ -391,7 +402,7 @@ export class ContactService {
       updated_at: new Date().toISOString(),
     }))
 
-    const { error } = await this.supabase
+    const { error } = await supabase
       .from('contacts')
       .upsert(updates)
 
@@ -400,7 +411,8 @@ export class ContactService {
 
   async removeTagsFromContacts(contactIds: string[], userId: string, tags: string[]) {
     // Get current contacts
-    const { data: contacts } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data: contacts } = await supabase
       .from('contacts')
       .select('id, tags')
       .in('id', contactIds)
@@ -415,7 +427,7 @@ export class ContactService {
       updated_at: new Date().toISOString(),
     }))
 
-    const { error } = await this.supabase
+    const { error } = await supabase
       .from('contacts')
       .upsert(updates)
 
@@ -423,7 +435,8 @@ export class ContactService {
   }
 
   async bulkUpdateContactStatus(contactIds: string[], userId: string, status: string) {
-    const { error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { error } = await supabase
       .from('contacts')
       .update({
         status,
@@ -450,7 +463,8 @@ export class ContactService {
   async findDuplicateContact(userId: string, email: string, excludeContactId?: string) {
     const normalizedEmail = EmailValidationService.normalizeEmail(email)
     
-    let query = this.supabase
+    const supabase = await this.getSupabase()
+    let query = supabase
       .from('contacts')
       .select('id, email, first_name, last_name')
       .eq('user_id', userId)
@@ -530,7 +544,8 @@ export class ContactService {
   async getContactByEmail(userId: string, email: string) {
     const normalizedEmail = EmailValidationService.normalizeEmail(email)
     
-    const { data, error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data, error } = await supabase
       .from('contacts')
       .select('*')
       .eq('user_id', userId)

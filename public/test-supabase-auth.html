@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Supabase Auth Implementation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .auth-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔐 Supabase Auth Implementation Test</h1>
+    
+    <div class="result info">
+        <strong>Testing:</strong> Pure Supabase Auth (no NextAuth)
+        <br><strong>Client:</strong> createClientSupabase() for frontend
+        <br><strong>Server:</strong> createServerSupabaseClient() for API routes
+    </div>
+
+    <div class="auth-form">
+        <h3>Test Authentication</h3>
+        <input type="email" id="email" placeholder="Email" value="test@example.com">
+        <input type="password" id="password" placeholder="Password" value="testpassword123">
+        <button onclick="testSignUp()">Sign Up</button>
+        <button onclick="testSignIn()">Sign In</button>
+        <button onclick="testSignOut()">Sign Out</button>
+    </div>
+
+    <button onclick="testAuthStatus()">Check Auth Status</button>
+    <button onclick="testContactsAPI()">Test Contacts API</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // Initialize Supabase client
+        const supabaseUrl = 'https://fwokykaobucelhkvdtik.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b2t5a2FvYnVjZWxoa3ZkdGlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4NzM0NTUsImV4cCI6MjA2OTQ0OTQ1NX0.Yrs0pHfSnSnwcMZPUGgI0LEHxvNdm5Pby7U-yiXrMnk'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results')
+            const timestamp = new Date().toLocaleTimeString()
+            resultsDiv.innerHTML += `
+                <div class="result ${type}">
+                    [${timestamp}] ${message}
+                </div>
+            `
+            resultsDiv.scrollTop = resultsDiv.scrollHeight
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = ''
+        }
+
+        async function testSignUp() {
+            const email = document.getElementById('email').value
+            const password = document.getElementById('password').value
+            
+            try {
+                log('🔄 Testing sign up...', 'info')
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        data: {
+                            name: email.split('@')[0]
+                        }
+                    }
+                })
+                
+                if (error) {
+                    log(`❌ Sign up failed: ${error.message}`, 'error')
+                } else {
+                    log(`✅ Sign up successful! User: ${data.user?.email}`, 'success')
+                    if (data.user && !data.user.email_confirmed_at) {
+                        log('📧 Check your email for confirmation link', 'info')
+                    }
+                }
+            } catch (error) {
+                log(`❌ Sign up error: ${error.message}`, 'error')
+            }
+        }
+
+        async function testSignIn() {
+            const email = document.getElementById('email').value
+            const password = document.getElementById('password').value
+            
+            try {
+                log('🔄 Testing sign in...', 'info')
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                })
+                
+                if (error) {
+                    log(`❌ Sign in failed: ${error.message}`, 'error')
+                } else {
+                    log(`✅ Sign in successful! User: ${data.user?.email}`, 'success')
+                    log(`🎫 Session: ${data.session ? 'Active' : 'None'}`, 'info')
+                }
+            } catch (error) {
+                log(`❌ Sign in error: ${error.message}`, 'error')
+            }
+        }
+
+        async function testSignOut() {
+            try {
+                log('🔄 Testing sign out...', 'info')
+                const { error } = await supabase.auth.signOut()
+                
+                if (error) {
+                    log(`❌ Sign out failed: ${error.message}`, 'error')
+                } else {
+                    log('✅ Sign out successful!', 'success')
+                }
+            } catch (error) {
+                log(`❌ Sign out error: ${error.message}`, 'error')
+            }
+        }
+
+        async function testAuthStatus() {
+            try {
+                log('🔄 Checking auth status...', 'info')
+                const { data: { session }, error } = await supabase.auth.getSession()
+                
+                if (error) {
+                    log(`❌ Auth status error: ${error.message}`, 'error')
+                } else if (session) {
+                    log(`✅ Authenticated as: ${session.user.email}`, 'success')
+                    log(`🎫 Token expires: ${new Date(session.expires_at * 1000).toLocaleString()}`, 'info')
+                } else {
+                    log('❌ Not authenticated', 'error')
+                }
+            } catch (error) {
+                log(`❌ Auth status error: ${error.message}`, 'error')
+            }
+        }
+
+        async function testContactsAPI() {
+            try {
+                log('🔄 Testing contacts API...', 'info')
+                const response = await fetch('/api/contacts/stats')
+                const data = await response.json()
+                
+                if (response.ok) {
+                    log(`✅ API Success: ${response.status} OK`, 'success')
+                    log(`📊 Data: ${JSON.stringify(data, null, 2)}`, 'info')
+                } else {
+                    log(`❌ API Failed: ${response.status} ${response.statusText}`, 'error')
+                    log(`💥 Error: ${data.error || 'Unknown error'}`, 'error')
+                }
+            } catch (error) {
+                log(`❌ API Network Error: ${error.message}`, 'error')
+            }
+        }
+
+        // Listen for auth state changes
+        supabase.auth.onAuthStateChange((event, session) => {
+            log(`🔔 Auth event: ${event}`, 'info')
+            if (session) {
+                log(`👤 User: ${session.user.email}`, 'info')
+            }
+        })
+
+        // Auto-check auth status on load
+        setTimeout(testAuthStatus, 1000)
+    </script>
+</body>
+</html>

@@ -1,15 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createServerSupabaseClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = await createServerSupabaseClient()
 
     // Get segments from database
     const { data: segments, error: segmentsError } = await supabase
@@ -48,26 +43,17 @@ export async function GET(request: NextRequest) {
       }))
     ]
 
-    return NextResponse.json(allSegments)
+    return createSuccessResponse(allSegments)
 
   } catch (error) {
     console.error('Error fetching contact segments:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createServerSupabaseClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const supabase = await createServerSupabaseClient()
 
     const body = await request.json()
     const { name, description, filterCriteria } = body
@@ -117,13 +103,10 @@ export async function POST(request: NextRequest) {
       filterCriteria: segment.conditions
     }
 
-    return NextResponse.json(responseSegment, { status: 201 })
+    return createSuccessResponse(responseSegment, 201)
 
   } catch (error) {
     console.error('Error creating contact segment:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

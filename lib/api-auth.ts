@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import type { User } from '@supabase/supabase-js'
 
 export interface AuthResult {
@@ -17,10 +17,11 @@ export interface ApiResponse<T = any> {
 
 /**
  * Standardized authentication check for API routes
+ * Uses the correct route handler client for Next.js API routes
  */
 export async function authenticateRequest(request: NextRequest): Promise<AuthResult> {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createServerSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     
     if (error) {
@@ -35,7 +36,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
     if (!user) {
       return {
         user: null,
-        error: 'Unauthorized',
+        error: 'Authentication required',
         status: 401
       }
     }
@@ -49,8 +50,8 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
     console.error('Authentication check failed:', error)
     return {
       user: null,
-      error: 'Internal authentication error',
-      status: 500
+      error: 'Authentication failed',
+      status: 401
     }
   }
 }

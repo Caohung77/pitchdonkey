@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Contacts API Authentication</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Contacts API Authentication</h1>
+
+    <div class="status info">
+        <h3>📋 Testing Contacts API Endpoints</h3>
+        <p>This will test if the contacts API authentication is working after our fixes.</p>
+        <p><strong>Make sure you're signed in first!</strong></p>
+    </div>
+
+    <div class="status info">
+        <h3>🔧 Tests to Run</h3>
+        <button onclick="testContactsStats()">Test Contacts Stats API</button>
+        <button onclick="testContactsList()">Test Contacts List API</button>
+        <button onclick="testContactsSegments()">Test Contacts Segments API</button>
+        <button onclick="testAllAPIs()">Test All APIs</button>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="status info">
+        <h3>🎯 Expected Results</h3>
+        <p><strong>If authentication is working:</strong></p>
+        <ul>
+            <li>✅ All API calls should return <strong>200 OK</strong> instead of 401</li>
+            <li>✅ APIs should return data (even if empty)</li>
+            <li>✅ No "Unauthorized" errors</li>
+        </ul>
+        
+        <p><strong>If you still see 401 errors:</strong></p>
+        <ul>
+            <li>❌ Make sure you're signed in to the application</li>
+            <li>❌ Try refreshing the page to get a fresh session</li>
+            <li>❌ Check browser console for additional errors</li>
+        </ul>
+    </div>
+
+    <script>
+        async function testContactsStats() {
+            await testAPI('/api/contacts/stats', 'Contacts Stats API');
+        }
+
+        async function testContactsList() {
+            await testAPI('/api/contacts?page=1&limit=5', 'Contacts List API');
+        }
+
+        async function testContactsSegments() {
+            await testAPI('/api/contacts/segments', 'Contacts Segments API');
+        }
+
+        async function testAllAPIs() {
+            const apis = [
+                { url: '/api/contacts/stats', name: 'Contacts Stats API' },
+                { url: '/api/contacts?page=1&limit=5', name: 'Contacts List API' },
+                { url: '/api/contacts/segments', name: 'Contacts Segments API' },
+                { url: '/api/contacts/lists', name: 'Contacts Lists API' }
+            ];
+
+            for (const api of apis) {
+                await testAPI(api.url, api.name);
+                // Small delay between tests
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        async function testAPI(url, name) {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML += `<div class="result info">Testing ${name}...</div>`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                const timestamp = new Date().toLocaleTimeString();
+
+                if (response.ok) {
+                    resultsDiv.innerHTML += `
+                        <div class="result success">
+                            [${timestamp}] ✅ ${name}: ${response.status} OK
+                            <br><small>Authentication working! Response: ${JSON.stringify(data).substring(0, 200)}...</small>
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML += `
+                        <div class="result error">
+                            [${timestamp}] ❌ ${name}: ${response.status} ${response.statusText}
+                            <br><small>Error: ${data.error || 'Authentication failed'}</small>
+                            <br><small>Details: ${data.details || 'Please sign in first'}</small>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                const timestamp = new Date().toLocaleTimeString();
+                resultsDiv.innerHTML += `
+                    <div class="result error">
+                        [${timestamp}] ❌ ${name} Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Show environment info
+        document.addEventListener('DOMContentLoaded', function() {
+            const envInfo = document.createElement('div');
+            envInfo.className = 'status info';
+            envInfo.innerHTML = `
+                <h3>🌐 Test Environment</h3>
+                <p><strong>Server:</strong> ${window.location.origin}</p>
+                <p><strong>Test Time:</strong> ${new Date().toLocaleString()}</p>
+                <p><strong>Status:</strong> Contacts API authentication should now work</p>
+            `;
+            document.body.insertBefore(envInfo, document.body.firstChild.nextSibling);
+        });
+    </script>
+</body>
+</html>

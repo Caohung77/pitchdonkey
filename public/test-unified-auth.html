@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Unified Supabase Authentication</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #218838; }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Unified Supabase Authentication Test</h1>
+
+    <div class="status success">
+        <h3>✅ NEW: One Unified Authentication System</h3>
+        <p>We've replaced the multiple conflicting auth systems with ONE unified Supabase solution:</p>
+        <ul>
+            <li>✅ <strong>Frontend:</strong> Uses <code>createClientSupabase()</code></li>
+            <li>✅ <strong>Backend:</strong> Uses <code>createServerSupabase()</code></li>
+            <li>✅ <strong>Same session storage:</strong> Both use compatible cookie handling</li>
+            <li>✅ <strong>No more conflicts:</strong> One system, one source of truth</li>
+        </ul>
+    </div>
+
+    <div class="status info">
+        <h3>🧪 Test the Unified System</h3>
+        <p><strong>Make sure you're signed in first!</strong></p>
+        <button onclick="testUnifiedAuth()">Test Contacts Stats API</button>
+        <button onclick="testAllContactsAPIs()">Test All Contacts APIs</button>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="status info">
+        <h3>🎯 Expected Results</h3>
+        <p><strong>With unified authentication:</strong></p>
+        <ul>
+            <li>✅ <strong>200 OK responses</strong> - No more 401 errors</li>
+            <li>✅ <strong>Consistent sessions</strong> - Frontend and backend in sync</li>
+            <li>✅ <strong>Reliable authentication</strong> - Works every time</li>
+        </ul>
+    </div>
+
+    <script>
+        async function testUnifiedAuth() {
+            await testAPI('/api/contacts/stats', 'Contacts Stats API (Unified)');
+        }
+
+        async function testAllContactsAPIs() {
+            const apis = [
+                { url: '/api/contacts/stats', name: 'Contacts Stats' },
+                { url: '/api/contacts?page=1&limit=5', name: 'Contacts List' },
+                { url: '/api/contacts/segments', name: 'Contacts Segments' },
+                { url: '/api/contacts/lists', name: 'Contacts Lists' }
+            ];
+
+            for (const api of apis) {
+                await testAPI(api.url, api.name + ' (Unified)');
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+
+        async function testAPI(url, name) {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML += `<div class="result info">Testing ${name}...</div>`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                const timestamp = new Date().toLocaleTimeString();
+
+                if (response.ok) {
+                    resultsDiv.innerHTML += `
+                        <div class="result success">
+                            [${timestamp}] ✅ ${name}: ${response.status} OK
+                            <br><small>🎉 UNIFIED AUTH WORKING! Response: ${JSON.stringify(data).substring(0, 150)}...</small>
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML += `
+                        <div class="result error">
+                            [${timestamp}] ❌ ${name}: ${response.status} ${response.statusText}
+                            <br><small>Error: ${data.error || 'Authentication failed'}</small>
+                            <br><small>Details: ${JSON.stringify(data)}</small>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                const timestamp = new Date().toLocaleTimeString();
+                resultsDiv.innerHTML += `
+                    <div class="result error">
+                        [${timestamp}] ❌ ${name} Network Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Auto-run test on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                testUnifiedAuth();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

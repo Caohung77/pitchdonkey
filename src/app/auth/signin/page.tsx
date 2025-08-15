@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { supabase } from '@/lib/supabase-client'
+import { createClientSupabase } from '@/lib/supabase-client'
 
 export default function SignInPage() {
   const router = useRouter()
@@ -24,6 +24,7 @@ export default function SignInPage() {
     setError('')
 
     try {
+      const supabase = createClientSupabase()
       const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
@@ -48,6 +49,7 @@ export default function SignInPage() {
     
     try {
       // Try to sign in with the existing demo user
+      const supabase = createClientSupabase()
       const { data, error } = await supabase.auth.signInWithPassword({
         email: 'banbau@gmx.net',
         password: 'demo123456', // You'll need to set this password

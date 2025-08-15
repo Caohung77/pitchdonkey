@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { supabase } from '@/lib/supabase-client'
+import { createClientSupabase } from '@/lib/supabase-client'
 import { useRouter } from 'next/navigation'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
@@ -30,6 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  
+  // Use Supabase client
+  const supabase = createClientSupabase()
 
   // Create fallback user data from Supabase session
   const createFallbackUser = useCallback((supabaseUser: SupabaseUser): User => {
