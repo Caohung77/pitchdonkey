@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { withAuth } from '@/lib/auth-middleware'
 import { DomainAuthService } from '@/lib/domain-auth'
 
 // GET /api/domains/[domain]/status - Get domain authentication status
-export async function GET(
+export const GET = withAuth(async (
   request: NextRequest,
+  { user, supabase },
   { params }: { params: { domain: string } }
-) {
+) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const domain = decodeURIComponent(params.domain)
     const domainAuthService = new DomainAuthService()
@@ -90,4 +85,4 @@ export async function GET(
       { status: 500 }
     )
   }
-}
+})

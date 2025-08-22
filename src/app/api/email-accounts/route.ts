@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, addSecurityHeaders, withRateLimit } from '@/lib/auth-middleware'
+import { extractDomainFromEmail } from '@/lib/domain-auth'
 
 // GET /api/email-accounts - Get user's email accounts
 export const GET = withAuth(async (request: NextRequest, { user, supabase }) => {
@@ -90,11 +91,21 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       }, { status: 409 })
     }
 
+    // Extract domain from email address for domain auth integration
+    let domain: string | undefined
+    try {
+      domain = extractDomainFromEmail(email)
+    } catch (error) {
+      console.error('Failed to extract domain from email:', error)
+      // Continue without domain if extraction fails
+    }
+
     // Prepare account data matching actual database schema (supabase-setup.sql)
     const accountData = {
       user_id: user.id,
       provider,
       email,
+      domain, // Add domain field for domain auth integration
       // Note: 'name' field doesn't exist in actual database schema
       // All other fields have defaults, so we only need to provide what we have
     }

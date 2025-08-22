@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Shield, CheckCircle, XCircle, AlertCircle, Copy, RefreshCw, ExternalLink } from 'lucide-react'
+import { ApiClient } from '@/lib/api-client'
 
 interface DomainAuthDialogProps {
   domain: string
@@ -68,13 +69,8 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
     setError('')
 
     try {
-      const response = await fetch(`/api/domains/${encodeURIComponent(domain)}/status`)
-      if (response.ok) {
-        const data = await response.json()
-        setStatus(data.status)
-      } else {
-        throw new Error('Failed to fetch domain status')
-      }
+      const data = await ApiClient.get(`/api/domains/${encodeURIComponent(domain)}/status`)
+      setStatus(data.status)
     } catch (error) {
       console.error('Error fetching domain status:', error)
       setError('Failed to load domain authentication status')
@@ -85,11 +81,8 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
 
   const generateDNSRecords = async () => {
     try {
-      const response = await fetch(`/api/domains/${encodeURIComponent(domain)}/records`)
-      if (response.ok) {
-        const data = await response.json()
-        setGeneratedRecords(data.records)
-      }
+      const data = await ApiClient.get(`/api/domains/${encodeURIComponent(domain)}/records`)
+      setGeneratedRecords(data.records)
     } catch (error) {
       console.error('Error generating DNS records:', error)
     }
@@ -100,16 +93,8 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
     setError('')
 
     try {
-      const response = await fetch(`/api/domains/${encodeURIComponent(domain)}/verify`, {
-        method: 'POST'
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStatus(data.status)
-      } else {
-        throw new Error('Verification failed')
-      }
+      const data = await ApiClient.post(`/api/domains/${encodeURIComponent(domain)}/verify`, {})
+      setStatus(data.status)
     } catch (error) {
       console.error('Error verifying domain:', error)
       setError('Failed to verify domain authentication')
@@ -153,6 +138,17 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
             Set up SPF, DKIM, and DMARC records to improve email deliverability and security
           </DialogDescription>
         </DialogHeader>
+
+        {/* Development Mode Notice */}
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center">
+            <AlertCircle className="h-4 w-4 text-blue-600 mr-2" />
+            <span className="text-blue-800 text-sm">
+              <strong>Development Mode:</strong> These are sample DNS records for demonstration. 
+              In production, you would add these to your actual DNS provider.
+            </span>
+          </div>
+        </div>
 
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
