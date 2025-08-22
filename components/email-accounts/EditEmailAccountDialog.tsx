@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Settings, AlertCircle, CheckCircle } from 'lucide-react'
+import { ApiClient } from '@/lib/api-client'
 
 interface EmailAccount {
   id: string
@@ -59,35 +60,32 @@ export default function EditEmailAccountDialog({ account, onAccountUpdated }: Ed
     setSuccess('')
 
     try {
-      const response = await fetch(`/api/email-accounts/${account.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          daily_send_limit: formData.daily_send_limit,
-          warmup_enabled: formData.warmup_enabled,
-          ...(account.provider === 'smtp' && {
-            smtp_host: formData.smtp_host,
-            smtp_port: formData.smtp_port,
-            smtp_username: formData.smtp_username,
-            smtp_password: formData.smtp_password,
-            smtp_secure: formData.smtp_secure,
-          }),
-        }),
-      })
-
-      if (response.ok) {
-        setSuccess('Email account updated successfully!')
-        onAccountUpdated()
-        setTimeout(() => {
-          setOpen(false)
-          setSuccess('')
-        }, 1500)
-      } else {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update email account')
+      const requestData: any = {
+        settings: {
+          daily_limit: formData.daily_send_limit,
+          warm_up_enabled: formData.warmup_enabled,
+        }
       }
+
+      // Add SMTP config if this is an SMTP account
+      if (account.provider === 'smtp') {
+        requestData.smtp_config = {
+          host: formData.smtp_host,
+          port: formData.smtp_port,
+          username: formData.smtp_username,
+          password: formData.smtp_password,
+          secure: formData.smtp_secure,
+        }
+      }
+
+      const response = await ApiClient.put(`/api/email-accounts/${account.id}`, requestData)
+
+      setSuccess('Email account updated successfully!')
+      onAccountUpdated()
+      setTimeout(() => {
+        setOpen(false)
+        setSuccess('')
+      }, 1500)
     } catch (error) {
       console.error('Error updating email account:', error)
       setError(error instanceof Error ? error.message : 'Failed to update email account')

@@ -1,12 +1,10 @@
-import { NextRequest } from 'next/server'
-import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { withAuth } from '@/lib/auth-middleware'
 import nodemailer from 'nodemailer'
 
-export const POST = withAuth(async (request: NextRequest, user, { params }) => {
+export const POST = withAuth(async (request: NextRequest, { user, supabase }, { params }) => {
   try {
     const { id } = params
-    const supabase = createServerSupabaseClient()
 
     // Get email account
     const { data: account, error: accountError } = await supabase
@@ -17,7 +15,10 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
       .single()
 
     if (accountError || !account) {
-      return handleApiError(new Error('Email account not found'))
+      return NextResponse.json({
+        error: 'Email account not found',
+        code: 'NOT_FOUND'
+      }, { status: 404 })
     }
 
     let testResult = {
@@ -29,7 +30,7 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
     try {
       if (account.provider === 'smtp') {
         // Test SMTP connection
-        const transporter = nodemailer.createTransporter({
+        const transporter = nodemailer.createTransport({
           host: account.smtp_host,
           port: account.smtp_port,
           secure: account.smtp_secure,
@@ -73,11 +74,10 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
         throw new Error(`Unsupported provider: ${account.provider}`)
       }
 
-      // Update last tested timestamp
+      // Update account status based on test result
       await supabase
         .from('email_accounts')
         .update({ 
-          last_tested_at: new Date().toISOString(),
           status: testResult.success ? 'active' : 'error'
         })
         .eq('id', id)
@@ -97,15 +97,22 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
       await supabase
         .from('email_accounts')
         .update({ 
-          last_tested_at: new Date().toISOString(),
           status: 'error'
         })
         .eq('id', id)
     }
 
-    return createSuccessResponse(testResult)
+    return NextResponse.json({
+      success: true,
+      data: testResult
+    })
 
   } catch (error) {
-    return handleApiError(error)
+    console.error('Connection test error:', error)
+    return NextResponse.json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 })

@@ -11,7 +11,7 @@ const mockTransporter = {
 }
 
 jest.mock('nodemailer', () => ({
-  createTransporter: jest.fn(() => mockTransporter),
+  createTransport: jest.fn(() => mockTransporter),
 }))
 
 // Mock net module for connectivity tests

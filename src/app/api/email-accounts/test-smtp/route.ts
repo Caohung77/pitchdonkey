@@ -19,7 +19,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     try {
       // Test SMTP connection
-      const transporter = nodemailer.createTransporter({
+      const transporter = nodemailer.createTransport({
         host,
         port: parseInt(port),
         secure: secure === true,

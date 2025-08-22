@@ -1,31 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { withAuth, addSecurityHeaders, withRateLimit } from '@/lib/auth-middleware'
 import { z } from 'zod'
 
 const updateEmailAccountSchema = z.object({
-  status: z.enum(['pending', 'active', 'inactive', 'suspended']).optional(),
-  daily_send_limit: z.number().min(1).max(1000).optional(),
-  warmup_enabled: z.boolean().optional(),
-  smtp_host: z.string().optional(),
-  smtp_port: z.number().optional(),
-  smtp_username: z.string().optional(),
-  smtp_password: z.string().optional(),
-  smtp_secure: z.boolean().optional(),
+  // Note: 'name' field doesn't exist in actual database schema (supabase-setup.sql)
+  settings: z.object({
+    daily_limit: z.number().min(1).max(1000).optional(),
+    delay_between_emails: z.number().min(1).optional(),
+    warm_up_enabled: z.boolean().optional(),
+    signature: z.string().optional()
+  }).optional(),
+  smtp_config: z.object({
+    host: z.string().optional(),
+    port: z.number().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    secure: z.boolean().optional()
+  }).optional()
 })
 
 // GET /api/email-accounts/[id] - Get specific email account
-export async function GET(
+export const GET = withAuth(async (
   request: NextRequest,
+  { user, supabase },
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    await withRateLimit(user, 100, 60000) // 100 requests per minute
     
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { data: account, error } = await supabase
       .from('email_accounts')
       .select('*')
@@ -33,119 +35,194 @@ export async function GET(
       .eq('user_id', user.id)
       .single()
 
-    if (error || !account) {
-      return NextResponse.json({ error: 'Email account not found' }, { status: 404 })
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({
+          error: 'Email account not found',
+          code: 'NOT_FOUND'
+        }, { status: 404 })
+      }
+      
+      console.error('Error fetching email account:', error)
+      return NextResponse.json({
+        error: 'Failed to fetch email account',
+        code: 'FETCH_ERROR'
+      }, { status: 500 })
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      data: account,
+      data: account
     })
+    
+    return addSecurityHeaders(response)
   } catch (error) {
     console.error('Error fetching email account:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    }, { status: 500 })
   }
-}
+})
 
 // PUT /api/email-accounts/[id] - Update email account
-export async function PUT(
+export const PUT = withAuth(async (
   request: NextRequest,
+  { user, supabase },
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    await withRateLimit(user, 20, 60000) // 20 updates per minute
     
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const body = await request.json()
+    
+    // Validate input
+    const validationResult = updateEmailAccountSchema.safeParse(body)
+    if (!validationResult.success) {
+      return NextResponse.json({
+        error: 'Invalid request data',
+        details: validationResult.error.errors,
+        code: 'VALIDATION_ERROR'
+      }, { status: 400 })
     }
 
-    // Verify account ownership
-    const { data: existingAccount } = await supabase
+    const updateData = validationResult.data
+
+    // First, verify the account exists and belongs to the user
+    const { data: existingAccount, error: fetchError } = await supabase
       .from('email_accounts')
-      .select('id')
+      .select('id, user_id')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
 
-    if (!existingAccount) {
-      return NextResponse.json({ error: 'Email account not found' }, { status: 404 })
+    if (fetchError || !existingAccount) {
+      return NextResponse.json({
+        error: 'Email account not found',
+        code: 'NOT_FOUND'
+      }, { status: 404 })
     }
 
-    const body = await request.json()
-    const validatedData = updateEmailAccountSchema.parse(body)
+    // Prepare update object based on actual database schema
+    const updateObject: any = {
+      updated_at: new Date().toISOString()
+    }
 
-    // Update the account with validated data
-    const { data: account, error } = await supabase
+    // Handle settings updates - map to actual fields that exist
+    if (updateData.settings) {
+      if (updateData.settings.daily_limit !== undefined) {
+        updateObject.daily_send_limit = updateData.settings.daily_limit
+      }
+      if (updateData.settings.warm_up_enabled !== undefined) {
+        updateObject.warmup_enabled = updateData.settings.warm_up_enabled
+      }
+    }
+
+    // Handle SMTP config updates - map to individual columns
+    if (updateData.smtp_config) {
+      if (updateData.smtp_config.host !== undefined) {
+        updateObject.smtp_host = updateData.smtp_config.host
+      }
+      if (updateData.smtp_config.port !== undefined) {
+        updateObject.smtp_port = updateData.smtp_config.port
+      }
+      if (updateData.smtp_config.username !== undefined) {
+        updateObject.smtp_username = updateData.smtp_config.username
+      }
+      if (updateData.smtp_config.password !== undefined) {
+        updateObject.smtp_password = updateData.smtp_config.password
+      }
+      if (updateData.smtp_config.secure !== undefined) {
+        updateObject.smtp_secure = updateData.smtp_config.secure
+      }
+    }
+
+    // Update the account
+    const { data: updatedAccount, error: updateError } = await supabase
       .from('email_accounts')
-      .update({
-        ...validatedData,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateObject)
       .eq('id', params.id)
       .eq('user_id', user.id)
       .select()
       .single()
 
-    if (error) {
-      console.error('Error updating email account:', error)
-      return NextResponse.json({ error: 'Failed to update email account' }, { status: 500 })
+    if (updateError) {
+      console.error('Error updating email account:', updateError)
+      return NextResponse.json({
+        error: 'Failed to update email account',
+        code: 'UPDATE_ERROR'
+      }, { status: 500 })
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      data: account,
-      message: 'Email account updated successfully',
+      data: updatedAccount,
+      message: 'Email account updated successfully'
     })
+    
+    return addSecurityHeaders(response)
   } catch (error) {
     console.error('Error updating email account:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    }, { status: 500 })
   }
-}
+})
 
-// DELETE /api/email-accounts/[id] - Delete email account
-export async function DELETE(
+// DELETE /api/email-accounts/[id] - Delete (soft delete) email account
+export const DELETE = withAuth(async (
   request: NextRequest,
+  { user, supabase },
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    await withRateLimit(user, 10, 60000) // 10 deletes per minute
     
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Verify account ownership
-    const { data: existingAccount } = await supabase
+    // First, verify the account exists and belongs to the user
+    const { data: existingAccount, error: fetchError } = await supabase
       .from('email_accounts')
-      .select('id')
+      .select('id, user_id, email')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
 
-    if (!existingAccount) {
-      return NextResponse.json({ error: 'Email account not found' }, { status: 404 })
+    if (fetchError || !existingAccount) {
+      return NextResponse.json({
+        error: 'Email account not found',
+        code: 'NOT_FOUND'
+      }, { status: 404 })
     }
 
-    // Delete the account
-    const { error } = await supabase
+    // Soft delete by setting deleted_at
+    const { error: deleteError } = await supabase
       .from('email_accounts')
-      .delete()
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
       .eq('id', params.id)
       .eq('user_id', user.id)
 
-    if (error) {
-      console.error('Error deleting email account:', error)
-      return NextResponse.json({ error: 'Failed to delete email account' }, { status: 500 })
+    if (deleteError) {
+      console.error('Error deleting email account:', deleteError)
+      return NextResponse.json({
+        error: 'Failed to delete email account',
+        code: 'DELETE_ERROR'
+      }, { status: 500 })
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      message: 'Email account deleted successfully',
+      message: 'Email account deleted successfully'
     })
+    
+    return addSecurityHeaders(response)
   } catch (error) {
     console.error('Error deleting email account:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    }, { status: 500 })
   }
-}
+})

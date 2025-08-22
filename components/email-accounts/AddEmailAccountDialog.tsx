@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Plus, Mail, ArrowRight, Loader2 } from 'lucide-react'
 import { EMAIL_PROVIDERS, EmailProvider } from '@/lib/email-providers'
+import { ApiClient } from '@/lib/api-client'
 import SMTPConfigDialog from './SMTPConfigDialog'
 
 interface AddEmailAccountDialogProps {
@@ -55,45 +56,42 @@ export default function AddEmailAccountDialog({ onAccountAdded }: AddEmailAccoun
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/email-accounts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const requestData = {
+        provider: 'smtp',
+        email: smtpConfig.email,
+        name: smtpConfig.name || smtpConfig.email,
+        smtp_config: {
+          host: smtpConfig.host,
+          port: Number(smtpConfig.port),
+          secure: smtpConfig.secure,
+          username: smtpConfig.username,
+          password: smtpConfig.password,
         },
-        body: JSON.stringify({
-          provider: 'smtp',
-          email: smtpConfig.email,
-          name: smtpConfig.name || smtpConfig.email,
-          smtp_config: {
-            host: smtpConfig.host,
-            port: smtpConfig.port,
-            secure: smtpConfig.secure,
-            username: smtpConfig.username,
-            password: smtpConfig.password,
-          },
-        }),
-      })
-
-      if (response.ok) {
-        setIsOpen(false)
-        setSelectedProvider(null)
-        setSmtpConfig({
-          email: '',
-          name: '',
-          host: '',
-          port: 587,
-          username: '',
-          password: '',
-          secure: false,
-        })
-        onAccountAdded()
-      } else {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to add email account')
       }
+      console.log('Sending SMTP config request:', {
+        ...requestData,
+        smtp_config: {
+          ...requestData.smtp_config,
+          password: '[HIDDEN]'
+        }
+      })
+      await ApiClient.post('/api/email-accounts', requestData)
+
+      setIsOpen(false)
+      setSelectedProvider(null)
+      setSmtpConfig({
+        email: '',
+        name: '',
+        host: '',
+        port: 587,
+        username: '',
+        password: '',
+        secure: false,
+      })
+      onAccountAdded()
     } catch (error) {
       console.error('SMTP setup error:', error)
-      // Handle error (show toast, etc.)
+      alert(`Failed to add email account: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsLoading(false)
     }
@@ -246,7 +244,10 @@ export default function AddEmailAccountDialog({ onAccountAdded }: AddEmailAccoun
                   id="port"
                   type="number"
                   value={smtpConfig.port}
-                  onChange={(e) => setSmtpConfig({ ...smtpConfig, port: parseInt(e.target.value) })}
+                  onChange={(e) => {
+                    const portValue = parseInt(e.target.value)
+                    setSmtpConfig({ ...smtpConfig, port: isNaN(portValue) ? 587 : portValue })
+                  }}
                   placeholder="587"
                   required
                 />

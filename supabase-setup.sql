@@ -60,7 +60,7 @@ CREATE TABLE public.email_accounts (
   current_daily_sent INTEGER DEFAULT 0,
   
   -- Reputation tracking
-  reputation_score DECIMAL(3,2) DEFAULT 100.00,
+  reputation_score DECIMAL(5,2) DEFAULT 100.00,
   bounce_rate DECIMAL(5,4) DEFAULT 0.0000,
   complaint_rate DECIMAL(5,4) DEFAULT 0.0000,
   

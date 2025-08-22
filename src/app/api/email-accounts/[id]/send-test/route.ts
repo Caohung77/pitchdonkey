@@ -1,19 +1,19 @@
-import { NextRequest } from 'next/server'
-import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { withAuth } from '@/lib/auth-middleware'
 import nodemailer from 'nodemailer'
 
-export const POST = withAuth(async (request: NextRequest, user, { params }) => {
+export const POST = withAuth(async (request: NextRequest, { user, supabase }, { params }) => {
   try {
     const { id } = params
     const body = await request.json()
     const { to, subject, message } = body
 
     if (!to || !subject || !message) {
-      return handleApiError(new Error('Missing required fields: to, subject, message'))
+      return NextResponse.json({
+        error: 'Missing required fields: to, subject, message',
+        code: 'VALIDATION_ERROR'
+      }, { status: 400 })
     }
-
-    const supabase = createServerSupabaseClient()
 
     // Get email account
     const { data: account, error: accountError } = await supabase
@@ -24,11 +24,17 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
       .single()
 
     if (accountError || !account) {
-      return handleApiError(new Error('Email account not found'))
+      return NextResponse.json({
+        error: 'Email account not found',
+        code: 'NOT_FOUND'
+      }, { status: 404 })
     }
 
     if (account.status !== 'active') {
-      return handleApiError(new Error('Email account is not active'))
+      return NextResponse.json({
+        error: 'Email account is not active',
+        code: 'ACCOUNT_INACTIVE'
+      }, { status: 400 })
     }
 
     let sendResult = {
@@ -43,7 +49,7 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
     try {
       if (account.provider === 'smtp') {
         // Send via SMTP
-        const transporter = nodemailer.createTransporter({
+        const transporter = nodemailer.createTransport({
           host: account.smtp_host,
           port: account.smtp_port,
           secure: account.smtp_secure,
@@ -54,7 +60,7 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
         })
 
         const info = await transporter.sendMail({
-          from: `"${account.name || 'ColdReach Pro'}" <${account.email}>`,
+          from: `"ColdReach Pro" <${account.email}>`,
           to,
           subject,
           text: message,
@@ -117,13 +123,8 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
           is_test: true
         })
 
-      // Update account last used timestamp
-      await supabase
-        .from('email_accounts')
-        .update({ 
-          last_used_at: new Date().toISOString()
-        })
-        .eq('id', id)
+      // Note: last_used_at field doesn't exist in the schema
+      // This functionality can be added later if needed
 
     } catch (error) {
       sendResult = {
@@ -139,9 +140,17 @@ export const POST = withAuth(async (request: NextRequest, user, { params }) => {
       }
     }
 
-    return createSuccessResponse(sendResult)
+    return NextResponse.json({
+      success: true,
+      data: sendResult
+    })
 
   } catch (error) {
-    return handleApiError(error)
+    console.error('Send test email error:', error)
+    return NextResponse.json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 })
