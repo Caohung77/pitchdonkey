@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
 import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from './database.types'
 
@@ -9,14 +8,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Client-side Supabase client (for React components)
-export const createClientSupabase = () => createBrowserClient<Database>(
-  supabaseUrl,
-  supabaseAnonKey
-)
+// Single Supabase client instance to prevent multiple instances
+let supabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = null
 
-// Browser client for direct usage
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+// Client-side Supabase client (for React components) - Returns singleton instance
+export const createClientSupabase = () => {
+  if (!supabaseInstance) {
+    supabaseInstance = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey)
+    console.log('Supabase client instance created')
+  } else {
+    console.log('Returning existing Supabase client instance')
+  }
+  return supabaseInstance
+}
 
-// Legacy export for backward compatibility
-export const createBrowserClient = () => createClient<Database>(supabaseUrl, supabaseAnonKey)
+// Export singleton instance for direct usage
+export const supabase = createClientSupabase()

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .eq('email', userInfo.email)
       .eq('provider', 'outlook')
-      .eq('is_active', true)
+      .eq('status', 'active') // Note: 'is_active' field doesn't exist in actual schema
 
     if (existingAccounts && existingAccounts.length > 0) {
       return NextResponse.redirect(`${request.nextUrl.origin}/dashboard/email-accounts?error=account_exists`)
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     await emailService.createEmailAccount(user.id, {
       provider: 'outlook',
       email: userInfo.email,
-      name: userInfo.name || 'Outlook Account',
+      // Note: 'name' field doesn't exist in actual database schema
       oauth_tokens: tokens,
       settings: {
         daily_limit: 50,

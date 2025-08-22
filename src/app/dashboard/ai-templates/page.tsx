@@ -386,13 +386,13 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
               id="content"
               value={formData.content}
               onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              placeholder="Write your template here. Use {{variable_name}} for personalization..."
+              placeholder="Write your template here. Use {variable_name} for personalization..."
               className="w-full p-3 border border-gray-300 rounded-md"
               rows={8}
               required
             />
             <p className="text-xs text-gray-500">
-              Use {{variable_name}} syntax for personalization variables
+              Use {`{{variable_name}}`} syntax for personalization variables
             </p>
           </div>
 

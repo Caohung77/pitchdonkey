@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 import { createServerSupabaseClient } from './supabase-server'
 import { checkUserPermissions } from './auth'
 import type { User } from '@supabase/supabase-js'
@@ -24,10 +25,9 @@ export interface AuthContext {
  * Throws error if user is not authenticated
  */
 export async function requireAuth(request?: NextRequest): Promise<AuthContext> {
-  const supabase = createServerSupabaseClient()
-  
   try {
     let user: User | null = null
+    let supabase: any = null
     
     if (request) {
       // Try to get user from Authorization header first (for API clients)
@@ -46,31 +46,51 @@ export async function requireAuth(request?: NextRequest): Promise<AuthContext> {
         
         if (!error && tokenUser) {
           user = tokenUser
+          supabase = createServerSupabaseClient() // Use service role for authenticated users
+        }
+      }
+      
+      // If no user from token, try session-based auth using SSR client
+      if (!user) {
+        // Create SSR client that can access cookies
+        const cookieStore = {
+          get: (name: string) => {
+            const cookie = request.cookies.get(name)
+            return cookie?.value
+          },
+          set: () => {}, // No-op for API routes
+          remove: () => {} // No-op for API routes
+        }
+        
+        const ssrClient = createServerClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          {
+            cookies: cookieStore
+          }
+        )
+        
+        const { data: { user: sessionUser }, error } = await ssrClient.auth.getUser()
+        if (!error && sessionUser) {
+          user = sessionUser
+          supabase = createServerSupabaseClient() // Use service role for authenticated users
         }
       }
     }
     
-    // If no user from token, try session-based auth
-    if (!user) {
-      const { data: { user: sessionUser }, error } = await supabase.auth.getUser()
-      if (!error && sessionUser) {
-        user = sessionUser
+    // Fallback to service role client if no request context
+    if (!supabase) {
+      supabase = createServerSupabaseClient()
+      if (!user) {
+        const { data: { user: fallbackUser }, error } = await supabase.auth.getUser()
+        if (!error && fallbackUser) {
+          user = fallbackUser
+        }
       }
     }
     
     if (!user) {
-      // Temporary fallback user for development - remove in production
-      console.warn('No authenticated user found, using fallback user for development')
-      user = {
-        id: 'fallback-user-id',
-        email: 'dev@coldreachpro.com',
-        user_metadata: {},
-        aud: 'authenticated',
-        app_metadata: {},
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        role: 'authenticated'
-      } as any
+      throw new AuthenticationError('No authenticated user found')
     }
     
     return {

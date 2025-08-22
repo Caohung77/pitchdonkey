@@ -1,47 +1,83 @@
 import { createClientSupabase } from './supabase-client'
 
-// Enhanced fetch that automatically adds auth headers
+// Custom fetch function that automatically includes auth headers
 export async function authenticatedFetch(url: string, options: RequestInit = {}) {
   const supabase = createClientSupabase()
-  const { data: { session } } = await supabase.auth.getSession()
   
-  const headers = new Headers(options.headers)
+  // Get the current session
+  const { data: { session }, error } = await supabase.auth.getSession()
   
-  // Add auth header if we have a session
-  if (session?.access_token) {
-    headers.set('Authorization', `Bearer ${session.access_token}`)
+  console.log('Auth session:', { hasSession: !!session, hasToken: !!session?.access_token, error }) // Debug
+  
+  if (!session?.access_token) {
+    console.error('No authentication token available. Session:', session)
+    throw new Error('No authentication token available')
   }
-  
-  // Ensure content-type is set for POST/PUT requests
-  if (!headers.has('Content-Type') && (options.method === 'POST' || options.method === 'PUT')) {
-    headers.set('Content-Type', 'application/json')
+
+  // Add authorization header
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session.access_token}`,
+    ...options.headers,
   }
-  
+
+  console.log('Making authenticated request to:', url) // Debug
+
   return fetch(url, {
     ...options,
-    headers
+    headers,
   })
 }
 
-// Convenience methods
-export const apiClient = {
-  get: (url: string, options?: RequestInit) => 
-    authenticatedFetch(url, { ...options, method: 'GET' }),
-    
-  post: (url: string, data?: any, options?: RequestInit) => 
-    authenticatedFetch(url, { 
-      ...options, 
-      method: 'POST', 
-      body: data ? JSON.stringify(data) : undefined 
-    }),
-    
-  put: (url: string, data?: any, options?: RequestInit) => 
-    authenticatedFetch(url, { 
-      ...options, 
-      method: 'PUT', 
-      body: data ? JSON.stringify(data) : undefined 
-    }),
-    
-  delete: (url: string, options?: RequestInit) => 
-    authenticatedFetch(url, { ...options, method: 'DELETE' })
+// API client class for easier usage
+export class ApiClient {
+  static async get(url: string) {
+    const response = await authenticatedFetch(url, { method: 'GET' })
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`)
+    }
+    return response.json()
+  }
+
+  static async post(url: string, data: any) {
+    const response = await authenticatedFetch(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+    if (!response.ok) {
+      let errorMessage = `API Error: ${response.status}`
+      try {
+        const errorData = await response.json()
+        if (errorData.error) {
+          errorMessage = errorData.error
+        }
+        if (errorData.details) {
+          errorMessage += ` - ${errorData.details}`
+        }
+      } catch (e) {
+        // If we can't parse the error response, use the status message
+      }
+      throw new Error(errorMessage)
+    }
+    return response.json()
+  }
+
+  static async put(url: string, data: any) {
+    const response = await authenticatedFetch(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`)
+    }
+    return response.json()
+  }
+
+  static async delete(url: string) {
+    const response = await authenticatedFetch(url, { method: 'DELETE' })
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`)
+    }
+    return response.json()
+  }
 }

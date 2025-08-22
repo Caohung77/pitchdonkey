@@ -1,11 +1,8 @@
-import { NextRequest } from 'next/server'
-import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { withAuth } from '@/lib/auth-middleware'
 
-export const GET = withAuth(async (request: NextRequest, user) => {
+export const GET = withAuth(async (request: NextRequest, { user, supabase }) => {
   try {
-    const supabase = await createServerSupabaseClient()
-
     // Get contact lists from database
     const { data: lists, error: listsError } = await supabase
       .from('contact_lists')
@@ -38,20 +35,28 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       type: 'list' // To distinguish from segments
     }))
 
-    return createSuccessResponse(formattedLists)
+    return NextResponse.json({
+      success: true,
+      data: formattedLists
+    })
 
   } catch (error) {
     console.error('Error fetching contact lists:', error)
-    return handleApiError(error)
+    return NextResponse.json({
+      error: 'Failed to fetch contact lists',
+      code: 'FETCH_ERROR'
+    }, { status: 500 })
   }
 })
 
-export const POST = withAuth(async (request: NextRequest, user) => {
+export const POST = withAuth(async (request: NextRequest, { user, supabase }) => {
   try {
-    const supabase = await createServerSupabaseClient()
-
+    console.log('Creating contact list for user:', user.id, user.email) // Debug log
+    
     const body = await request.json()
     const { name, description, contactIds, tags } = body
+    
+    console.log('Request body:', { name, description, contactIds: contactIds?.length, tags: tags?.length }) // Debug log
 
     // Validate required fields
     if (!name) {
@@ -97,10 +102,16 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       type: 'list'
     }
 
-    return createSuccessResponse(responseList, 201)
+    return NextResponse.json({
+      success: true,
+      data: responseList
+    }, { status: 201 })
 
   } catch (error) {
     console.error('Error creating contact list:', error)
-    return handleApiError(error)
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Failed to create contact list',
+      code: 'CREATE_ERROR'
+    }, { status: 500 })
   }
 })

@@ -152,7 +152,7 @@ export function SegmentManager({ userId }: SegmentManagerProps) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center text-sm text-gray-600">
                     <Users className="h-4 w-4 mr-1" />
-                    <span>{segment.contactCount.toLocaleString()} contacts</span>
+                    <span>{(segment.contactCount || 0).toLocaleString()} contacts</span>
                   </div>
                   <Badge variant="secondary">
                     {segment.id === 'all-contacts' ? 'Default' : 'Custom'}

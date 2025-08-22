@@ -48,6 +48,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Define signOut function early so it can be used in useEffect hooks
+  const signOut = useCallback(async () => {
+    try {
+      console.log('AuthProvider: Signing out...')
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        console.error('AuthProvider: Sign out error:', error)
+        setError('Failed to sign out')
+        throw new Error(error.message)
+      } else {
+        setUser(null)
+        setError(null)
+        console.log('AuthProvider: Sign out successful')
+        router.push('/auth/signin')
+      }
+    } catch (error) {
+      console.error('AuthProvider: Sign out error:', error)
+      setError('Failed to sign out')
+      throw error
+    }
+  }, [router])
+
   // REMOVED: fetchEnhancedProfile function that was causing 401 authentication loops
   // The AuthProvider now only uses Supabase session data to prevent API calls that could fail
   // and trigger unwanted sign-outs. This was the root cause of the authentication loop issue.
@@ -111,6 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false)
           setError(null)
           console.log('AuthProvider: User signed out')
+          // Clear any stored auth data
+          localStorage.removeItem('supabase.auth.token')
+          sessionStorage.clear()
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
           // Update user data on token refresh
           const fallbackUser = createFallbackUser(session.user)
@@ -128,6 +154,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
     }
   }, [initializeAuth, createFallbackUser])
+
+  // Session timeout monitoring
+  useEffect(() => {
+    if (!user) return
+
+    const checkSessionValidity = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error || !session) {
+          console.log('AuthProvider: Session invalid, signing out')
+          await signOut()
+          return
+        }
+
+        // Check if session is close to expiring (within 5 minutes)
+        if (session.expires_at) {
+          const expiresAt = session.expires_at * 1000 // Convert to milliseconds
+          const now = Date.now()
+          const fiveMinutes = 5 * 60 * 1000
+
+          if (expiresAt - now < fiveMinutes) {
+            console.log('AuthProvider: Session expiring soon, refreshing token')
+            const { error: refreshError } = await supabase.auth.refreshSession()
+            
+            if (refreshError) {
+              console.error('AuthProvider: Token refresh failed:', refreshError)
+              await signOut()
+            }
+          }
+        }
+      } catch (error) {
+        console.error('AuthProvider: Session check error:', error)
+      }
+    }
+
+    // Check session validity every 2 minutes
+    const interval = setInterval(checkSessionValidity, 2 * 60 * 1000)
+
+    // Also check immediately
+    checkSessionValidity()
+
+    return () => clearInterval(interval)
+  }, [user, signOut])
+
+  // Activity-based session extension
+  useEffect(() => {
+    if (!user) return
+
+    let lastActivity = Date.now()
+
+    const updateActivity = () => {
+      lastActivity = Date.now()
+    }
+
+    const checkActivity = async () => {
+      const now = Date.now()
+      const thirtyMinutes = 30 * 60 * 1000
+
+      // If no activity for 30 minutes, warn user
+      if (now - lastActivity > thirtyMinutes) {
+        console.log('AuthProvider: User inactive, refreshing session')
+        
+        try {
+          const { error } = await supabase.auth.refreshSession()
+          if (error) {
+            console.error('AuthProvider: Inactive session refresh failed:', error)
+            await signOut()
+          }
+        } catch (error) {
+          console.error('AuthProvider: Activity check error:', error)
+        }
+      }
+    }
+
+    // Add activity listeners
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
+    events.forEach(event => {
+      document.addEventListener(event, updateActivity, true)
+    })
+
+    // Check activity every 5 minutes
+    const activityInterval = setInterval(checkActivity, 5 * 60 * 1000)
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, updateActivity, true)
+      })
+      clearInterval(activityInterval)
+    }
+  }, [user, signOut])
 
   // Refresh user profile - simplified to avoid API calls that could cause 401 loops
   const refreshUser = useCallback(async () => {
@@ -172,28 +289,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(error.message)
     }
   }
-
-  const signOut = useCallback(async () => {
-    try {
-      console.log('AuthProvider: Signing out...')
-      const { error } = await supabase.auth.signOut()
-      
-      if (error) {
-        console.error('AuthProvider: Sign out error:', error)
-        setError('Failed to sign out')
-        throw new Error(error.message)
-      } else {
-        setUser(null)
-        setError(null)
-        console.log('AuthProvider: Sign out successful')
-        router.push('/auth/signin')
-      }
-    } catch (error) {
-      console.error('AuthProvider: Sign out error:', error)
-      setError('Failed to sign out')
-      throw error
-    }
-  }, [router])
 
   return (
     <AuthContext.Provider value={{ user, loading, error, signIn, signUp, signOut, refreshUser }}>

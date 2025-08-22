@@ -56,9 +56,11 @@ export const supabaseAdmin = createClient<Database>(
   }
 )
 
-// Helper function to get user from server
+// Helper function to get user from server (DEPRECATED - use auth-middleware.ts)
+// @deprecated Use requireAuth from auth-middleware.ts instead
 export async function getUser() {
-  const supabase = await createServerSupabaseClient()
+  console.warn('getUser from supabase-server.ts is deprecated. Use requireAuth from auth-middleware.ts')
+  const supabase = createServerSupabaseClient()
   
   try {
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -75,9 +77,11 @@ export async function getUser() {
   }
 }
 
-// Helper function to get session from server
+// Helper function to get session from server (DEPRECATED - use auth-middleware.ts)
+// @deprecated Use requireAuth from auth-middleware.ts instead
 export async function getSession() {
-  const supabase = await createServerSupabaseClient()
+  console.warn('getSession from supabase-server.ts is deprecated. Use requireAuth from auth-middleware.ts')
+  const supabase = createServerSupabaseClient()
   
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
@@ -94,8 +98,10 @@ export async function getSession() {
   }
 }
 
-// Helper function to require authentication
+// Helper function to require authentication (DEPRECATED - use auth-middleware.ts)
+// @deprecated Use requireAuth from auth-middleware.ts instead
 export async function requireAuth() {
+  console.warn('requireAuth from supabase-server.ts is deprecated. Use requireAuth from auth-middleware.ts')
   const user = await getUser()
   
   if (!user) {

@@ -148,12 +148,21 @@ export default function DashboardLayout({
               <p className="text-gray-600 mb-4">
                 Please sign in to access the dashboard.
               </p>
-              <Button 
-                onClick={() => window.location.href = '/auth/signin'}
-                className="w-full"
-              >
-                Go to Sign In
-              </Button>
+              <div className="space-y-2">
+                <Button 
+                  onClick={() => window.location.href = '/auth/signin'}
+                  className="w-full"
+                >
+                  Go to Sign In
+                </Button>
+                <Button 
+                  onClick={() => window.location.href = '/debug-auth'}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Debug Auth
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

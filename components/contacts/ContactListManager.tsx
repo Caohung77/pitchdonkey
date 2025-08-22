@@ -13,6 +13,7 @@ import {
   Heart,
   List
 } from 'lucide-react'
+import { ApiClient } from '@/lib/api-client'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,13 +50,10 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
   const fetchLists = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/contacts/lists')
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (Array.isArray(data)) {
-          setLists(data)
-        }
+      const result = await ApiClient.get('/api/contacts/lists')
+      const data = result.data || result // Handle both new and old response formats
+      if (Array.isArray(data)) {
+        setLists(data)
       }
     } catch (error) {
       console.error('Error fetching contact lists:', error)
@@ -74,13 +72,8 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
     }
 
     try {
-      const response = await fetch(`/api/contacts/lists/${listId}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        setLists(prev => prev.filter(l => l.id !== listId))
-      }
+      await ApiClient.delete(`/api/contacts/lists/${listId}`)
+      setLists(prev => prev.filter(l => l.id !== listId))
     } catch (error) {
       console.error('Error deleting contact list:', error)
     }
@@ -191,7 +184,7 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center text-sm text-gray-600">
                     <Users className="h-4 w-4 mr-1" />
-                    <span>{list.contactCount.toLocaleString()} contacts</span>
+                    <span>{(list.contactCount || 0).toLocaleString()} contacts</span>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {list.tags.slice(0, 2).map(tag => (

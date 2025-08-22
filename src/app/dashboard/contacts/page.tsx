@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase-client'
+import { useState } from 'react'
+import { useAuth } from '@/components/auth/AuthProvider'
 import { Mail, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,103 +15,21 @@ import { SegmentManager } from '@/components/contacts/SegmentManager'
 import { ContactListManager } from '@/components/contacts/ContactListManager'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-interface User {
-  id: string
-  email: string
-  name: string
-}
-
 interface ContactsPageState {
-  user: User | null
-  loading: boolean
-  error: string | null
-  sessionChecked: boolean
   searchTerm: string
   statusFilter: string
   activeTab: string
 }
 
 function ContactsPageContent() {
+  // Use AuthProvider instead of direct session management
+  const { user, loading, error, refreshUser } = useAuth()
+  
   const [state, setState] = useState<ContactsPageState>({
-    user: null,
-    loading: true,
-    error: null,
-    sessionChecked: false,
     searchTerm: '',
     statusFilter: 'all',
     activeTab: 'contacts'
   })
-
-  // Direct session management without AuthProvider
-  useEffect(() => {
-    checkSession()
-  }, [])
-
-  const checkSession = async () => {
-    try {
-      console.log('Dashboard ContactsPage: Checking session...')
-      
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError) {
-        console.error('Dashboard ContactsPage: Session error:', sessionError)
-        setState(prev => ({
-          ...prev,
-          error: 'Session error: ' + sessionError.message,
-          loading: false,
-          sessionChecked: true
-        }))
-        return
-      }
-
-      if (!session?.user) {
-        console.log('Dashboard ContactsPage: No session found')
-        setState(prev => ({
-          ...prev,
-          user: null,
-          loading: false,
-          sessionChecked: true
-        }))
-        return
-      }
-
-      console.log('Dashboard ContactsPage: Session found for user:', session.user.email)
-      
-      // Create user object from session
-      const user: User = {
-        id: session.user.id,
-        email: session.user.email!,
-        name: session.user.user_metadata?.full_name || 
-              session.user.user_metadata?.name || 
-              session.user.email?.split('@')[0] || 
-              'User'
-      }
-
-      setState(prev => ({
-        ...prev,
-        user,
-        loading: false,
-        sessionChecked: true,
-        error: null
-      }))
-
-    } catch (error) {
-      console.error('Dashboard ContactsPage: Error checking session:', error)
-      setState(prev => ({
-        ...prev,
-        error: 'Failed to check authentication',
-        loading: false,
-        sessionChecked: true
-      }))
-    }
-  }
-
-
-
-  const handleRetrySession = () => {
-    setState(prev => ({ ...prev, loading: true, error: null }))
-    checkSession()
-  }
 
   // Filter handlers
   const handleSearchChange = (searchTerm: string) => {
@@ -135,7 +53,7 @@ function ContactsPageContent() {
   }
 
   // Loading state
-  if (state.loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="min-h-screen flex items-center justify-center">
@@ -149,7 +67,7 @@ function ContactsPageContent() {
   }
 
   // Error state
-  if (state.error && state.sessionChecked) {
+  if (error) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="min-h-screen flex items-center justify-center">
@@ -158,8 +76,8 @@ function ContactsPageContent() {
               <div className="text-center">
                 <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Error</h2>
-                <p className="text-gray-600 mb-4">{state.error}</p>
-                <Button onClick={handleRetrySession} className="w-full">
+                <p className="text-gray-600 mb-4">{error}</p>
+                <Button onClick={refreshUser} className="w-full">
                   Retry
                 </Button>
               </div>
@@ -171,7 +89,7 @@ function ContactsPageContent() {
   }
 
   // No session state - show login prompt
-  if (!state.user && state.sessionChecked) {
+  if (!user) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="min-h-screen flex items-center justify-center">
@@ -228,7 +146,7 @@ function ContactsPageContent() {
 
           <TabsContent value="contacts" className="space-y-6">
             {/* Contact Statistics */}
-            <ContactsStats userId={state.user.id} />
+            <ContactsStats userId={user.id} />
 
             {/* Search and Filters */}
             <ContactsFilters
@@ -241,18 +159,18 @@ function ContactsPageContent() {
 
             {/* Contacts List */}
             <ContactsList 
-              userId={state.user.id}
+              userId={user.id}
               searchTerm={state.searchTerm}
               statusFilter={state.statusFilter}
             />
           </TabsContent>
 
           <TabsContent value="segments">
-            <SegmentManager userId={state.user.id} />
+            <SegmentManager userId={user.id} />
           </TabsContent>
 
           <TabsContent value="lists">
-            <ContactListManager userId={state.user.id} />
+            <ContactListManager userId={user.id} />
           </TabsContent>
         </Tabs>
       </div>

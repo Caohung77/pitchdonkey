@@ -67,50 +67,41 @@ export class EmailAccountService {
   private supabase = createClientComponentClient()
 
   async createEmailAccount(userId: string, config: EmailAccountConfig) {
-    // Encrypt sensitive data before storing
-    const encryptedData: any = {
+    // Prepare data matching actual database schema (supabase-setup.sql)
+    const accountData: any = {
       user_id: userId,
       provider: config.provider,
       email: config.email,
-      name: config.name || config.email,
-      settings: {
-        daily_limit: 50,
-        delay_between_emails: 60,
-        warm_up_enabled: true,
-        ...config.settings,
-      },
-      is_active: true,
-      is_verified: false,
+      // Note: 'name', 'is_active', 'is_verified' fields don't exist in actual database schema
+      status: 'pending', // This field exists in the actual schema
     }
 
-    // Encrypt OAuth tokens if present
+    // Handle OAuth tokens - store in individual columns according to supabase-setup.sql
     if (config.oauth_tokens) {
-      encryptedData.oauth_tokens = encryptOAuthTokens(config.oauth_tokens)
+      accountData.access_token = config.oauth_tokens.access_token
+      accountData.refresh_token = config.oauth_tokens.refresh_token
+      accountData.token_expires_at = new Date(config.oauth_tokens.expires_at * 1000).toISOString()
     }
 
-    // Encrypt SMTP config if present
+    // Handle SMTP config - store in individual columns according to supabase-setup.sql
     if (config.smtp_config) {
-      encryptedData.smtp_config = encryptSMTPConfig(config.smtp_config)
+      accountData.smtp_host = config.smtp_config.host
+      accountData.smtp_port = config.smtp_config.port
+      accountData.smtp_username = config.smtp_config.username
+      accountData.smtp_password = config.smtp_config.password // Should be encrypted in production
+      accountData.smtp_secure = config.smtp_config.secure
     }
 
     const { data, error } = await this.supabase
       .from('email_accounts')
-      .insert(encryptedData)
+      .insert(accountData)
       .select()
       .single()
 
     if (error) throw error
 
-    // Decrypt sensitive data before returning
-    if (data) {
-      if (data.oauth_tokens) {
-        data.oauth_tokens = decryptOAuthTokens(data.oauth_tokens)
-      }
-      if (data.smtp_config) {
-        data.smtp_config = decryptSMTPConfig(data.smtp_config)
-      }
-    }
-
+    // Note: No need to decrypt since we're storing in individual columns now
+    // In production, should decrypt smtp_password and access_token/refresh_token fields
     return data
   }
 

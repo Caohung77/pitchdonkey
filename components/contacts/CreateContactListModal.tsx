@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ApiClient } from '@/lib/api-client'
 import { 
   Users, 
   Plus, 
@@ -60,29 +61,24 @@ export function CreateContactListModal({ isOpen, onClose, onListCreated }: Creat
   const fetchContacts = async () => {
     try {
       setContactsLoading(true)
-      const response = await fetch('/api/contacts?limit=1000') // Get more contacts for list creation
-      if (response.ok) {
-        const result = await response.json()
-        console.log('Contacts API response:', result) // Debug log
-        
-        // Handle the API response structure
-        if (result.success && result.data && result.data.contacts) {
-          console.log('Found contacts:', result.data.contacts.length) // Debug log
-          setContacts(result.data.contacts)
-        } else if (Array.isArray(result)) {
-          // Fallback for direct array response
-          console.log('Direct array response:', result.length) // Debug log
-          setContacts(result)
-        } else {
-          console.error('Unexpected API response structure:', result)
-          setContacts([])
-        }
+      const result = await ApiClient.get('/api/contacts?limit=1000') // Get more contacts for list creation
+      console.log('Contacts API response:', result) // Debug log
+      
+      // Handle the API response structure
+      if (result.success && result.data && result.data.contacts) {
+        console.log('Found contacts:', result.data.contacts.length) // Debug log
+        setContacts(result.data.contacts)
+      } else if (Array.isArray(result)) {
+        // Fallback for direct array response
+        console.log('Direct array response:', result.length) // Debug log
+        setContacts(result)
       } else {
-        console.error('Failed to fetch contacts:', response.status)
+        console.error('Unexpected API response structure:', result)
         setContacts([])
       }
     } catch (error) {
       console.error('Error fetching contacts:', error)
+      // Reset to empty array on error
       setContacts([])
     } finally {
       setContactsLoading(false)
@@ -107,30 +103,23 @@ export function CreateContactListModal({ isOpen, onClose, onListCreated }: Creat
     try {
       setLoading(true)
       
-      const response = await fetch('/api/contacts/lists', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: listData.name,
-          description: listData.description,
-          contactIds: selectedContacts,
-          tags: listData.tags
-        })
+      const result = await ApiClient.post('/api/contacts/lists', {
+        name: listData.name,
+        description: listData.description,
+        contactIds: selectedContacts,
+        tags: listData.tags
       })
 
-      if (response.ok) {
-        const newList = await response.json()
-        onListCreated(newList)
-        onClose()
-        resetForm()
-      } else {
-        const errorData = await response.json()
-        console.error('Error creating list:', errorData)
-        alert(`Failed to create list: ${errorData.error || 'Unknown error'}`)
-      }
+      console.log('API response:', result) // Debug log
+      
+      // Handle the API response structure - the API returns { success: true, data: list }
+      const newList = result.success ? result.data : result
+      onListCreated(newList)
+      onClose()
+      resetForm()
     } catch (error) {
       console.error('Error creating list:', error)
-      alert('Failed to create list. Please check your connection and try again.')
+      alert(`Failed to create list: ${error.message || 'Unknown error'}`)
     } finally {
       setLoading(false)
     }

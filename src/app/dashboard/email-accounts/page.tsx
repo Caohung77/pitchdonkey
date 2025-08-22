@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail, Plus, AlertCircle, Settings, CheckCircle, XCircle } from 'lucide-react'
-import SMTPConfigDialog from '@/components/email-accounts/SMTPConfigDialog'
+import { useAuth } from '@/components/auth/AuthProvider'
+import { ApiClient } from '@/lib/api-client'
+import AddEmailAccountDialog from '@/components/email-accounts/AddEmailAccountDialog'
 import EditEmailAccountDialog from '@/components/email-accounts/EditEmailAccountDialog'
 import DomainAuthDialog from '@/components/email-accounts/DomainAuthDialog'
 
@@ -21,9 +23,9 @@ interface EmailAccount {
   warmup_stage: string
   daily_send_limit: number
   current_daily_sent: number
-  reputation_score: string
-  bounce_rate: string
-  complaint_rate: string
+  reputation_score: number
+  bounce_rate: number
+  complaint_rate: number
   smtp_host?: string
   smtp_port?: number
   smtp_username?: string
@@ -32,6 +34,7 @@ interface EmailAccount {
 }
 
 export default function EmailAccountsPage() {
+  const { user, loading: authLoading } = useAuth()
   const [accounts, setAccounts] = useState<EmailAccount[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -41,30 +44,29 @@ export default function EmailAccountsPage() {
     try {
       setIsLoading(true)
       setError('') // Clear any previous errors
-      const response = await fetch('/api/email-accounts')
-      if (response.ok) {
-        const data = await response.json()
-        setAccounts(data.data || [])
-      } else {
-        // Only show error for actual server errors, not empty results
-        if (response.status >= 500) {
-          setError('Failed to load email accounts')
-        } else {
-          console.error('API error:', response.status)
-          setAccounts([]) // Just set empty array for other errors
-        }
-      }
+      
+      const data = await ApiClient.get('/api/email-accounts')
+      setAccounts(data.data || [])
     } catch (error) {
       console.error('Error fetching accounts:', error)
-      // Only show error for network/connection issues
-      setError('Unable to connect to server. Please try again.')
+      
+      if (error instanceof Error && error.message.includes('No authentication token')) {
+        // Authentication error - redirect to signin
+        window.location.href = '/auth/signin'
+        return
+      }
+      
+      setError('Failed to load email accounts. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchAccounts()
+    // Only fetch accounts if user is authenticated and not loading
+    if (!authLoading && user) {
+      fetchAccounts()
+    }
     
     // Check for OAuth success/error messages
     const urlParams = new URLSearchParams(window.location.search)
@@ -91,7 +93,7 @@ export default function EmailAccountsPage() {
     if (success || error) {
       window.history.replaceState({}, '', '/dashboard/email-accounts')
     }
-  }, [])
+  }, [authLoading, user])
 
   const handleAccountAdded = () => {
     fetchAccounts()
@@ -103,15 +105,8 @@ export default function EmailAccountsPage() {
     }
 
     try {
-      const response = await fetch(`/api/email-accounts/${accountId}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
-        setAccounts(accounts.filter(account => account.id !== accountId))
-      } else {
-        throw new Error('Failed to delete email account')
-      }
+      await ApiClient.delete(`/api/email-accounts/${accountId}`)
+      setAccounts(accounts.filter(account => account.id !== accountId))
     } catch (error) {
       console.error('Error deleting account:', error)
       setError('Failed to delete email account')
@@ -120,16 +115,8 @@ export default function EmailAccountsPage() {
 
   const handleTest = async (accountId: string) => {
     try {
-      const response = await fetch(`/api/email-accounts/${accountId}/test`, {
-        method: 'POST',
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        alert(`Connection test successful: ${data.data.message}`)
-      } else {
-        throw new Error('Connection test failed')
-      }
+      const data = await ApiClient.post(`/api/email-accounts/${accountId}/test`, {})
+      alert(`Connection test successful: ${data.data.message}`)
     } catch (error) {
       console.error('Error testing connection:', error)
       alert('Connection test failed')
@@ -147,25 +134,13 @@ export default function EmailAccountsPage() {
     if (!message) return
 
     try {
-      const response = await fetch(`/api/email-accounts/${accountId}/send-test`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to,
-          subject,
-          message
-        })
+      const data = await ApiClient.post(`/api/email-accounts/${accountId}/send-test`, {
+        to,
+        subject,
+        message
       })
 
-      const data = await response.json()
-
-      if (response.ok) {
-        alert(`✅ Test email sent successfully!\n\nFrom: ${data.data.from}\nTo: ${data.data.to}\nMessage ID: ${data.data.messageId}`)
-      } else {
-        alert(`❌ Failed to send test email:\n${data.error}\n${data.details || ''}`)
-      }
+      alert(`✅ Test email sent successfully!\n\nFrom: ${data.data.from}\nTo: ${data.data.to}\nMessage ID: ${data.data.messageId}`)
     } catch (error) {
       console.error('Error sending test email:', error)
       alert('❌ Failed to send test email')
@@ -174,26 +149,34 @@ export default function EmailAccountsPage() {
 
   const handleActivate = async (accountId: string) => {
     try {
-      const response = await fetch(`/api/email-accounts/${accountId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          status: 'active',
-        }),
+      await ApiClient.put(`/api/email-accounts/${accountId}`, {
+        status: 'active',
       })
 
-      if (response.ok) {
-        setSuccessMessage('Email account activated successfully!')
-        fetchAccounts() // Refresh the accounts list
-      } else {
-        throw new Error('Failed to activate email account')
-      }
+      setSuccessMessage('Email account activated successfully!')
+      fetchAccounts() // Refresh the accounts list
     } catch (error) {
       console.error('Error activating account:', error)
       setError('Failed to activate email account')
     }
+  }
+
+  // Show loading state while authentication is loading
+  if (authLoading) {
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2">Loading...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Redirect if not authenticated (this should be handled by middleware, but just in case)
+  if (!user) {
+    window.location.href = '/auth/signin'
+    return null
   }
 
   return (
@@ -207,10 +190,7 @@ export default function EmailAccountsPage() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Connect Account
-          </Button>
+          <AddEmailAccountDialog onAccountAdded={handleAccountAdded} />
         </div>
       </div>
 
@@ -260,16 +240,8 @@ export default function EmailAccountsPage() {
               <p className="text-gray-600 mb-6">
                 Connect your first email account to start sending cold email campaigns
               </p>
-              <div className="flex space-x-3 justify-center">
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Connect Gmail
-                </Button>
-                <Button variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Connect Outlook
-                </Button>
-                <SMTPConfigDialog onAccountCreated={handleAccountAdded} />
+              <div className="flex justify-center">
+                <AddEmailAccountDialog onAccountAdded={handleAccountAdded} />
               </div>
             </div>
           </CardContent>
@@ -308,7 +280,7 @@ export default function EmailAccountsPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Reputation:</span>
-                    <span>{account.reputation_score}</span>
+                    <span>{account.reputation_score}%</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Domain Auth:</span>

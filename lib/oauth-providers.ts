@@ -56,7 +56,7 @@ export class GoogleOAuthService {
     this.oauth2Client = new google.auth.OAuth2(
       OAUTH_PROVIDERS.gmail.clientId,
       OAUTH_PROVIDERS.gmail.clientSecret,
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/email-accounts/oauth/gmail/callback`
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005'}/api/email-accounts/oauth/gmail/callback`
     )
   }
 
@@ -153,7 +153,7 @@ export class MicrosoftOAuthService {
   constructor() {
     this.clientId = OAUTH_PROVIDERS.outlook.clientId
     this.clientSecret = OAUTH_PROVIDERS.outlook.clientSecret
-    this.redirectUri = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/email-accounts/oauth/outlook/callback`
+    this.redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005'}/api/email-accounts/oauth/outlook/callback`
   }
 
   generateAuthUrl(state: string): string {

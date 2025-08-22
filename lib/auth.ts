@@ -1,128 +1,5 @@
-import { createServerSupabaseClient, supabaseAdmin } from './supabase'
+import { createServerSupabaseClient } from './supabase'
 import { User } from '@supabase/supabase-js'
-import { NextAuthOptions } from 'next-auth'
-import GoogleProvider from 'next-auth/providers/google'
-import { SupabaseAdapter } from '@next-auth/supabase-adapter'
-
-// NextAuth configuration
-export const authOptions: NextAuthOptions = {
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-  ],
-  adapter: SupabaseAdapter({
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    secret: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  }),
-  callbacks: {
-    async session({ session, user }) {
-      // Add user ID to session
-      if (session.user) {
-        (session.user as any).id = user.id
-      }
-      return session
-    },
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-      }
-      return token
-    },
-  },
-  pages: {
-    signIn: '/auth/signin',
-    error: '/auth/error',
-  },
-  session: {
-    strategy: 'database',
-  },
-}
-
-// Client-side auth helpers
-export const authHelpers = {
-  // Sign up with email and password
-  async signUp(email: string, password: string, userData?: { name?: string }) {
-    const { data, error } = await supabaseAdmin.auth.signUp({
-      email,
-      password,
-      options: {
-        data: userData,
-      },
-    })
-    
-    if (error) throw error
-    return data
-  },
-
-  // Sign in with email and password
-  async signIn(email: string, password: string) {
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-      email,
-      password,
-    })
-    
-    if (error) throw error
-    return data
-  },
-
-  // Sign in with Google OAuth
-  async signInWithGoogle() {
-    const { data, error } = await supabaseAdmin.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-    
-    if (error) throw error
-    return data
-  },
-
-  // Sign out
-  async signOut() {
-    const { error } = await supabaseAdmin.auth.signOut()
-    if (error) throw error
-  },
-
-  // Get current session
-  async getSession() {
-    const { data: { session }, error } = await supabaseAdmin.auth.getSession()
-    if (error) throw error
-    return session
-  },
-
-  // Get current user
-  async getUser() {
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser()
-    if (error) throw error
-    return user
-  },
-
-  // Reset password
-  async resetPassword(email: string) {
-    const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
-    })
-    
-    if (error) throw error
-  },
-
-  // Update password
-  async updatePassword(password: string) {
-    const { error } = await supabaseAdmin.auth.updateUser({
-      password,
-    })
-    
-    if (error) throw error
-  },
-
-  // Listen to auth state changes
-  onAuthStateChange(callback: (event: string, session: any) => void) {
-    return supabaseAdmin.auth.onAuthStateChange(callback)
-  },
-}
 
 // Helper function to get current user from server-side
 export async function getCurrentUser(userId: string) {
@@ -212,7 +89,6 @@ async function checkResourceLimit(userId: string, resource: string, limit: numbe
         .from('email_accounts')
         .select('id', { count: 'exact' })
         .eq('user_id', userId)
-        .eq('is_active', true)
       break
       
     case 'contacts':
@@ -258,8 +134,7 @@ export async function getUserUsage(userId: string) {
     supabase
       .from('email_accounts')
       .select('id', { count: 'exact' })
-      .eq('user_id', userId)
-      .eq('is_active', true),
+      .eq('user_id', userId),
     
     supabase
       .from('contacts')
