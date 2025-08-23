@@ -1,24 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { withAuth } from '@/lib/auth-middleware'
 
 // GET /api/contacts/lists/[id] - Get a specific contact list
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+
+    const { id } = params
 
     // Get list from database
     const { data: list, error: listError } = await supabase
       .from('contact_lists')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
@@ -33,7 +26,7 @@ export async function GET(
         name: list.name,
         description: list.description,
         contactCount: list.contact_ids ? list.contact_ids.length : 0,
-        contactIds: list.contact_ids || [],
+        contact_ids: list.contact_ids || [],
         tags: list.tags || [],
         isFavorite: list.is_favorite,
         createdAt: list.created_at,
@@ -48,21 +41,12 @@ export async function GET(
       { status: 500 }
     )
   }
-}
+})
 
 // PUT /api/contacts/lists/[id] - Update a contact list
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const PUT = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
+    const { id } = params
     const body = await request.json()
     const { name, description, contactIds, tags, isFavorite } = body
 
@@ -76,7 +60,7 @@ export async function PUT(
         tags,
         is_favorite: isFavorite
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .select()
       .single()
@@ -110,26 +94,18 @@ export async function PUT(
       { status: 500 }
     )
   }
-}
+})
 
 // DELETE /api/contacts/lists/[id] - Delete a contact list
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { id } = params
 
     // Delete from database
     const { error: deleteError } = await supabase
       .from('contact_lists')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
 
     if (deleteError) {
@@ -149,4 +125,4 @@ export async function DELETE(
       { status: 500 }
     )
   }
-}
+})

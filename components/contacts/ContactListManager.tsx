@@ -22,6 +22,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { CreateContactListModal } from './CreateContactListModal'
+import { EditContactListModal } from './EditContactListModal'
+import { ViewContactListModal } from './ViewContactListModal'
 
 interface ContactList {
   id: string
@@ -42,6 +44,8 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
   const [lists, setLists] = useState<ContactList[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingList, setEditingList] = useState<ContactList | null>(null)
+  const [viewingList, setViewingList] = useState<ContactList | null>(null)
 
   useEffect(() => {
     fetchLists()
@@ -84,23 +88,33 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
       const list = lists.find(l => l.id === listId)
       if (!list) return
 
-      const response = await fetch(`/api/contacts/lists/${listId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...list,
-          isFavorite: !currentFavorite
-        })
+      await ApiClient.put(`/api/contacts/lists/${listId}`, {
+        ...list,
+        isFavorite: !currentFavorite
       })
 
-      if (response.ok) {
-        setLists(prev => prev.map(l => 
-          l.id === listId ? { ...l, isFavorite: !currentFavorite } : l
-        ))
-      }
+      setLists(prev => prev.map(l => 
+        l.id === listId ? { ...l, isFavorite: !currentFavorite } : l
+      ))
     } catch (error) {
       console.error('Error updating favorite status:', error)
+      alert(`Failed to update favorite status: ${error.message || 'Please try again.'}`)
     }
+  }
+
+  const handleEditList = (list: ContactList) => {
+    setEditingList(list)
+  }
+
+  const handleViewList = (list: ContactList) => {
+    setViewingList(list)
+  }
+
+  const handleListUpdated = (updatedList: ContactList) => {
+    setLists(prev => prev.map(l => 
+      l.id === updatedList.id ? updatedList : l
+    ))
+    setEditingList(null)
   }
 
   if (loading) {
@@ -154,7 +168,7 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleEditList(list)}>
                         <Edit className="h-4 w-4 mr-2" />
                         Edit List
                       </DropdownMenuItem>
@@ -164,7 +178,7 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
                         <Heart className="h-4 w-4 mr-2" />
                         {list.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleViewList(list)}>
                         <List className="h-4 w-4 mr-2" />
                         View Contacts
                       </DropdownMenuItem>
@@ -223,6 +237,19 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onListCreated={handleListCreated}
+      />
+
+      <EditContactListModal
+        list={editingList}
+        isOpen={!!editingList}
+        onClose={() => setEditingList(null)}
+        onListUpdated={handleListUpdated}
+      />
+
+      <ViewContactListModal
+        list={viewingList}
+        isOpen={!!viewingList}
+        onClose={() => setViewingList(null)}
       />
     </div>
   )

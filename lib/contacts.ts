@@ -215,6 +215,24 @@ export class ContactService {
     }
   }
 
+  async getContactsByIds(userId: string, contactIds: string[]) {
+    const supabase = await this.getSupabase()
+    
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('user_id', userId)
+      .in('id', contactIds)
+      .neq('status', 'deleted')
+
+    if (error) {
+      console.error('Error fetching contacts by IDs:', error)
+      throw new Error('Failed to fetch contacts')
+    }
+
+    return data || []
+  }
+
   async getContactStats(userId: string) {
     const supabase = await this.getSupabase()
     const { data, error } = await supabase

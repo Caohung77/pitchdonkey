@@ -6,6 +6,16 @@ import { contactSchema } from '@/lib/validations'
 export const GET = withAuth(async (request: NextRequest, user) => {
   try {
     const { searchParams } = new URL(request.url)
+    const ids = searchParams.get('ids')?.split(',').filter(Boolean)
+    
+    // If requesting specific contacts by IDs
+    if (ids && ids.length > 0) {
+      const contactService = new ContactService()
+      const result = await contactService.getContactsByIds(user.id, ids)
+      return createSuccessResponse({ contacts: result })
+    }
+
+    // Otherwise, use pagination
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
     const search = searchParams.get('search') || undefined

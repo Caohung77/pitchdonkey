@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ApiClient } from '@/lib/api-client'
 import { 
   Plus, 
   Search, 
@@ -90,13 +91,7 @@ export default function CampaignsPage() {
   const fetchCampaigns = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/campaigns')
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
+      const data = await ApiClient.get('/api/campaigns')
       
       // Ensure data is an array
       if (Array.isArray(data)) {
@@ -117,45 +112,29 @@ export default function CampaignsPage() {
     try {
       console.log(`Updating campaign ${campaignId} status to ${newStatus}`)
       
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      })
-
-      if (response.ok) {
-        const updatedCampaign = await response.json()
-        console.log('Campaign updated successfully:', updatedCampaign)
-        
-        setCampaigns(prev => 
-          prev.map(campaign => 
-            campaign.id === campaignId 
-              ? { ...campaign, status: newStatus as Campaign['status'] }
-              : campaign
-          )
+      const updatedCampaign = await ApiClient.put(`/api/campaigns/${campaignId}`, { status: newStatus })
+      console.log('Campaign updated successfully:', updatedCampaign)
+      
+      setCampaigns(prev => 
+        prev.map(campaign => 
+          campaign.id === campaignId 
+            ? { ...campaign, status: newStatus as Campaign['status'] }
+            : campaign
         )
-      } else {
-        const errorData = await response.json()
-        console.error('Failed to update campaign:', errorData)
-        alert(`Failed to update campaign: ${errorData.error || 'Unknown error'}`)
-      }
+      )
     } catch (error) {
       console.error('Error updating campaign status:', error)
-      alert('Failed to update campaign status. Please try again.')
+      alert(`Failed to update campaign status: ${error.message || 'Please try again.'}`)
     }
   }
 
   const handleDuplicate = async (campaignId: string) => {
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/duplicate`, {
-        method: 'POST'
-      })
-
-      if (response.ok) {
-        fetchCampaigns() // Refresh the list
-      }
+      await ApiClient.post(`/api/campaigns/${campaignId}/duplicate`, {})
+      fetchCampaigns() // Refresh the list
     } catch (error) {
       console.error('Error duplicating campaign:', error)
+      alert(`Failed to duplicate campaign: ${error.message || 'Please try again.'}`)
     }
   }
 
@@ -165,52 +144,38 @@ export default function CampaignsPage() {
     }
 
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        setCampaigns(prev => prev.filter(campaign => campaign.id !== campaignId))
-      }
+      await ApiClient.delete(`/api/campaigns/${campaignId}`)
+      setCampaigns(prev => prev.filter(campaign => campaign.id !== campaignId))
     } catch (error) {
       console.error('Error deleting campaign:', error)
+      alert(`Failed to delete campaign: ${error.message || 'Please try again.'}`)
     }
   }
 
   const handleReschedule = async (campaignId: string, scheduleData: any) => {
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          scheduleSettings: {
-            ...scheduleData,
-            send_immediately: scheduleData.type === 'now'
-          }
-        })
+      const updatedCampaign = await ApiClient.put(`/api/campaigns/${campaignId}`, { 
+        scheduleSettings: {
+          ...scheduleData,
+          send_immediately: scheduleData.type === 'now'
+        }
       })
 
-      if (response.ok) {
-        const updatedCampaign = await response.json()
-        setCampaigns(prev => 
-          prev.map(campaign => 
-            campaign.id === campaignId 
-              ? { ...campaign, ...updatedCampaign }
-              : campaign
+      setCampaigns(prev => 
+        prev.map(campaign => 
+          campaign.id === campaignId 
+            ? { ...campaign, ...updatedCampaign }
+            : campaign
           )
         )
         
-        // If rescheduled to start now, also update status to active
-        if (scheduleData.type === 'now') {
-          await handleStatusChange(campaignId, 'active')
-        }
-      } else {
-        const errorData = await response.json()
-        alert(`Failed to reschedule campaign: ${errorData.error || 'Unknown error'}`)
+      // If rescheduled to start now, also update status to active
+      if (scheduleData.type === 'now') {
+        await handleStatusChange(campaignId, 'active')
       }
     } catch (error) {
       console.error('Error rescheduling campaign:', error)
-      alert('Failed to reschedule campaign. Please try again.')
+      alert(`Failed to reschedule campaign: ${error.message || 'Please try again.'}`)
     }
   }
 
@@ -218,31 +183,19 @@ export default function CampaignsPage() {
     try {
       console.log(`Stopping campaign ${campaignId}`)
       
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'stopped' }) // Now properly send 'stopped' status
-      })
-
-      if (response.ok) {
-        const updatedCampaign = await response.json()
-        console.log('Campaign stopped successfully:', updatedCampaign)
-        
-        setCampaigns(prev => 
-          prev.map(campaign => 
-            campaign.id === campaignId 
-              ? { ...campaign, status: 'stopped' as Campaign['status'] } // Show as stopped in UI
+      const updatedCampaign = await ApiClient.put(`/api/campaigns/${campaignId}`, { status: 'stopped' })
+      console.log('Campaign stopped successfully:', updatedCampaign)
+      
+      setCampaigns(prev => 
+        prev.map(campaign => 
+          campaign.id === campaignId 
+            ? { ...campaign, status: 'stopped' as Campaign['status'] } // Show as stopped in UI
               : campaign
-          )
         )
-      } else {
-        const errorData = await response.json()
-        console.error('Failed to stop campaign:', errorData)
-        alert(`Failed to stop campaign: ${errorData.error || 'Unknown error'}`)
-      }
+      )
     } catch (error) {
       console.error('Error stopping campaign:', error)
-      alert('Failed to stop campaign. Please try again.')
+      alert(`Failed to stop campaign: ${error.message || 'Please try again.'}`)
     }
   }
 
