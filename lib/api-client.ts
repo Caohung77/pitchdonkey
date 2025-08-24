@@ -68,7 +68,16 @@ export class ApiClient {
       body: JSON.stringify(data),
     })
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`)
+      let errorMessage = `API Error: ${response.status}`
+      try {
+        const errorData = await response.json()
+        if (errorData.error) {
+          errorMessage = errorData.error
+        }
+      } catch {
+        // If we can't parse the error response, use the status code
+      }
+      throw new Error(errorMessage)
     }
     return response.json()
   }
@@ -76,7 +85,16 @@ export class ApiClient {
   static async delete(url: string) {
     const response = await authenticatedFetch(url, { method: 'DELETE' })
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`)
+      let errorMessage = `API Error: ${response.status}`
+      try {
+        const errorData = await response.json()
+        if (errorData.error) {
+          errorMessage = errorData.error
+        }
+      } catch {
+        // If we can't parse the error response, use the status code
+      }
+      throw new Error(errorMessage)
     }
     return response.json()
   }

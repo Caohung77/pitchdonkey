@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from './supabase'
+import { createServerSupabaseClient } from './supabase-server'
 import { User } from '@supabase/supabase-js'
 
 // Helper function to get current user from server-side

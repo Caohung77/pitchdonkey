@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>React Render Debug - Template Variables</title>
+    <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Exact reproduction of the HTMLEmailEditor getPreviewContent function
+        function getPreviewContent(editorContent) {
+            if (!editorContent) return '';
+            
+            let previewContent = editorContent;
+            
+            const replacements = [
+                // HTML entity encoded variables (from templates)
+                { pattern: /&#123;&#123;\s*first_name\s*&#125;&#125;/g, value: 'John' },
+                { pattern: /&#123;&#123;\s*last_name\s*&#125;&#125;/g, value: 'Smith' },
+                { pattern: /&#123;&#123;\s*email\s*&#125;&#125;/g, value: 'john.smith@example.com' },
+                { pattern: /&#123;&#123;\s*company\s*&#125;&#125;/g, value: 'Acme Corp' },
+                { pattern: /&#123;&#123;\s*sender_name\s*&#125;&#125;/g, value: 'Your Name' },
+                { pattern: /&#123;&#123;\s*company_name\s*&#125;&#125;/g, value: 'Your Company' },
+                
+                // Regular curly braces (user input)
+                { pattern: /\{\{\s*first_name\s*\}\}/g, value: 'John' },
+                { pattern: /\{\{\s*last_name\s*\}\}/g, value: 'Smith' },
+                { pattern: /\{\{\s*email\s*\}\}/g, value: 'john.smith@example.com' },
+                { pattern: /\{\{\s*company\s*\}\}/g, value: 'Acme Corp' },
+                { pattern: /\{\{\s*sender_name\s*\}\}/g, value: 'Your Name' },
+                { pattern: /\{\{\s*company_name\s*\}\}/g, value: 'Your Company' }
+            ];
+            
+            // Apply all replacements safely
+            replacements.forEach(({ pattern, value }) => {
+                previewContent = previewContent.replace(pattern, value);
+            });
+            
+            // Sanitize any remaining template variables to prevent JavaScript execution
+            previewContent = previewContent.replace(/\{\{\s*[^}]*\s*\}\}/g, '[VARIABLE]');
+            previewContent = previewContent.replace(/&#123;&#123;\s*[^}]*\s*&#125;&#125;/g, '[VARIABLE]');
+            
+            return previewContent;
+        }
+
+        // Test component that reproduces the HTMLEmailEditor preview
+        function EmailPreviewTest() {
+            const [content, setContent] = useState('');
+            const [error, setError] = useState(null);
+
+            const testCases = [
+                {
+                    name: "Basic Template (Should work)",
+                    content: '<p>Hello &#123;&#123;first_name&#125;&#125;, welcome to &#123;&#123;company&#125;&#125;!</p>'
+                },
+                {
+                    name: "User Input (Should work)", 
+                    content: '<p>Hello {{first_name}}, welcome to {{company}}!</p>'
+                },
+                {
+                    name: "DANGEROUS: Single Braces (Could cause error)",
+                    content: '<p>Hello {first_name}, welcome to {company}!</p>'
+                },
+                {
+                    name: "Mixed (Could cause error)",
+                    content: '<p>Hello {{first_name}} and {last_name}!</p>'
+                }
+            ];
+
+            const testCase = (caseData) => {
+                try {
+                    setError(null);
+                    setContent(caseData.content);
+                    console.log(`Testing: ${caseData.name}`);
+                    console.log(`Content: ${caseData.content}`);
+                    
+                    const processed = getPreviewContent(caseData.content);
+                    console.log(`Processed: ${processed}`);
+                    
+                    return processed;
+                } catch (err) {
+                    console.error(`Error in ${caseData.name}:`, err);
+                    setError(err.message);
+                    return `ERROR: ${err.message}`;
+                }
+            };
+
+            return (
+                <div style={{padding: '20px', fontFamily: 'Arial, sans-serif'}}>
+                    <h1>React dangerouslySetInnerHTML Template Variable Test</h1>
+                    
+                    <div style={{marginBottom: '20px'}}>
+                        <h2>Test Cases:</h2>
+                        {testCases.map((testCaseData, index) => {
+                            const processed = testCase(testCaseData);
+                            
+                            return (
+                                <div key={index} style={{
+                                    margin: '15px 0', 
+                                    padding: '15px', 
+                                    border: '1px solid #ccc',
+                                    backgroundColor: processed.startsWith('ERROR:') ? '#ffe6e6' : '#f9f9f9'
+                                }}>
+                                    <h3>{testCaseData.name}</h3>
+                                    <p><strong>Original:</strong> <code>{testCaseData.content}</code></p>
+                                    <p><strong>Processed:</strong> <code>{processed}</code></p>
+                                    
+                                    {/* This is the critical test - simulating dangerouslySetInnerHTML */}
+                                    <div style={{border: '1px dashed #999', padding: '10px', backgroundColor: 'white'}}>
+                                        <strong>Rendered Output:</strong>
+                                        <div dangerouslySetInnerHTML={{ __html: processed }} />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {error && (
+                        <div style={{backgroundColor: '#ffe6e6', padding: '10px', border: '1px solid red'}}>
+                            <strong>JavaScript Error Detected:</strong> {error}
+                        </div>
+                    )}
+
+                    <div style={{marginTop: '30px', backgroundColor: '#f0f0f0', padding: '15px'}}>
+                        <h3>Critical Test: What happens with unprocessed single braces?</h3>
+                        <p>If you see "Can't find variable: first_name" in the console, it means React is trying to execute the variable as JavaScript.</p>
+                        
+                        <div style={{marginTop: '10px'}}>
+                            <strong>Dangerous Content Test:</strong>
+                            <div style={{border: '1px solid red', padding: '10px', backgroundColor: 'white'}}>
+                                {/* This should NOT cause an error if properly handled */}
+                                <div dangerouslySetInnerHTML={{ 
+                                    __html: '<p>Testing dangerous content: {first_name} and {company}</p>' 
+                                }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Global error handler to catch the specific error
+        window.addEventListener('error', (e) => {
+            if (e.message.includes('first_name')) {
+                console.error('🚨 FOUND THE ERROR:', e.message);
+                console.error('Stack:', e.error?.stack);
+                console.error('This is the error the user is experiencing!');
+                alert(`FOUND IT! Error: ${e.message}`);
+            }
+        });
+
+        ReactDOM.render(<EmailPreviewTest />, document.getElementById('root'));
+    </script>
+
+    <p style="margin-top: 30px; padding: 15px; background-color: #fffbf0; border: 1px solid orange;">
+        <strong>Instructions:</strong><br>
+        1. Open browser developer tools (F12)<br>
+        2. Look for any "Can't find variable: first_name" errors<br>
+        3. If you see that error, we've reproduced the user's issue<br>
+        4. The error occurs when React tries to render unprocessed single-brace variables as JavaScript
+    </p>
+</body>
+</html>

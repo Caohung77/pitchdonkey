@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Simple Campaign JavaScript Error</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-case { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .error { background: #ffe6e6; border-color: #ff0000; }
+        .success { background: #e6ffe6; border-color: #00ff00; }
+    </style>
+</head>
+<body>
+    <h1>Simple Campaign JavaScript Error Debugging</h1>
+
+    <div id="test-cases">
+        <!-- Test Case 1: Simulate HTMLEmailEditor rendering -->
+        <div class="test-case" id="test1">
+            <h2>Test 1: HTMLEmailEditor Component Simulation</h2>
+            <div id="test1-result"></div>
+        </div>
+
+        <!-- Test Case 2: Direct dangerouslySetInnerHTML -->
+        <div class="test-case" id="test2">
+            <h2>Test 2: Direct dangerouslySetInnerHTML Test</h2>
+            <div id="test2-result"></div>
+        </div>
+
+        <!-- Test Case 3: Template variable scenarios -->
+        <div class="test-case" id="test3">
+            <h2>Test 3: Template Variables</h2>
+            <div id="test3-result"></div>
+        </div>
+
+        <!-- Test Case 4: Browser JavaScript execution test -->
+        <div class="test-case" id="test4">
+            <h2>Test 4: JavaScript Execution Context</h2>
+            <div id="test4-result"></div>
+        </div>
+    </div>
+
+    <script>
+        console.log('=== Starting Simple Campaign Debug ===');
+
+        // Test 1: Simulate getPreviewContent function from HTMLEmailEditor
+        function simulateGetPreviewContent(content) {
+            let previewContent = content;
+            
+            const replacements = [
+                // HTML entity encoded variables (from templates)
+                { pattern: /&#123;&#123;\s*first_name\s*&#125;&#125;/g, value: 'John' },
+                { pattern: /&#123;&#123;\s*last_name\s*&#125;&#125;/g, value: 'Smith' },
+                { pattern: /&#123;&#123;\s*email\s*&#125;&#125;/g, value: 'john.smith@example.com' },
+                { pattern: /&#123;&#123;\s*company\s*&#125;&#125;/g, value: 'Acme Corp' },
+                { pattern: /&#123;&#123;\s*sender_name\s*&#125;&#125;/g, value: 'Your Name' },
+                { pattern: /&#123;&#123;\s*company_name\s*&#125;&#125;/g, value: 'Your Company' },
+                
+                // Regular curly braces (user input)
+                { pattern: /\{\{\s*first_name\s*\}\}/g, value: 'John' },
+                { pattern: /\{\{\s*last_name\s*\}\}/g, value: 'Smith' },
+                { pattern: /\{\{\s*email\s*\}\}/g, value: 'john.smith@example.com' },
+                { pattern: /\{\{\s*company\s*\}\}/g, value: 'Acme Corp' },
+                { pattern: /\{\{\s*sender_name\s*\}\}/g, value: 'Your Name' },
+                { pattern: /\{\{\s*company_name\s*\}\}/g, value: 'Your Company' }
+            ];
+            
+            // Apply all replacements safely
+            replacements.forEach(({ pattern, value }) => {
+                previewContent = previewContent.replace(pattern, value);
+            });
+            
+            // Sanitize any remaining template variables to prevent JavaScript execution
+            previewContent = previewContent.replace(/\{\{\s*[^}]*\s*\}\}/g, '[VARIABLE]');
+            previewContent = previewContent.replace(/&#123;&#123;\s*[^}]*\s*&#125;&#125;/g, '[VARIABLE]');
+            
+            return previewContent;
+        }
+
+        // Test scenarios that could cause the ReferenceError
+        const testCases = [
+            {
+                id: 'test1',
+                name: 'Basic Template',
+                content: '<p>Hello {{first_name}}, welcome to {{company}}!</p>'
+            },
+            {
+                id: 'test2', 
+                name: 'HTML Encoded Template',
+                content: '<p>Hello &#123;&#123;first_name&#125;&#125;, from &#123;&#123;company_name&#125;&#125;!</p>'
+            },
+            {
+                id: 'test3',
+                name: 'Mixed Variables',
+                content: '<p>Hi {{first_name}} and &#123;&#123;last_name&#125;&#125;, check out {company_data}!</p>'
+            },
+            {
+                id: 'test4',
+                name: 'Potential JavaScript Context',
+                content: '<p>Hello {first_name}, welcome!</p><script>console.log("This should not execute");</script>'
+            }
+        ];
+
+        // Run Test 1: HTMLEmailEditor simulation
+        console.log('\n=== Test 1: HTMLEmailEditor Simulation ===');
+        try {
+            testCases.forEach(testCase => {
+                console.log(`Testing ${testCase.name}:`);
+                console.log('Original:', testCase.content);
+                
+                const processed = simulateGetPreviewContent(testCase.content);
+                console.log('Processed:', processed);
+                
+                // This simulates dangerouslySetInnerHTML
+                const testElement = document.createElement('div');
+                testElement.innerHTML = processed;
+                console.log('✅ Rendered successfully');
+            });
+            
+            document.getElementById('test1-result').innerHTML = '<span style="color: green;">✅ All template processing tests passed</span>';
+        } catch (error) {
+            console.error('❌ Test 1 ERROR:', error);
+            document.getElementById('test1-result').innerHTML = `<span style="color: red;">❌ ERROR: ${error.message}</span>`;
+        }
+
+        // Test 2: Direct dangerouslySetInnerHTML test
+        console.log('\n=== Test 2: Direct dangerouslySetInnerHTML ===');
+        try {
+            const problematicContent = '<p>Hello {{first_name}}, welcome to {{company}}!</p>';
+            const processedContent = simulateGetPreviewContent(problematicContent);
+            
+            // This simulates React's dangerouslySetInnerHTML
+            document.getElementById('test2-result').innerHTML = processedContent;
+            console.log('✅ Direct innerHTML test passed');
+        } catch (error) {
+            console.error('❌ Test 2 ERROR:', error);
+            document.getElementById('test2-result').innerHTML = `<span style="color: red;">❌ ERROR: ${error.message}</span>`;
+        }
+
+        // Test 3: Check if variables exist in global scope
+        console.log('\n=== Test 3: Global Variable Check ===');
+        try {
+            // Check if any of these variables exist in the global scope
+            const variableNames = ['first_name', 'last_name', 'company', 'sender_name', 'company_name'];
+            let foundVariables = [];
+            
+            variableNames.forEach(varName => {
+                if (typeof window[varName] !== 'undefined') {
+                    foundVariables.push(varName);
+                }
+            });
+            
+            if (foundVariables.length > 0) {
+                console.warn('⚠️ Found global variables:', foundVariables);
+                document.getElementById('test3-result').innerHTML = `<span style="color: orange;">⚠️ Global variables found: ${foundVariables.join(', ')}</span>`;
+            } else {
+                console.log('✅ No conflicting global variables');
+                document.getElementById('test3-result').innerHTML = '<span style="color: green;">✅ No conflicting global variables</span>';
+            }
+        } catch (error) {
+            console.error('❌ Test 3 ERROR:', error);
+            document.getElementById('test3-result').innerHTML = `<span style="color: red;">❌ ERROR: ${error.message}</span>`;
+        }
+
+        // Test 4: JavaScript execution context test
+        console.log('\n=== Test 4: JavaScript Execution Context ===');
+        try {
+            // Try to cause the exact error reported
+            console.log('Testing if browser tries to execute {first_name}...');
+            
+            // This should NOT cause an error if properly handled
+            const testHTML = '<p>Testing: {first_name} and {{first_name}}</p>';
+            const testDiv = document.createElement('div');
+            testDiv.innerHTML = testHTML;
+            
+            console.log('✅ JavaScript context test passed');
+            document.getElementById('test4-result').innerHTML = '<span style="color: green;">✅ No JavaScript execution issues detected</span>';
+            
+        } catch (error) {
+            console.error('❌ Test 4 ERROR:', error);
+            document.getElementById('test4-result').innerHTML = `<span style="color: red;">❌ ERROR: ${error.message}</span>`;
+        }
+
+        // Test 5: Check for React-specific issues (simulate)
+        console.log('\n=== Test 5: React Context Simulation ===');
+        try {
+            // Simulate what happens in React when dangerouslySetInnerHTML is used
+            const reactSimulation = {
+                dangerouslySetInnerHTML: function(htmlContent) {
+                    // This is what React does internally (simplified)
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = htmlContent.__html;
+                    return tempDiv.innerHTML;
+                }
+            };
+            
+            const content = simulateGetPreviewContent('<p>Hello {{first_name}}!</p>');
+            const result = reactSimulation.dangerouslySetInnerHTML({ __html: content });
+            
+            console.log('✅ React simulation test passed');
+            console.log('Result:', result);
+            
+        } catch (error) {
+            console.error('❌ Test 5 ERROR:', error);
+        }
+
+        console.log('\n=== Debug Complete ===');
+        console.log('If you see "Can\'t find variable: first_name" error, it means:');
+        console.log('1. The template variables are not being properly processed');
+        console.log('2. React is trying to execute {first_name} as JavaScript');
+        console.log('3. The browser is interpreting template syntax as JS variable references');
+        
+    </script>
+
+    <h2>Manual Testing Instructions</h2>
+    <ol>
+        <li>Open browser developer tools (F12)</li>
+        <li>Check the console for any "Can't find variable: first_name" errors</li>
+        <li>If you see the error, it means the browser is trying to execute template variables as JavaScript</li>
+        <li>All test cases above should pass if the HTML processing is working correctly</li>
+    </ol>
+
+    <div style="background: #f0f0f0; padding: 15px; margin-top: 20px;">
+        <h3>Expected Error Pattern:</h3>
+        <code>Runtime ReferenceError: Can't find variable: first_name</code>
+        <p>This occurs when the browser tries to interpret <code>{first_name}</code> as a JavaScript variable reference instead of treating it as plain text content.</p>
+    </div>
+
+</body>
+</html>

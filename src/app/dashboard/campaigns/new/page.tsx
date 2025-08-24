@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { SequenceBuilder } from '@/components/campaigns/SequenceBuilder'
 import { CreateSegmentModal } from '@/components/contacts/CreateSegmentModal'
+import { ApiClient } from '@/lib/api-client'
 
 interface CampaignData {
   name: string
@@ -137,21 +138,20 @@ export default function NewCampaignPage() {
 
   const fetchContactSegments = async () => {
     try {
-      const response = await fetch('/api/contacts/segments')
+      const segments = await ApiClient.get('/api/contacts/segments')
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const segments = await response.json()
-      
-      // Ensure segments is an array
-      if (Array.isArray(segments)) {
-        setContactSegments(segments)
+      // Handle API response format
+      let segmentsData = []
+      if (segments.success && Array.isArray(segments.data)) {
+        segmentsData = segments.data
+      } else if (Array.isArray(segments)) {
+        segmentsData = segments
       } else {
-        console.error('API returned non-array data:', segments)
-        setContactSegments([]) // Set empty array as fallback
+        console.error('API returned unexpected format:', segments)
+        segmentsData = []
       }
+      
+      setContactSegments(segmentsData)
     } catch (error) {
       console.error('Error fetching contact segments:', error)
       setContactSegments([]) // Set empty array on error
@@ -160,21 +160,20 @@ export default function NewCampaignPage() {
 
   const fetchContactLists = async () => {
     try {
-      const response = await fetch('/api/contacts/lists')
+      const lists = await ApiClient.get('/api/contacts/lists')
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const lists = await response.json()
-      
-      // Ensure lists is an array
-      if (Array.isArray(lists)) {
-        setContactLists(lists)
+      // Handle API response format
+      let listsData = []
+      if (lists.success && Array.isArray(lists.data)) {
+        listsData = lists.data
+      } else if (Array.isArray(lists)) {
+        listsData = lists
       } else {
-        console.error('API returned non-array data:', lists)
-        setContactLists([]) // Set empty array as fallback
+        console.error('API returned unexpected format:', lists)
+        listsData = []
       }
+      
+      setContactLists(listsData)
     } catch (error) {
       console.error('Error fetching contact lists:', error)
       setContactLists([]) // Set empty array on error
@@ -258,20 +257,21 @@ export default function NewCampaignPage() {
   const handleSaveDraft = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/campaigns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...campaignData,
-          status: 'draft'
-        })
+      const result = await ApiClient.post('/api/campaigns', {
+        ...campaignData,
+        status: 'draft'
       })
-
-      if (response.ok) {
+      
+      // Handle response format
+      if (result.success || result.id) {
         router.push('/dashboard/campaigns')
+      } else {
+        console.error('Failed to save draft:', result)
+        alert('Failed to save campaign draft. Please try again.')
       }
     } catch (error) {
       console.error('Error saving draft:', error)
+      alert(`Failed to save draft: ${error.message || 'Please try again.'}`)
     } finally {
       setLoading(false)
     }
@@ -282,20 +282,21 @@ export default function NewCampaignPage() {
 
     try {
       setLoading(true)
-      const response = await fetch('/api/campaigns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...campaignData,
-          status: 'running'
-        })
+      const result = await ApiClient.post('/api/campaigns', {
+        ...campaignData,
+        status: 'running'
       })
-
-      if (response.ok) {
+      
+      // Handle response format
+      if (result.success || result.id) {
         router.push('/dashboard/campaigns')
+      } else {
+        console.error('Failed to launch campaign:', result)
+        alert('Failed to launch campaign. Please try again.')
       }
     } catch (error) {
       console.error('Error launching campaign:', error)
+      alert(`Failed to launch campaign: ${error.message || 'Please try again.'}`)
     } finally {
       setLoading(false)
     }

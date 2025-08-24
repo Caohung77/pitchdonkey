@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Template Variables - Exact Issue Reproduction</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .error { border-color: red; background-color: #ffe6e6; }
+        .success { border-color: green; background-color: #e6ffe6; }
+    </style>
+</head>
+<body>
+    <h1>Template Variables - JavaScript Execution Debug</h1>
+    
+    <div id="results"></div>
+
+    <script>
+        console.log('=== DEBUGGING TEMPLATE VARIABLE JAVASCRIPT EXECUTION ===');
+        
+        // Reproduction of the getPreviewContent function from HTMLEmailEditor
+        function getPreviewContent(editorContent) {
+            if (!editorContent) return '';
+            
+            let previewContent = editorContent;
+            
+            const replacements = [
+                // HTML entity encoded variables (from templates)
+                { pattern: /&#123;&#123;\s*first_name\s*&#125;&#125;/g, value: 'John' },
+                { pattern: /&#123;&#123;\s*last_name\s*&#125;&#125;/g, value: 'Smith' },
+                { pattern: /&#123;&#123;\s*email\s*&#125;&#125;/g, value: 'john.smith@example.com' },
+                { pattern: /&#123;&#123;\s*company\s*&#125;&#125;/g, value: 'Acme Corp' },
+                { pattern: /&#123;&#123;\s*sender_name\s*&#125;&#125;/g, value: 'Your Name' },
+                { pattern: /&#123;&#123;\s*company_name\s*&#125;&#125;/g, value: 'Your Company' },
+                
+                // Regular curly braces (user input)
+                { pattern: /\{\{\s*first_name\s*\}\}/g, value: 'John' },
+                { pattern: /\{\{\s*last_name\s*\}\}/g, value: 'Smith' },
+                { pattern: /\{\{\s*email\s*\}\}/g, value: 'john.smith@example.com' },
+                { pattern: /\{\{\s*company\s*\}\}/g, value: 'Acme Corp' },
+                { pattern: /\{\{\s*sender_name\s*\}\}/g, value: 'Your Name' },
+                { pattern: /\{\{\s*company_name\s*\}\}/g, value: 'Your Company' }
+            ];
+            
+            // Apply all replacements safely
+            replacements.forEach(({ pattern, value }) => {
+                previewContent = previewContent.replace(pattern, value);
+            });
+            
+            // Sanitize any remaining template variables to prevent JavaScript execution
+            previewContent = previewContent.replace(/\{\{\s*[^}]*\s*\}\}/g, '[VARIABLE]');
+            previewContent = previewContent.replace(/&#123;&#123;\s*[^}]*\s*&#125;&#125;/g, '[VARIABLE]');
+            
+            return previewContent;
+        }
+        
+        // Test scenarios that could cause the ReferenceError
+        const testScenarios = [
+            {
+                name: "Basic Template from HTMLEmailEditor basic template",
+                content: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h1 style="color: #333; font-size: 24px; margin-bottom: 20px;">Hello &#123;&#123;first_name&#125;&#125;,</h1>
+          
+          <p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 15px;">
+            I hope this email finds you well. I wanted to reach out because...
+          </p>
+          
+          <p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+            [Your message content here]
+          </p>
+          
+          <div style="margin: 30px 0;">
+            <a href="#" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Call to Action</a>
+          </div>
+          
+          <p style="color: #555; font-size: 16px; line-height: 1.6;">
+            Best regards,<br>
+            &#123;&#123;sender_name&#125;&#125;
+          </p>
+        </div>
+      `
+            },
+            {
+                name: "User Input with Regular Braces",
+                content: `<p>Hello {{first_name}}, welcome to {{company}}!</p>`
+            },
+            {
+                name: "Mixed Variable Types",
+                content: `<p>Hi {{first_name}} and &#123;&#123;last_name&#125;&#125;!</p>`
+            },
+            {
+                name: "Unmatched Variables (Should trigger error)",
+                content: `<p>Hello {first_name}, welcome to {company}!</p>`
+            },
+            {
+                name: "Edge Case - Single Braces (Potential JavaScript)",
+                content: `<p>Value is {first_name} and {last_name}</p>`
+            }
+        ];
+        
+        let resultsHTML = '';
+        let errorFound = false;
+        
+        testScenarios.forEach((scenario, index) => {
+            try {
+                console.log(`\n--- Test ${index + 1}: ${scenario.name} ---`);
+                console.log('Original content:', scenario.content);
+                
+                const processed = getPreviewContent(scenario.content);
+                console.log('Processed content:', processed);
+                
+                // Create a test div and set innerHTML (simulating dangerouslySetInnerHTML)
+                const testDiv = document.createElement('div');
+                testDiv.innerHTML = processed;
+                
+                // Check if the processed content still contains unprocessed variables
+                const hasUnprocessedVars = processed.includes('{first_name}') || 
+                                           processed.includes('{last_name}') || 
+                                           processed.includes('{company}');
+                
+                if (hasUnprocessedVars) {
+                    console.warn(`⚠️ Test ${index + 1}: Found unprocessed single-brace variables!`);
+                    resultsHTML += `
+                    <div class="test error">
+                        <h3>❌ Test ${index + 1}: ${scenario.name}</h3>
+                        <p><strong>Issue:</strong> Contains unprocessed single-brace variables!</p>
+                        <p><strong>Processed:</strong> <code>${processed.slice(0, 200)}...</code></p>
+                        <p><strong>Risk:</strong> Browser may try to execute {first_name} as JavaScript</p>
+                    </div>`;
+                    errorFound = true;
+                } else {
+                    console.log(`✅ Test ${index + 1}: Processed correctly`);
+                    resultsHTML += `
+                    <div class="test success">
+                        <h3>✅ Test ${index + 1}: ${scenario.name}</h3>
+                        <p><strong>Status:</strong> All variables processed correctly</p>
+                        <p><strong>Result:</strong> <code>${processed.slice(0, 100)}...</code></p>
+                    </div>`;
+                }
+                
+            } catch (error) {
+                console.error(`❌ Test ${index + 1} ERROR:`, error);
+                resultsHTML += `
+                <div class="test error">
+                    <h3>❌ Test ${index + 1}: ${scenario.name}</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Stack:</strong> <code>${error.stack}</code></p>
+                </div>`;
+                errorFound = true;
+            }
+        });
+        
+        // Test specific case: What happens when React tries to render {variable}?
+        console.log('\n--- CRITICAL TEST: JavaScript Variable Execution ---');
+        try {
+            // This is the dangerous case - single braces that aren't processed
+            const dangerousContent = '<p>Hello {first_name}, welcome!</p>';
+            const testDiv = document.createElement('div');
+            
+            console.log('Testing dangerous content:', dangerousContent);
+            
+            // This should NOT cause a ReferenceError if handled properly
+            testDiv.innerHTML = dangerousContent;
+            
+            console.log('✅ No error with single braces in innerHTML');
+            
+        } catch (error) {
+            console.error('❌ CRITICAL ERROR with single braces:', error);
+            resultsHTML += `
+            <div class="test error">
+                <h3>🚨 CRITICAL: JavaScript Execution Error</h3>
+                <p><strong>Error:</strong> ${error.message}</p>
+                <p><strong>Explanation:</strong> Browser is trying to execute {first_name} as JavaScript!</p>
+            </div>`;
+            errorFound = true;
+        }
+        
+        // Add summary
+        resultsHTML += `
+        <div style="margin-top: 30px; padding: 20px; background-color: ${errorFound ? '#ffe6e6' : '#e6ffe6'}; border-radius: 5px;">
+            <h2>${errorFound ? '🚨 ISSUE FOUND' : '✅ ALL TESTS PASSED'}</h2>
+            <p>${errorFound ? 
+                'The template processing may not be handling single-brace variables {first_name} correctly, causing the browser to interpret them as JavaScript variable references.' :
+                'All template variables are being processed correctly and safely.'
+            }</p>
+        </div>`;
+        
+        document.getElementById('results').innerHTML = resultsHTML;
+        
+        console.log('\n=== DEBUGGING COMPLETE ===');
+        console.log('Summary:', errorFound ? 
+            'Found issues with template variable processing' : 
+            'No issues detected with template variable processing');
+    </script>
+</body>
+</html>

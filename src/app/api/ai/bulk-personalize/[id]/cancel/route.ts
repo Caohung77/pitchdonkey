@@ -6,8 +6,9 @@ import { BulkPersonalizationService } from '@/lib/bulk-personalization'
 // POST /api/ai/bulk-personalize/[id]/cancel - Cancel a running job
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const resolvedParams = await params
   try {
     const supabase = createRouteHandlerClient({ cookies })
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -19,7 +20,7 @@ export async function POST(
     const bulkService = new BulkPersonalizationService()
     
     // Check if job exists and user owns it
-    const job = await bulkService.getJobStatus(params.id, supabase)
+    const job = await bulkService.getJobStatus(resolvedParams.id, supabase)
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
@@ -36,7 +37,7 @@ export async function POST(
       )
     }
 
-    await bulkService.cancelJob(params.id, supabase)
+    await bulkService.cancelJob(resolvedParams.id, supabase)
 
     return NextResponse.json({
       success: true,

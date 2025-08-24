@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug HTML Editor Preview</title>
+</head>
+<body>
+    <h1>Testing HTMLEmailEditor Preview Scenarios</h1>
+
+    <div id="test-cases">
+        <!-- Test Case 1: Normal template variables -->
+        <h2>Test Case 1: Normal Variables</h2>
+        <div id="test1"></div>
+
+        <!-- Test Case 2: Mixed braces -->
+        <h2>Test Case 2: Mixed Braces</h2>
+        <div id="test2"></div>
+
+        <!-- Test Case 3: Triple braces -->
+        <h2>Test Case 3: Triple Braces</h2>
+        <div id="test3"></div>
+
+        <!-- Test Case 4: Single braces with variable names -->
+        <h2>Test Case 4: Single Braces</h2>
+        <div id="test4"></div>
+    </div>
+
+    <script>
+        // Simulate the getPreviewContent() function
+        function getPreviewContent(content) {
+            let previewContent = content;
+            
+            const replacements = [
+                // HTML entity encoded variables (from templates)
+                { pattern: /&#123;&#123;\s*first_name\s*&#125;&#125;/g, value: 'John' },
+                { pattern: /&#123;&#123;\s*last_name\s*&#125;&#125;/g, value: 'Smith' },
+                
+                // Regular curly braces (user input)
+                { pattern: /\{\{\s*first_name\s*\}\}/g, value: 'John' },
+                { pattern: /\{\{\s*last_name\s*\}\}/g, value: 'Smith' }
+            ];
+            
+            // Apply all replacements
+            replacements.forEach(({ pattern, value }) => {
+                previewContent = previewContent.replace(pattern, value);
+            });
+            
+            // Sanitize any remaining template variables
+            previewContent = previewContent.replace(/\{\{\s*[^}]*\s*\}\}/g, '[VARIABLE]');
+            previewContent = previewContent.replace(/&#123;&#123;\s*[^}]*\s*&#125;&#125;/g, '[VARIABLE]');
+            
+            return previewContent;
+        }
+
+        // Test scenarios that could cause JavaScript execution
+        const testCases = [
+            {
+                id: 'test1',
+                name: 'Normal Variables',
+                content: '<p>Hello {{first_name}}, welcome to {{company}}!</p>'
+            },
+            {
+                id: 'test2', 
+                name: 'Mixed Braces',
+                content: '<p>Hello {{first_name}}, and {first_name} again, plus {company_name}</p>'
+            },
+            {
+                id: 'test3',
+                name: 'Triple Braces', 
+                content: '<p>Hello {{{first_name}}}, welcome to {{{company}}}!</p>'
+            },
+            {
+                id: 'test4',
+                name: 'Single Braces with Variable Names',
+                content: '<p>Hello {first_name}, welcome to our {company}!</p>'
+            }
+        ];
+
+        // Run tests
+        testCases.forEach(testCase => {
+            console.log(`\nTesting ${testCase.name}:`);
+            console.log('Original:', testCase.content);
+            
+            try {
+                const processed = getPreviewContent(testCase.content);
+                console.log('Processed:', processed);
+                
+                // This simulates dangerouslySetInnerHTML
+                document.getElementById(testCase.id).innerHTML = processed;
+                console.log('✅ Rendered successfully');
+            } catch (error) {
+                console.error('❌ ERROR:', error.message);
+                document.getElementById(testCase.id).innerHTML = `<strong style="color: red;">ERROR: ${error.message}</strong>`;
+            }
+        });
+
+        // Test what happens when browser tries to execute {variable_name}
+        console.log('\n=== TESTING JAVASCRIPT EXECUTION ===');
+        
+        // This should cause ReferenceError if JavaScript tries to execute
+        try {
+            document.getElementById('js-test').innerHTML = '<p>Value: {first_name}</p>';
+            console.log('✅ Single braces rendered as text');
+        } catch (error) {
+            console.error('❌ ERROR with single braces:', error.message);
+        }
+        
+        // Test if there's any eval-like behavior
+        window.first_name = 'John_From_Window';
+        try {
+            const testContent = '<p>Hello {first_name}, welcome!</p>';
+            document.getElementById('js-test2').innerHTML = testContent;
+            console.log('✅ Single braces with window variable rendered as text');
+        } catch (error) {
+            console.error('❌ ERROR with window variable:', error.message);
+        }
+    </script>
+
+    <h2>JavaScript Execution Tests</h2>
+    <div id="js-test"></div>
+    <div id="js-test2"></div>
+
+    <h2>Raw Template Test</h2>
+    <div id="raw-test">{first_name}</div>
+
+</body>
+</html>

@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { withAuth } from '@/lib/auth-middleware'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
   try {
-    const supabase = createServerSupabaseClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const { data: campaign, error } = await supabase
       .from('campaigns')
@@ -38,21 +29,10 @@ export async function GET(
       { status: 500 }
     )
   }
-}
+})
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+const updateCampaign = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
   try {
-    const supabase = createServerSupabaseClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      console.error('Authentication error:', authError)
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const body = await request.json()
     console.log('PATCH request body:', body)
@@ -137,20 +117,14 @@ export async function PATCH(
       { status: 500 }
     )
   }
-}
+})
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// Both PATCH and PUT methods for updating campaigns (for compatibility)
+export const PATCH = updateCampaign
+export const PUT = updateCampaign
+
+export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
   try {
-    const supabase = createServerSupabaseClient()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // Check if campaign exists and belongs to user
     const { data: campaign, error: fetchError } = await supabase
@@ -168,12 +142,49 @@ export async function DELETE(
       return NextResponse.json({ error: 'Failed to fetch campaign' }, { status: 500 })
     }
 
-    // Don't allow deletion of active campaigns
-    if (campaign.status === 'active') {
-      return NextResponse.json(
-        { error: 'Cannot delete active campaign. Please pause it first.' },
-        { status: 400 }
-      )
+    // Auto-stop active campaigns before deletion
+    if (['running', 'sending', 'active'].includes(campaign.status)) {
+      console.log(`Auto-stopping campaign ${params.id} before deletion`)
+      
+      try {
+        // Stop the campaign first
+        await supabase
+          .from('campaigns')
+          .update({ 
+            status: 'stopped',
+            stopped_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', params.id)
+          .eq('user_id', user.id)
+
+        // Try to stop campaign execution
+        try {
+          const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
+          await CampaignExecutionEngine.stopCampaign(params.id, supabase)
+          console.log(`Stopped campaign execution for ${params.id}`)
+        } catch (executionError) {
+          console.warn('Campaign execution stop error (continuing with deletion):', executionError)
+          // Continue with deletion even if execution stop fails
+        }
+      } catch (stopError) {
+        console.error('Error stopping campaign before deletion:', stopError)
+        return NextResponse.json(
+          { error: 'Failed to stop campaign before deletion. Please manually stop the campaign first.' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Delete related email tracking data first (if it exists)
+    try {
+      await supabase
+        .from('email_tracking')
+        .delete()
+        .eq('campaign_id', params.id)
+    } catch (trackingError) {
+      console.warn('Error deleting email tracking data:', trackingError)
+      // Continue with campaign deletion even if tracking cleanup fails
     }
 
     // Delete campaign
@@ -188,6 +199,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 })
     }
 
+    console.log(`Campaign ${params.id} deleted successfully by user ${user.id}`)
+
     return NextResponse.json({ message: 'Campaign deleted successfully' })
 
   } catch (error) {
@@ -197,4 +210,4 @@ export async function DELETE(
       { status: 500 }
     )
   }
-}
+})

@@ -33,12 +33,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { RescheduleCampaignDialog } from '@/components/campaigns/RescheduleCampaignDialog'
 import { StopCampaignDialog } from '@/components/campaigns/StopCampaignDialog'
+import { CampaignProgressBar } from '@/components/campaigns/CampaignProgressBar'
 
 interface Campaign {
   id: string
   name: string
   description: string
-  status: 'draft' | 'scheduled' | 'running' | 'paused' | 'stopped' | 'completed' | 'archived'
+  status: 'draft' | 'scheduled' | 'sending' | 'running' | 'paused' | 'stopped' | 'completed' | 'archived'
   contactCount: number
   emailsSent: number
   openRate: number
@@ -48,21 +49,28 @@ interface Campaign {
   completedAt?: string
   stoppedAt?: string
   nextSendAt?: string
+  total_contacts?: number
+  emails_delivered?: number
+  emails_opened?: number
+  emails_failed?: number
+  updated_at?: string
 }
 
 const STATUS_COLORS = {
   draft: 'bg-gray-100 text-gray-800',
   scheduled: 'bg-blue-100 text-blue-800',
+  sending: 'bg-blue-100 text-blue-800',
   running: 'bg-green-100 text-green-800',
   paused: 'bg-yellow-100 text-yellow-800',
   stopped: 'bg-red-100 text-red-800',
-  completed: 'bg-blue-100 text-blue-800',
+  completed: 'bg-green-100 text-green-800',
   archived: 'bg-gray-100 text-gray-800'
 }
 
 const STATUS_ICONS = {
   draft: '📝',
   scheduled: '📅',
+  sending: '📤',
   running: '🟢',
   paused: '⏸️',
   stopped: '🛑',
@@ -84,6 +92,26 @@ export default function CampaignsPage() {
     campaign: Campaign | null
   }>({ open: false, campaign: null })
 
+  // Handle real-time campaign progress updates
+  const handleProgressUpdate = (campaignId: string, updatedData: any) => {
+    setCampaigns(prev => 
+      prev.map(campaign => 
+        campaign.id === campaignId 
+          ? { 
+              ...campaign, 
+              emailsSent: updatedData.emails_sent || campaign.emailsSent,
+              total_contacts: updatedData.total_contacts || campaign.total_contacts,
+              emails_delivered: updatedData.emails_delivered || campaign.emails_delivered,
+              emails_opened: updatedData.emails_opened || campaign.emails_opened,
+              emails_failed: updatedData.emails_failed || campaign.emails_failed,
+              status: updatedData.status || campaign.status,
+              updated_at: updatedData.updated_at || campaign.updated_at
+            }
+          : campaign
+      )
+    )
+  }
+
   useEffect(() => {
     fetchCampaigns()
   }, [])
@@ -93,13 +121,19 @@ export default function CampaignsPage() {
       setLoading(true)
       const data = await ApiClient.get('/api/campaigns')
       
-      // Ensure data is an array
-      if (Array.isArray(data)) {
-        setCampaigns(data)
+      // Handle the API response structure - the API returns { success: true, data: campaigns }
+      let campaignsData = []
+      if (data.success && Array.isArray(data.data)) {
+        campaignsData = data.data
+      } else if (Array.isArray(data)) {
+        // Fallback for direct array response
+        campaignsData = data
       } else {
-        console.error('API returned non-array data:', data)
-        setCampaigns([]) // Set empty array as fallback
+        console.error('API returned unexpected data format:', data)
+        campaignsData = []
       }
+      
+      setCampaigns(campaignsData)
     } catch (error) {
       console.error('Error fetching campaigns:', error)
       setCampaigns([]) // Set empty array on error
@@ -218,6 +252,7 @@ export default function CampaignsPage() {
           { label: 'Launch Now', action: () => handleStatusChange(campaign.id, 'running'), icon: Play },
           { label: 'Reschedule Campaign', action: () => setRescheduleDialog({ open: true, campaign }), icon: Clock }
         ]
+      case 'sending':
       case 'running':
         return [
           { label: 'Pause Campaign', action: () => handleStatusChange(campaign.id, 'paused'), icon: Pause },
@@ -262,12 +297,19 @@ export default function CampaignsPage() {
             Manage your email outreach campaigns
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/campaigns/new">
-            <Plus className="h-4 w-4 mr-2" />
-            New Campaign
-          </Link>
-        </Button>
+        <div className="flex items-center space-x-3">
+          <Button asChild>
+            <Link href="/dashboard/campaigns/simple">
+              <Plus className="h-4 w-4 mr-2" />
+              Simple Campaign
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/campaigns/new">
+              Advanced Campaign
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -291,6 +333,7 @@ export default function CampaignsPage() {
           <option value="all">All Status</option>
           <option value="draft">Draft</option>
           <option value="scheduled">Scheduled</option>
+          <option value="sending">Sending</option>
           <option value="running">Running</option>
           <option value="paused">Paused</option>
           <option value="stopped">Stopped</option>
@@ -318,7 +361,7 @@ export default function CampaignsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Array.isArray(campaigns) ? campaigns.filter(c => c.status === 'running').length : 0}
+              {Array.isArray(campaigns) ? campaigns.filter(c => c.status === 'running' || c.status === 'sending').length : 0}
             </div>
           </CardContent>
         </Card>
@@ -356,46 +399,61 @@ export default function CampaignsPage() {
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
+                    <div className="flex items-center space-x-3 mb-3">
                       <h3 className="text-lg font-semibold">{campaign.name}</h3>
-                      <Badge className={STATUS_COLORS[campaign.status]}>
-                        {STATUS_ICONS[campaign.status]} {campaign.status}
-                      </Badge>
                     </div>
                     
                     {campaign.description && (
                       <p className="text-gray-600 mb-3">{campaign.description}</p>
                     )}
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                      <div className="flex items-center space-x-2">
-                        <Users className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm">
-                          {campaign.contactCount.toLocaleString()} contacts
-                        </span>
+                    {/* Progress Bar for Active Campaigns */}
+                    {(campaign.status === 'sending' || campaign.status === 'running' || campaign.status === 'paused' || campaign.status === 'completed') ? (
+                      <div className="mb-4">
+                        <CampaignProgressBar 
+                          campaign={campaign}
+                          showDetails={true}
+                          onProgressUpdate={handleProgressUpdate}
+                        />
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <Mail className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm">
-                          {campaign.emailsSent.toLocaleString()} sent
-                        </span>
+                    ) : (
+                      <div className="mb-4">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Badge className={STATUS_COLORS[campaign.status]}>
+                            {STATUS_ICONS[campaign.status]} {campaign.status}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="flex items-center space-x-2">
+                            <Users className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm">
+                              {campaign.contactCount.toLocaleString()} contacts
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <Mail className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm">
+                              {campaign.emailsSent.toLocaleString()} sent
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <TrendingUp className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm">
+                              {campaign.openRate}% open rate
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm">
+                              Created {formatDate(campaign.createdAt)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <TrendingUp className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm">
-                          {campaign.openRate}% open rate
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm">
-                          Created {formatDate(campaign.createdAt)}
-                        </span>
-                      </div>
-                    </div>
+                    )}
 
                     {campaign.status === 'running' && campaign.nextSendAt && (
                       <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full inline-flex">
@@ -471,12 +529,19 @@ export default function CampaignsPage() {
               }
             </p>
             {(!searchTerm && statusFilter === 'all') && (
-              <Button asChild>
-                <Link href="/dashboard/campaigns/new">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Campaign
-                </Link>
-              </Button>
+              <div className="flex items-center space-x-3">
+                <Button asChild>
+                  <Link href="/dashboard/campaigns/simple">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Simple Campaign
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/dashboard/campaigns/new">
+                    Advanced Campaign
+                  </Link>
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
