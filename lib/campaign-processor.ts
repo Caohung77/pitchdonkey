@@ -272,40 +272,55 @@ export class CampaignProcessor {
             emailsSent++
             console.log(`✅ Email ${i+1}/${contacts.length} sent to ${contact.email}`)
 
-            // Record successful send in tracking table
+            // Record successful send in tracking table (using actual database schema)
             await supabase
               .from('email_tracking')
               .insert({
+                user_id: campaign.user_id,
                 campaign_id: campaign.id,
                 contact_id: contact.id,
-                email_account_id: emailAccount.id,
-                step_number: 1,
-                status: 'sent',
-                subject: personalizedSubject,
-                content: personalizedContent,
-                personalized_content: personalizedContent,
-                tracking_pixel_id: trackingId,
+                message_id: trackingId, // Required unique field
                 sent_at: new Date().toISOString(),
+                // Note: removed status field as it doesn't exist in actual schema
               })
+
+            // Update campaign total_contacts if not set and trigger UI refresh
+            await supabase
+              .from('campaigns')
+              .update({
+                total_contacts: contacts.length,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', campaign.id)
+
+            console.log(`📊 Email ${emailsSent}/${contacts.length} sent and tracked`)
 
           } else {
             emailsFailed++
             console.log(`❌ Failed to send email ${i+1}/${contacts.length} to ${contact.email}: ${result.error}`)
 
-            // Record failed send
+            // Record failed send (using actual database schema)
             await supabase
               .from('email_tracking')
               .insert({
+                user_id: campaign.user_id,
                 campaign_id: campaign.id,
                 contact_id: contact.id,
-                email_account_id: emailAccount.id,
-                step_number: 1,
-                status: 'failed',
-                subject: personalizedSubject,
-                content: personalizedContent,
+                message_id: `failed_${trackingId}`, // Required unique field
+                bounced_at: new Date().toISOString(), // Use bounced_at for failed emails
                 bounce_reason: result.error,
-                created_at: new Date().toISOString(),
               })
+
+            // Update campaign total_contacts if not set and trigger UI refresh
+            await supabase
+              .from('campaigns')
+              .update({
+                total_contacts: contacts.length,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', campaign.id)
+
+            console.log(`📊 Email ${i+1}/${contacts.length} failed and tracked`)
           }
 
           // Apply rate limiting delay (30-60 seconds between emails)
@@ -318,6 +333,17 @@ export class CampaignProcessor {
         } catch (error) {
           emailsFailed++
           console.error(`❌ Error sending to ${contact.email}:`, error)
+          
+          // Update campaign total_contacts if not set and trigger UI refresh
+          await supabase
+            .from('campaigns')
+            .update({
+              total_contacts: contacts.length,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', campaign.id)
+
+          console.log(`📊 Email ${i+1}/${contacts.length} error handled`)
         }
       }
 

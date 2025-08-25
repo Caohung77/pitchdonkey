@@ -13,7 +13,8 @@ import {
   TrendingUp,
   Pause,
   Play,
-  Square
+  Square,
+  RefreshCw
 } from 'lucide-react'
 import { createClientSupabase } from '@/lib/supabase-client'
 
@@ -69,9 +70,12 @@ export function CampaignProgressBar({
   const openRate = progress.delivered > 0 ? Math.round((progress.opened / progress.delivered) * 100) : 0
   const queuedEmails = Math.max(0, progress.total - progress.sent - progress.failed)
 
-  // Real-time subscription for campaign updates
+  // Real-time subscription for campaign updates + auto-refresh during sending
   useEffect(() => {
     const supabase = createClientSupabase()
+    
+    // Fetch initial progress
+    fetchLatestProgress()
     
     // Subscribe to campaign updates
     const campaignSubscription = supabase
@@ -85,23 +89,24 @@ export function CampaignProgressBar({
           filter: `id=eq.${campaign.id}`
         },
         (payload) => {
-          const updatedCampaign = payload.new as any
-          setProgress(prev => ({
-            ...prev,
-            total: updatedCampaign.total_contacts || prev.total,
-            sent: updatedCampaign.emails_sent || 0,
-            delivered: updatedCampaign.emails_delivered || 0,
-            opened: updatedCampaign.emails_opened || 0,
-            failed: updatedCampaign.emails_failed || 0,
-            lastUpdated: updatedCampaign.updated_at
-          }))
-          
-          onProgressUpdate?.(campaign.id, updatedCampaign)
+          console.log(`📈 Campaign updated for ${campaign.id}:`, payload.new)
+          // Re-fetch actual progress instead of relying on campaign fields
+          fetchLatestProgress()
+          onProgressUpdate?.(campaign.id, payload.new)
         }
       )
       .subscribe()
 
-    // Subscribe to email tracking updates
+    // Auto-refresh every 10 seconds when campaign is actively sending
+    let refreshInterval: NodeJS.Timeout | null = null
+    if (campaign.status === 'sending' || campaign.status === 'running') {
+      refreshInterval = setInterval(() => {
+        console.log(`🔄 Auto-refreshing progress for sending campaign ${campaign.id}`)
+        fetchLatestProgress()
+      }, 10000) // Refresh every 10 seconds
+    }
+
+    // Subscribe to email tracking updates - this is key for real-time progress
     const trackingSubscription = supabase
       .channel(`tracking-${campaign.id}`)
       .on(
@@ -112,8 +117,23 @@ export function CampaignProgressBar({
           table: 'email_tracking',
           filter: `campaign_id=eq.${campaign.id}`
         },
-        () => {
+        (payload) => {
+          console.log(`📧 New email tracked for campaign ${campaign.id}:`, payload.new)
           // Refresh progress stats when new tracking records are added
+          fetchLatestProgress()
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'email_tracking',
+          filter: `campaign_id=eq.${campaign.id}`
+        },
+        (payload) => {
+          console.log(`📧 Email tracking updated for campaign ${campaign.id}:`, payload.new)
+          // Refresh progress when tracking records are updated (e.g., opened, clicked)
           fetchLatestProgress()
         }
       )
@@ -122,10 +142,13 @@ export function CampaignProgressBar({
     return () => {
       campaignSubscription.unsubscribe()
       trackingSubscription.unsubscribe()
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+      }
     }
   }, [campaign.id, onProgressUpdate])
 
-  // Fetch latest progress from database
+  // Fetch latest progress from database by counting actual email tracking records
   const fetchLatestProgress = async () => {
     try {
       setIsLoading(true)
@@ -134,20 +157,35 @@ export function CampaignProgressBar({
       // Get updated campaign stats
       const { data: campaignData } = await supabase
         .from('campaigns')
-        .select('total_contacts, emails_sent, emails_delivered, emails_opened, emails_failed, updated_at')
+        .select('total_contacts, updated_at')
         .eq('id', campaign.id)
         .single()
 
+      // Count actual emails from tracking table using timestamp fields (matches actual schema)
+      const { data: emailStats } = await supabase
+        .from('email_tracking')
+        .select('sent_at, delivered_at, opened_at, bounced_at')
+        .eq('campaign_id', campaign.id)
+
+      // Count emails based on timestamp fields (matches actual database schema)
+      const sentCount = emailStats?.filter(e => e.sent_at !== null).length || 0
+      const deliveredCount = emailStats?.filter(e => e.delivered_at !== null).length || sentCount // Default to sent if no delivery tracking
+      const failedCount = emailStats?.filter(e => e.bounced_at !== null).length || 0
+      const openedCount = emailStats?.filter(e => e.opened_at !== null).length || 0
+
       if (campaignData) {
-        setProgress(prev => ({
-          ...prev,
-          total: campaignData.total_contacts || prev.total,
-          sent: campaignData.emails_sent || 0,
-          delivered: campaignData.emails_delivered || 0,
-          opened: campaignData.emails_opened || 0,
-          failed: campaignData.emails_failed || 0,
+        const newProgress = {
+          total: campaignData.total_contacts || campaign.contactCount || campaign.total_contacts || 0,
+          sent: sentCount,
+          delivered: deliveredCount,
+          opened: openedCount || 0,
+          failed: failedCount,
+          queued: Math.max(0, (campaignData.total_contacts || 0) - sentCount - failedCount),
           lastUpdated: campaignData.updated_at
-        }))
+        }
+        
+        console.log(`📊 Real progress for campaign ${campaign.id}:`, newProgress)
+        setProgress(newProgress)
       }
 
       // Calculate estimated time remaining for sending campaigns
@@ -249,6 +287,16 @@ export function CampaignProgressBar({
           </Badge>
           {isLoading && (
             <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+          )}
+          {(campaign.status === 'sending' || campaign.status === 'running') && (
+            <button
+              onClick={fetchLatestProgress}
+              disabled={isLoading}
+              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              title="Refresh progress"
+            >
+              <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
           )}
         </div>
         

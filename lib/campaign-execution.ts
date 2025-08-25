@@ -344,20 +344,25 @@ export class CampaignExecutionEngine {
         .eq('contact_id', job.contact_id)
         .eq('campaign_id', job.campaign_id)
 
-      // Create email tracking record
+      // Trigger UI refresh by updating campaign timestamp
+      await supabaseClient
+        .from('campaigns')
+        .update({
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', job.campaign_id)
+
+      console.log(`📊 Sequence email sent and tracked for campaign ${job.campaign_id}`)
+
+      // Create email tracking record (using actual database schema)
       await supabaseClient
         .from('email_tracking')
         .insert({
+          user_id: campaign.user_id,
           campaign_id: job.campaign_id,
           contact_id: job.contact_id,
-          email_account_id: job.email_account_id,
-          step_number: job.step_number,
-          status: 'sent',
-          subject: personalizedSubject,
-          content: personalizedContent,
-          ab_test_variant: progress.ab_test_variant,
+          message_id: job.id, // Required unique field
           sent_at: new Date().toISOString(),
-          tracking_pixel_id: job.id
         })
 
       // Schedule next step if applicable
