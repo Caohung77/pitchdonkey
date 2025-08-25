@@ -83,6 +83,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [fixingStuckCampaigns, setFixingStuckCampaigns] = useState(false)
   const [rescheduleDialog, setRescheduleDialog] = useState<{
     open: boolean
     campaign: Campaign | null
@@ -110,6 +111,37 @@ export default function CampaignsPage() {
           : campaign
       )
     )
+  }
+
+  const fixStuckCampaigns = async () => {
+    setFixingStuckCampaigns(true)
+    try {
+      const response = await fetch('/api/campaigns/fix-stuck-campaigns', {
+        method: 'POST',
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        console.log('✅ Fixed stuck campaigns:', result)
+        // Refresh campaigns to show updated statuses
+        fetchCampaigns()
+        
+        if (result.campaigns_fixed > 0) {
+          alert(`Fixed ${result.campaigns_fixed} stuck campaigns!`)
+        } else {
+          alert('No stuck campaigns found.')
+        }
+      } else {
+        console.error('❌ Failed to fix stuck campaigns:', result.error)
+        alert('Failed to fix stuck campaigns. Check console for details.')
+      }
+    } catch (error) {
+      console.error('❌ Error fixing stuck campaigns:', error)
+      alert('Error fixing stuck campaigns. Check console for details.')
+    } finally {
+      setFixingStuckCampaigns(false)
+    }
   }
 
   useEffect(() => {
@@ -309,6 +341,15 @@ export default function CampaignsPage() {
               Advanced Campaign
             </Link>
           </Button>
+          <Button 
+            variant="secondary" 
+            size="sm"
+            onClick={fixStuckCampaigns}
+            disabled={fixingStuckCampaigns}
+            title="Fix campaigns stuck in 'Sending' status"
+          >
+            {fixingStuckCampaigns ? 'Fixing...' : 'Fix Status'}
+          </Button>
         </div>
       </div>
 
@@ -404,7 +445,17 @@ export default function CampaignsPage() {
                     </div>
                     
                     {campaign.description && (
-                      <p className="text-gray-600 mb-3">{campaign.description}</p>
+                      <p className="text-gray-600 mb-3">
+                        {(() => {
+                          // Parse JSON description if it exists, otherwise use raw description
+                          try {
+                            const descData = JSON.parse(campaign.description)
+                            return descData.description || campaign.description
+                          } catch (e) {
+                            return campaign.description
+                          }
+                        })()}
+                      </p>
                     )}
 
                     {/* Progress Bar for Active Campaigns */}

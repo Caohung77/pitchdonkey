@@ -360,17 +360,24 @@ export class CampaignProcessor {
 
       // Update campaign statistics and mark as completed
       const campaignStatus = emailsSent > 0 ? 'completed' : 'paused'
+      const updateData: any = {
+        total_contacts: contacts.length,
+        status: campaignStatus,
+        updated_at: new Date().toISOString()
+      }
+      
+      // Add completion timestamp if completed
+      if (campaignStatus === 'completed') {
+        updateData.completed_at = new Date().toISOString()
+      }
+      
       await supabase
         .from('campaigns')
-        .update({
-          total_contacts: contacts.length,
-          status: campaignStatus,
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', campaign.id)
 
       console.log(`🎉 Campaign ${campaign.name} ${campaignStatus}! Sent: ${emailsSent}, Failed: ${emailsFailed}`)
+      console.log(`📊 Campaign status updated to: ${campaignStatus}`)
 
     } catch (error) {
       console.error(`❌ Error in simple campaign processing:`, error)
