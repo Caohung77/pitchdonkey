@@ -106,6 +106,36 @@ export function CampaignProgressBar({
       }, 10000) // Refresh every 10 seconds
     }
 
+    // Also refresh every 30 seconds for campaigns that might be stuck
+    let stuckCheckInterval: NodeJS.Timeout | null = null
+    if (campaign.status === 'sending' || campaign.status === 'running') {
+      stuckCheckInterval = setInterval(() => {
+        console.log(`🔍 Checking for stuck campaign ${campaign.id}`)
+        // Force check completion by calling the API directly
+        fetch(`/api/campaigns/${campaign.id}/check-completion`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+        .then(response => response.json())
+        .then(result => {
+          console.log(`📊 Stuck check result for ${campaign.id}:`, result)
+          if (result.success && (result.new_status === 'completed' || result.current_status === 'completed')) {
+            console.log(`✅ Found completed campaign ${campaign.id}, updating UI`)
+            onProgressUpdate?.(campaign.id, { 
+              ...campaign, 
+              status: 'completed', 
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            fetchLatestProgress() // Also refresh the progress display
+          }
+        })
+        .catch(error => console.error('Stuck check error:', error))
+      }, 30000) // Check every 30 seconds for stuck campaigns
+    }
+
     // Subscribe to email tracking updates - this is key for real-time progress
     const trackingSubscription = supabase
       .channel(`tracking-${campaign.id}`)
@@ -144,6 +174,9 @@ export function CampaignProgressBar({
       trackingSubscription.unsubscribe()
       if (refreshInterval) {
         clearInterval(refreshInterval)
+      }
+      if (stuckCheckInterval) {
+        clearInterval(stuckCheckInterval)
       }
     }
   }, [campaign.id, onProgressUpdate])
@@ -187,13 +220,12 @@ export function CampaignProgressBar({
         console.log(`📊 Real progress for campaign ${campaign.id}:`, newProgress)
         setProgress(newProgress)
         
-        // Auto-complete campaign if 100% sent and still in sending status
-        if (newProgress.sent >= newProgress.total && 
-            newProgress.total > 0 && 
-            (campaign.status === 'sending' || campaign.status === 'running')) {
-          console.log(`🎉 Campaign ${campaign.id} reached 100%, checking completion...`)
+        // Auto-complete campaign if 100% sent (check regardless of current status to handle stuck campaigns)
+        if (newProgress.sent >= newProgress.total && newProgress.total > 0) {
+          console.log(`🎉 Campaign ${campaign.id} reached 100% (${newProgress.sent}/${newProgress.total}), checking completion...`)
+          console.log(`📊 Current campaign status: ${campaign.status}`)
           
-          // Call the completion check API
+          // Call the completion check API regardless of current status to fix stuck campaigns
           try {
             const response = await fetch(`/api/campaigns/${campaign.id}/check-completion`, {
               method: 'POST',
@@ -202,10 +234,20 @@ export function CampaignProgressBar({
               },
             })
             const result = await response.json()
-            console.log(`📊 Completion check result:`, result)
+            console.log(`📊 Completion check API result:`, result)
             
             // If campaign was marked as completed, notify parent component
             if (result.success && result.new_status === 'completed') {
+              console.log(`✅ Campaign ${campaign.id} marked as completed, updating UI...`)
+              onProgressUpdate?.(campaign.id, { 
+                ...campaign, 
+                status: 'completed', 
+                completed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+            } else if (result.success && result.current_status === 'completed') {
+              // Campaign is already completed, just update the UI
+              console.log(`✅ Campaign ${campaign.id} is already completed, updating UI...`)
               onProgressUpdate?.(campaign.id, { 
                 ...campaign, 
                 status: 'completed', 

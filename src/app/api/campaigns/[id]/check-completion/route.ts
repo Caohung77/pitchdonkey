@@ -25,11 +25,40 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
 
-    // Only check completion for sending campaigns
-    if (campaign.status !== 'sending' && campaign.status !== 'running') {
+    // If already completed, just return current status
+    if (campaign.status === 'completed') {
       return NextResponse.json({ 
         success: true, 
-        message: 'Campaign is not in sending status',
+        message: 'Campaign is already completed',
+        current_status: campaign.status
+      })
+    }
+
+    // Only auto-complete sending/running campaigns, but allow checking others for debugging
+    if (campaign.status !== 'sending' && campaign.status !== 'running') {
+      // Still do the progress check for debugging, but don't auto-complete
+      const { data: emailStats, error: statsError } = await supabase
+        .from('email_tracking')
+        .select('sent_at')
+        .eq('campaign_id', campaignId)
+
+      if (!statsError) {
+        const sentCount = emailStats?.filter(e => e.sent_at !== null).length || 0
+        const totalContacts = campaign.total_contacts || 0
+        
+        return NextResponse.json({ 
+          success: true, 
+          message: `Campaign status is ${campaign.status}, not auto-completing`,
+          current_status: campaign.status,
+          sent_count: sentCount,
+          total_contacts: totalContacts,
+          completion_percentage: totalContacts > 0 ? Math.round((sentCount / totalContacts) * 100) : 0
+        })
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        message: `Campaign status is ${campaign.status}, not in sending status`,
         current_status: campaign.status
       })
     }

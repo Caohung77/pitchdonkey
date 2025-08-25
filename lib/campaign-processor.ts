@@ -306,6 +306,20 @@ export class CampaignProcessor {
 
             console.log(`📊 Email ${emailsSent}/${contacts.length} sent and tracked`)
 
+            // Check if this was the last email - if so, mark campaign as completed immediately
+            if (emailsSent === contacts.length) {
+              console.log(`🎉 Last email sent! Marking campaign ${campaign.id} as completed`)
+              await supabase
+                .from('campaigns')
+                .update({
+                  status: 'completed',
+                  completed_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', campaign.id)
+              console.log(`✅ Campaign ${campaign.id} marked as completed immediately`)
+            }
+
           } else {
             emailsFailed++
             console.log(`❌ Failed to send email ${i+1}/${contacts.length} to ${contact.email}: ${result.error}`)
