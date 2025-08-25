@@ -186,6 +186,37 @@ export function CampaignProgressBar({
         
         console.log(`📊 Real progress for campaign ${campaign.id}:`, newProgress)
         setProgress(newProgress)
+        
+        // Auto-complete campaign if 100% sent and still in sending status
+        if (newProgress.sent >= newProgress.total && 
+            newProgress.total > 0 && 
+            (campaign.status === 'sending' || campaign.status === 'running')) {
+          console.log(`🎉 Campaign ${campaign.id} reached 100%, checking completion...`)
+          
+          // Call the completion check API
+          try {
+            const response = await fetch(`/api/campaigns/${campaign.id}/check-completion`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            })
+            const result = await response.json()
+            console.log(`📊 Completion check result:`, result)
+            
+            // If campaign was marked as completed, notify parent component
+            if (result.success && result.new_status === 'completed') {
+              onProgressUpdate?.(campaign.id, { 
+                ...campaign, 
+                status: 'completed', 
+                completed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+            }
+          } catch (error) {
+            console.error('Failed to check campaign completion:', error)
+          }
+        }
       }
 
       // Calculate estimated time remaining for sending campaigns

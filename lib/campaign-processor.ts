@@ -347,19 +347,19 @@ export class CampaignProcessor {
         }
       }
 
-      // Update campaign statistics
+      // Update campaign statistics and mark as completed
+      const campaignStatus = emailsSent > 0 ? 'completed' : 'paused'
       await supabase
         .from('campaigns')
         .update({
-          emails_sent: emailsSent,
           total_contacts: contacts.length,
-          status: emailsSent > 0 ? 'completed' : 'paused',
+          status: campaignStatus,
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', campaign.id)
 
-      console.log(`🎉 Campaign ${campaign.name} completed! Sent: ${emailsSent}, Failed: ${emailsFailed}`)
+      console.log(`🎉 Campaign ${campaign.name} ${campaignStatus}! Sent: ${emailsSent}, Failed: ${emailsFailed}`)
 
     } catch (error) {
       console.error(`❌ Error in simple campaign processing:`, error)
