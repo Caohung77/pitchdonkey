@@ -255,6 +255,16 @@ export class CampaignProcessor {
           // Generate tracking ID
           const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
 
+          // Extract sender name from campaign description (if stored as JSON)
+          let senderName = ''
+          try {
+            const descriptionData = JSON.parse(campaign.description || '{}')
+            senderName = descriptionData.sender_name || ''
+          } catch (e) {
+            // If description is not JSON, it's just a regular description
+            senderName = ''
+          }
+
           // Personalize content
           const personalizedSubject = this.personalizeContent(campaign.email_subject, contact)
           const personalizedContent = this.personalizeContent(campaign.html_content, contact)
@@ -265,7 +275,8 @@ export class CampaignProcessor {
             subject: personalizedSubject,
             content: personalizedContent,
             emailAccount: emailAccount,
-            trackingId: trackingId
+            trackingId: trackingId,
+            senderName: senderName
           })
 
           if (result.status === 'sent') {
@@ -386,6 +397,7 @@ export class CampaignProcessor {
     content: string
     emailAccount: any
     trackingId: string
+    senderName?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
     
@@ -418,8 +430,11 @@ export class CampaignProcessor {
           htmlContent = `${htmlContent}${trackingPixel}`
         }
 
+        // Determine sender name priority: custom sender_name > email account display_name > default
+        const senderName = params.senderName || params.emailAccount.display_name || 'ColdReach Pro'
+        
         const info = await transporter.sendMail({
-          from: `"${params.emailAccount.display_name || 'ColdReach Pro'}" <${params.emailAccount.email}>`,
+          from: `"${senderName}" <${params.emailAccount.email}>`,
           to: params.to,
           subject: params.subject,
           text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version

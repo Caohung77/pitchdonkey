@@ -7,6 +7,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
     const {
       name,
       description,
+      sender_name,
       email_subject,
       html_content,
       contact_list_ids,
@@ -52,7 +53,10 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       .insert({
         user_id: user.id,
         name,
-        description: description || '',
+        description: JSON.stringify({
+          description: description || '',
+          sender_name: sender_name || ''
+        }),
         status,
         email_subject,
         html_content,

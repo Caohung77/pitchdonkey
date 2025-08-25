@@ -25,6 +25,7 @@ import {
 interface SimpleCampaignData {
   name: string
   description: string
+  sender_name: string
   email_subject: string
   html_content: string
   contact_list_ids: string[]
@@ -53,6 +54,7 @@ export default function SimpleCampaignPage() {
   const [campaignData, setCampaignData] = useState<SimpleCampaignData>({
     name: '',
     description: '',
+    sender_name: '',
     email_subject: '',
     html_content: '',
     contact_list_ids: [],
@@ -321,6 +323,26 @@ export default function SimpleCampaignPage() {
       case 1:
         return (
           <div className="space-y-6">
+            {/* Sender Name Field */}
+            <div>
+              <label htmlFor="sender_name" className="block text-sm font-medium text-gray-700 mb-2">
+                Sender Name
+              </label>
+              <input
+                type="text"
+                id="sender_name"
+                name="sender_name"
+                value={campaignData.sender_name}
+                onChange={(e) => setCampaignData(prev => ({ ...prev, sender_name: e.target.value }))}
+                placeholder="Your name or company name (e.g., John Doe, Acme Corp)"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                This will appear as the sender name in the recipient's inbox. Leave empty to use your email account's display name.
+              </p>
+              {errors.sender_name && <p className="text-red-500 text-sm mt-1">{errors.sender_name}</p>}
+            </div>
+
             <HTMLEmailEditor
               subject={campaignData.email_subject}
               htmlContent={campaignData.html_content}
