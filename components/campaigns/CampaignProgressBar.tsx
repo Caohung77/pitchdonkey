@@ -197,11 +197,25 @@ export function CampaignProgressBar({
           // IMMEDIATE CHECK: Don't wait, check database immediately
           const checkCompletion = async () => {
             try {
-              const { data: updatedCampaign } = await supabase
+              // Check if user is authenticated first
+              const { data: { user }, error: authError } = await supabase.auth.getUser()
+              if (authError || !user) {
+                console.error('🚨 User not authenticated, cannot check campaign status:', authError)
+                return
+              }
+              
+              console.log(`🔍 Checking completion status for campaign: ${campaign.id} (user: ${user.id})`)
+              
+              const { data: updatedCampaign, error: queryError } = await supabase
                 .from('campaigns')
                 .select('status, completed_at')
                 .eq('id', campaign.id)
                 .single()
+              
+              if (queryError) {
+                console.error(`❌ Query error for campaign ${campaign.id}:`, queryError)
+                throw queryError
+              }
               
               console.log(`📊 Database status for campaign ${campaign.id}:`, updatedCampaign?.status)
               
@@ -219,7 +233,18 @@ export function CampaignProgressBar({
                 setTimeout(checkCompletion, 3000)
               }
             } catch (error) {
-              console.log(`⚠️ Could not check completion status for campaign ${campaign.id}:`, error)
+              console.error(`❌ Campaign completion check failed for ${campaign.id}:`, {
+                error: error?.message || error,
+                code: error?.code,
+                details: error?.details,
+                hint: error?.hint
+              })
+              
+              // If we get authentication or RLS errors, stop retrying
+              if (error?.code === 'PGRST301' || error?.code === '42501' || error?.message?.includes('400') || error?.message?.includes('permission denied')) {
+                console.error('🚨 Authentication or RLS policy error - stopping retries for campaign', campaign.id)
+                return
+              }
             }
           }
           
