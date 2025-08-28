@@ -17,25 +17,43 @@ import {
   AlignLeft,
   AlignCenter,
   Image,
-  Palette
+  Palette,
+  Sparkles
 } from 'lucide-react'
+import { AIGeneratorModal } from './AIGeneratorModal'
+import { EmailPreviewModal } from './EmailPreviewModal'
 
 interface HTMLEmailEditorProps {
   subject: string
   htmlContent: string
   onSubjectChange: (subject: string) => void
   onContentChange: (content: string) => void
+  contactLists?: Array<{
+    id: string
+    name: string
+    contacts?: Array<{
+      id: string
+      first_name: string
+      last_name: string
+      company_name: string
+      email: string
+    }>
+  }>
 }
 
 export function HTMLEmailEditor({ 
   subject, 
   htmlContent, 
   onSubjectChange, 
-  onContentChange 
+  onContentChange,
+  contactLists = []
 }: HTMLEmailEditorProps) {
-  const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [editorContent, setEditorContent] = useState(htmlContent)
+  
+  // Modal states
+  const [showAIGenerator, setShowAIGenerator] = useState(false)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
 
   useEffect(() => {
     setEditorContent(htmlContent)
@@ -44,6 +62,12 @@ export function HTMLEmailEditor({
   const handleContentChange = (content: string) => {
     setEditorContent(content)
     onContentChange(content)
+  }
+
+  // Handle AI generation callback
+  const handleAIGenerated = (subject: string, htmlContent: string) => {
+    onSubjectChange(subject)
+    handleContentChange(htmlContent)
   }
 
   const insertTemplate = (template: string) => {
@@ -145,47 +169,21 @@ export function HTMLEmailEditor({
     handleContentChange(newContent)
   }
 
-  const getPreviewContent = () => {
-    if (!editorContent) return ''
-    
-    // Create a safe preview by properly replacing template variables
-    let previewContent = editorContent
-    
-    // Replace template variables with sample data for preview
-    // Handle both HTML-encoded and regular curly braces safely
-    const replacements = [
-      // HTML entity encoded variables (from templates)
-      { pattern: /&#123;&#123;\s*first_name\s*&#125;&#125;/g, value: 'John' },
-      { pattern: /&#123;&#123;\s*last_name\s*&#125;&#125;/g, value: 'Smith' },
-      { pattern: /&#123;&#123;\s*email\s*&#125;&#125;/g, value: 'john.smith@example.com' },
-      { pattern: /&#123;&#123;\s*company\s*&#125;&#125;/g, value: 'Acme Corp' },
-      { pattern: /&#123;&#123;\s*sender_name\s*&#125;&#125;/g, value: 'Your Name' },
-      { pattern: /&#123;&#123;\s*company_name\s*&#125;&#125;/g, value: 'Your Company' },
-      
-      // Regular curly braces (user input)
-      { pattern: /\{\{\s*first_name\s*\}\}/g, value: 'John' },
-      { pattern: /\{\{\s*last_name\s*\}\}/g, value: 'Smith' },
-      { pattern: /\{\{\s*email\s*\}\}/g, value: 'john.smith@example.com' },
-      { pattern: /\{\{\s*company\s*\}\}/g, value: 'Acme Corp' },
-      { pattern: /\{\{\s*sender_name\s*\}\}/g, value: 'Your Name' },
-      { pattern: /\{\{\s*company_name\s*\}\}/g, value: 'Your Company' }
-    ]
-    
-    // Apply all replacements safely
-    replacements.forEach(({ pattern, value }) => {
-      previewContent = previewContent.replace(pattern, value)
-    })
-    
-    // Sanitize any remaining template variables to prevent JavaScript execution
-    // Replace any remaining {{ }} patterns with safe placeholder text
-    previewContent = previewContent.replace(/\{\{\s*[^}]*\s*\}\}/g, '[VARIABLE]')
-    previewContent = previewContent.replace(/&#123;&#123;\s*[^}]*\s*&#125;&#125;/g, '[VARIABLE]')
-    
-    return previewContent
-  }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-none space-y-6">
+      {/* AI Generator Button */}
+      <div className="flex justify-center">
+        <Button
+          variant="outline"
+          onClick={() => setShowAIGenerator(true)}
+          className="flex items-center"
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
+          AI Email Generator
+        </Button>
+      </div>
+
       {/* Subject Line */}
       <div>
         <label className="block text-sm font-medium mb-2">Email Subject *</label>
@@ -228,23 +226,22 @@ export function HTMLEmailEditor({
                 </Button>
               </div>
 
-              {/* Preview Toggle */}
+              {/* Preview Button */}
               <Button
-                variant={isPreviewMode ? 'default' : 'outline'}
+                variant="outline"
                 size="sm"
-                onClick={() => setIsPreviewMode(!isPreviewMode)}
+                onClick={() => setShowPreviewModal(true)}
               >
-                {isPreviewMode ? <Code className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-                {isPreviewMode ? 'Edit' : 'Preview'}
+                <Eye className="h-4 w-4 mr-2" />
+                Preview
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Templates */}
-          {!isPreviewMode && (
-            <div className="border-b pb-4">
-              <h4 className="font-medium mb-3">Quick Templates</h4>
+          <div className="border-b pb-4">
+            <h4 className="font-medium mb-3">Quick Templates</h4>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => insertTemplate('basic')}>
                   Basic Template
@@ -257,11 +254,9 @@ export function HTMLEmailEditor({
                 </Button>
               </div>
             </div>
-          )}
 
           {/* Variables */}
-          {!isPreviewMode && (
-            <div className="border-b pb-4">
+          <div className="border-b pb-4">
               <h4 className="font-medium mb-3">Personalization Variables</h4>
               <div className="flex flex-wrap gap-2">
                 <Badge 
@@ -294,35 +289,25 @@ export function HTMLEmailEditor({
                 </Badge>
               </div>
             </div>
-          )}
 
-          {/* Editor/Preview */}
-          <div className={`${viewMode === 'mobile' ? 'max-w-sm mx-auto' : 'w-full'}`}>
-            {isPreviewMode ? (
-              <div className="border border-gray-200 rounded-md min-h-[400px] p-4 bg-white">
-                <div dangerouslySetInnerHTML={{ 
-                  __html: getPreviewContent() || '<p style="color: #999; font-style: italic;">No content yet. Switch to Edit mode to start writing your email.</p>' 
-                }} />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                  rows={15}
-                  placeholder="Start typing your HTML email content here, or use a template above..."
-                  value={editorContent}
-                  onChange={(e) => handleContentChange(e.target.value)}
-                />
-                <p className="text-xs text-gray-500">
-                  💡 Tip: Use HTML for formatting. Templates above include responsive CSS styling.
-                </p>
-              </div>
-            )}
+          {/* Email Editor */}
+          <div className="w-full">
+            <div className="space-y-3">
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                rows={15}
+                placeholder="Start typing your HTML email content here, or use a template above..."
+                value={editorContent}
+                onChange={(e) => handleContentChange(e.target.value)}
+              />
+              <p className="text-xs text-gray-500">
+                💡 Tip: Use HTML for formatting. Templates above include responsive CSS styling.
+              </p>
+            </div>
           </div>
 
           {/* Help Text */}
-          {!isPreviewMode && (
-            <div className="bg-blue-50 p-4 rounded-lg">
+          <div className="bg-blue-50 p-4 rounded-lg">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
                   <Type className="h-5 w-5 text-blue-600" />
@@ -338,9 +323,26 @@ export function HTMLEmailEditor({
                 </div>
               </div>
             </div>
-          )}
         </CardContent>
       </Card>
+
+      {/* AI Generator Modal */}
+      <AIGeneratorModal
+        isOpen={showAIGenerator}
+        onClose={() => setShowAIGenerator(false)}
+        onGenerated={handleAIGenerated}
+        contactLists={contactLists}
+      />
+
+      {/* Preview Modal */}
+      <EmailPreviewModal
+        isOpen={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        subject={subject}
+        htmlContent={editorContent}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
     </div>
   )
 }

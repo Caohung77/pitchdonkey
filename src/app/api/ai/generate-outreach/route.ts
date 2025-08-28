@@ -1,0 +1,163 @@
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import { ValidationError } from '@/lib/errors'
+
+interface OutreachGenerationRequest {
+  purpose: string
+  language: 'English' | 'German'
+  signature: string
+}
+
+// Expert outreach email agent prompt
+const OUTREACH_AGENT_PROMPT = `You are an expert outreach email copywriter.  
+Your job is to write **concise, high-response emails** tailored to the given purpose and language.  
+
+Follow these rules strictly:
+1. Start with a compelling subject line (relevant, personal, not spammy) - USE personalization variables like {{first_name}} and {{company}} in the subject when appropriate.
+2. Personalize the opening by referencing something about the recipient (use {{first_name}} and {{company}} variables effectively).
+3. Communicate value quickly—make it clear how this benefits the recipient.
+4. Keep it **short (75–150 words)** and scannable.
+5. Use one clear call-to-action (CTA).
+6. Maintain professional but warm tone.
+7. Include the provided signature at the end with proper HTML formatting and line breaks.
+8. Output clean HTML with inline CSS (max-width: 600px, simple personal email styling - NOT newsletter style).
+9. Use Arial or similar web-safe fonts.
+10. Make it look like a personal email, not a marketing newsletter.
+
+Generate a complete email including the signature. The signature should be properly formatted with line breaks.
+
+Purpose: {{purpose}}
+Language: {{language}} 
+Signature: {{signature}}
+
+You must return a JSON object with exactly this structure:
+{
+  "subject": "Your generated subject line with {{variables}} if appropriate",
+  "htmlContent": "Complete HTML email content including the signature"
+}
+
+The HTML should be clean, simple, and personal-looking. Include the signature at the bottom with proper HTML formatting.`
+
+export const POST = withAuth(async (request: NextRequest, user) => {
+  try {
+    const body: OutreachGenerationRequest = await request.json()
+    
+    // Validate input
+    if (!body.purpose?.trim()) {
+      throw new ValidationError('Purpose is required')
+    }
+    if (!body.signature?.trim()) {
+      throw new ValidationError('Signature is required')  
+    }
+    if (!['English', 'German'].includes(body.language)) {
+      throw new ValidationError('Language must be English or German')
+    }
+
+    console.log('🤖 Generating outreach email:', { 
+      purpose: body.purpose.substring(0, 100) + '...',
+      language: body.language,
+      signatureLength: body.signature.length
+    })
+
+    // Initialize Google Gemini AI
+    if (!process.env.GOOGLE_GEMINI_API_KEY) {
+      throw new ValidationError('Google Gemini API key not configured')
+    }
+
+    console.log('🔑 Using Gemini API key:', process.env.GOOGLE_GEMINI_API_KEY?.substring(0, 10) + '...')
+    
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY)
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+
+    // Prepare the prompt with user inputs
+    const prompt = OUTREACH_AGENT_PROMPT
+      .replace('{{purpose}}', body.purpose)
+      .replace('{{language}}', body.language)
+      .replace('{{signature}}', body.signature)
+
+    console.log('📝 Generated prompt length:', prompt.length)
+
+    // Generate content using Gemini
+    let generatedContent: string
+    try {
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      generatedContent = response.text()
+
+      console.log('✅ Gemini API response received, length:', generatedContent?.length || 0)
+      console.log('📄 Generated content preview:', generatedContent?.substring(0, 200) + '...')
+
+      if (!generatedContent) {
+        throw new ValidationError('Failed to generate email content - empty response')
+      }
+    } catch (geminiError: any) {
+      console.error('🚨 Gemini API Error:', {
+        message: geminiError.message,
+        code: geminiError.code,
+        status: geminiError.status
+      })
+      throw new ValidationError(`Gemini API error: ${geminiError.message || 'Unknown error'}`)
+    }
+
+    // Try to parse as JSON first (if the AI returned JSON format)
+    let parsedResponse
+    try {
+      // Look for JSON in the response
+      const jsonMatch = generatedContent.match(/\{[\s\S]*"subject"[\s\S]*"htmlContent"[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedResponse = JSON.parse(jsonMatch[0])
+      }
+    } catch (e) {
+      // If JSON parsing fails, we'll handle it manually below
+    }
+
+    if (parsedResponse && parsedResponse.subject && parsedResponse.htmlContent) {
+      // AI returned proper JSON format
+      return createSuccessResponse({
+        subject: parsedResponse.subject,
+        htmlContent: parsedResponse.htmlContent
+      })
+    }
+
+    // Fallback: Extract subject and content manually
+    // Look for subject line patterns
+    let subject = 'Regarding our conversation'
+    let htmlContent = generatedContent
+
+    // Try to extract subject from common patterns
+    const subjectPatterns = [
+      /Subject:\s*(.+)/i,
+      /Subject Line:\s*(.+)/i,
+      /"subject":\s*"([^"]+)"/i
+    ]
+
+    for (const pattern of subjectPatterns) {
+      const match = generatedContent.match(pattern)
+      if (match && match[1]) {
+        subject = match[1].trim()
+        break
+      }
+    }
+
+    // If content doesn't have HTML structure, wrap it
+    if (!htmlContent.includes('<div') && !htmlContent.includes('<p')) {
+      const lines = htmlContent.split('\n').filter(line => line.trim() && !line.toLowerCase().includes('subject'))
+      const formattedContent = lines.map(line => `<p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 15px;">${line.trim()}</p>`).join('\n  ')
+      
+      htmlContent = `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  ${formattedContent}
+</div>`.trim()
+    }
+
+    return createSuccessResponse({
+      subject: subject,
+      htmlContent: htmlContent
+    })
+
+  } catch (error) {
+    console.error('Outreach generation error:', error)
+    return handleApiError(error)
+  }
+})

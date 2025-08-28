@@ -62,6 +62,7 @@ export default function SimpleCampaignPage() {
     timezone: ''
   })
   const [contactLists, setContactLists] = useState<ContactList[]>([])
+  const [contactListsWithContacts, setContactListsWithContacts] = useState<Array<ContactList & { contacts?: Array<{ id: string; first_name: string; last_name: string; company_name: string; email: string }> }>>([])
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -76,6 +77,13 @@ export default function SimpleCampaignPage() {
       }))
     }
   }, [])
+
+  // Fetch contacts when selected lists change
+  useEffect(() => {
+    if (contactLists.length > 0) {
+      fetchSelectedContactLists()
+    }
+  }, [campaignData.contact_list_ids, contactLists])
 
   const fetchContactLists = async () => {
     try {
@@ -92,6 +100,42 @@ export default function SimpleCampaignPage() {
     } catch (error) {
       console.error('Error fetching contact lists:', error)
       setContactLists([])
+    }
+  }
+
+  // Fetch contacts for selected lists
+  const fetchSelectedContactLists = async () => {
+    if (campaignData.contact_list_ids.length === 0) {
+      setContactListsWithContacts([])
+      return
+    }
+
+    try {
+      const selectedLists = contactLists.filter(list => 
+        campaignData.contact_list_ids.includes(list.id)
+      )
+
+      // Fetch contacts for each selected list
+      const listsWithContacts = await Promise.all(
+        selectedLists.map(async (list) => {
+          try {
+            const response = await ApiClient.get(`/api/contacts/lists/${list.id}`)
+            const contacts = response.success ? response.data?.contacts || [] : []
+            return {
+              ...list,
+              contacts: contacts.slice(0, 10) // Limit to first 10 contacts for preview
+            }
+          } catch (error) {
+            console.error(`Error fetching contacts for list ${list.id}:`, error)
+            return { ...list, contacts: [] }
+          }
+        })
+      )
+
+      setContactListsWithContacts(listsWithContacts)
+    } catch (error) {
+      console.error('Error fetching selected contact lists:', error)
+      setContactListsWithContacts([])
     }
   }
 
@@ -351,6 +395,7 @@ export default function SimpleCampaignPage() {
               htmlContent={campaignData.html_content}
               onSubjectChange={(subject) => setCampaignData(prev => ({ ...prev, email_subject: subject }))}
               onContentChange={(content) => setCampaignData(prev => ({ ...prev, html_content: content }))}
+              contactLists={contactListsWithContacts}
             />
             
             {errors.email_subject && <p className="text-red-500 text-sm">{errors.email_subject}</p>}
@@ -506,7 +551,7 @@ export default function SimpleCampaignPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto px-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-4">
