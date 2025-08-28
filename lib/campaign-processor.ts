@@ -116,9 +116,7 @@ export class CampaignProcessor {
             await supabase
               .from('campaigns')
               .update({
-                status: 'completed',
-                completed_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
+                status: 'completed'
               })
               .eq('id', campaign.id)
             console.log(`✅ Marked ${campaign.name} as completed`)
@@ -294,12 +292,28 @@ export class CampaignProcessor {
           const personalizedSubject = this.personalizeContent(campaign.email_subject, contact)
           const personalizedContent = this.personalizeContent(campaign.html_content, contact)
 
+          // Extract sender name from campaign description (mandatory field)
+          let senderName = 'ColdReach Pro' // Fallback for legacy campaigns
+          try {
+            const descriptionData = JSON.parse(campaign.description || '{}')
+            senderName = descriptionData.sender_name
+            if (!senderName) {
+              console.warn(`⚠️ Campaign ${campaign.id} has no sender_name, using fallback`)
+              senderName = emailAccount.name || 'ColdReach Pro'
+            }
+          } catch {
+            // If description is not JSON, this is likely a legacy campaign
+            console.warn(`⚠️ Campaign ${campaign.id} has invalid description format, using email account name`)
+            senderName = emailAccount.name || 'ColdReach Pro'
+          }
+
           // Send email directly using our implementation
           const result = await this.sendEmail({
             to: contact.email,
             subject: personalizedSubject,
             content: personalizedContent,
             emailAccount: emailAccount,
+            senderName: senderName,
             trackingId: trackingId
           })
 
@@ -307,16 +321,17 @@ export class CampaignProcessor {
             emailsSent++
             console.log(`✅ Email ${i+1}/${contacts.length} sent to ${contact.email}`)
 
-            // Record successful send in tracking table (using actual database schema)
+            // Record successful send in tracking table (using ACTUAL database schema)
             await supabase
               .from('email_tracking')
               .insert({
                 user_id: campaign.user_id,
                 campaign_id: campaign.id,
                 contact_id: contact.id,
-                message_id: trackingId, // Required unique field
-                sent_at: new Date().toISOString(),
-                // Note: removed status field as it doesn't exist in actual schema
+                message_id: trackingId,
+                subject_line: personalizedSubject,
+                email_body: personalizedContent,
+                sent_at: new Date().toISOString()
               })
 
             // Update campaign total_contacts if not set and trigger UI refresh
@@ -334,16 +349,18 @@ export class CampaignProcessor {
             emailsFailed++
             console.log(`❌ Failed to send email ${i+1}/${contacts.length} to ${contact.email}: ${result.error}`)
 
-            // Record failed send (using actual database schema)
+            // Record failed send (using ACTUAL database schema)
             await supabase
               .from('email_tracking')
               .insert({
                 user_id: campaign.user_id,
                 campaign_id: campaign.id,
                 contact_id: contact.id,
-                message_id: `failed_${trackingId}`, // Required unique field
-                bounced_at: new Date().toISOString(), // Use bounced_at for failed emails
-                bounce_reason: result.error,
+                message_id: `failed_${trackingId}`,
+                subject_line: personalizedSubject,
+                email_body: personalizedContent,
+                bounced_at: new Date().toISOString(),
+                bounce_reason: result.error
               })
 
             // Update campaign total_contacts if not set and trigger UI refresh
@@ -388,9 +405,7 @@ export class CampaignProcessor {
         .update({
           emails_sent: emailsSent,
           total_contacts: contacts.length,
-          status: emailsSent > 0 ? 'completed' : 'paused',
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          status: emailsSent > 0 ? 'completed' : 'paused'
         })
         .eq('id', campaign.id)
 
@@ -420,6 +435,7 @@ export class CampaignProcessor {
     subject: string
     content: string
     emailAccount: any
+    senderName: string
     trackingId: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
@@ -454,7 +470,7 @@ export class CampaignProcessor {
         }
 
         const info = await transporter.sendMail({
-          from: `"${params.emailAccount.display_name || 'ColdReach Pro'}" <${params.emailAccount.email}>`,
+          from: `"${params.senderName}" <${params.emailAccount.email}>`,
           to: params.to,
           subject: params.subject,
           text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version

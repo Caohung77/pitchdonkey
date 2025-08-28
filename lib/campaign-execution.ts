@@ -977,7 +977,7 @@ export class CampaignExecutionEngine {
         }
 
         const info = await transporter.sendMail({
-          from: `"${params.emailAccount.display_name || 'ColdReach Pro'}" <${params.emailAccount.email}>`,
+          from: `"${params.emailAccount.name || 'ColdReach Pro'}" <${params.emailAccount.email}>`,
           to: params.to,
           subject: params.subject,
           text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version

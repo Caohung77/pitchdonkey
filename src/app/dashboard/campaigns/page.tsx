@@ -95,6 +95,8 @@ export default function CampaignsPage() {
 
   // Handle real-time campaign progress updates
   const handleProgressUpdate = (campaignId: string, updatedData: any) => {
+    console.log(`🔄 Updating campaign ${campaignId} with:`, updatedData)
+    
     setCampaigns(prev => 
       prev.map(campaign => 
         campaign.id === campaignId 
@@ -111,6 +113,14 @@ export default function CampaignsPage() {
           : campaign
       )
     )
+    
+    // FORCE REFRESH: If status is completed, refetch campaigns after a delay to ensure UI sync
+    if (updatedData.status === 'completed') {
+      console.log(`✅ Campaign ${campaignId} marked as completed, forcing UI refresh in 2 seconds`)
+      setTimeout(() => {
+        fetchCampaigns()
+      }, 2000)
+    }
   }
 
   const fixStuckCampaigns = async () => {

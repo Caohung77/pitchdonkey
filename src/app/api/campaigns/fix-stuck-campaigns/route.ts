@@ -62,9 +62,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
         const { error: updateError } = await supabase
           .from('campaigns')
           .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            status: 'completed'
           })
           .eq('id', campaign.id)
 

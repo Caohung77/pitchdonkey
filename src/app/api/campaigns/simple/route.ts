@@ -32,6 +32,9 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
     if (!name) {
       return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 })
     }
+    if (!sender_name || sender_name.trim() === '') {
+      return NextResponse.json({ error: 'Sender name is required' }, { status: 400 })
+    }
     if (!email_subject) {
       return NextResponse.json({ error: 'Email subject is required' }, { status: 400 })
     }

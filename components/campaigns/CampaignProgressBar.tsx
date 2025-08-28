@@ -154,6 +154,9 @@ export function CampaignProgressBar({
       setIsLoading(true)
       const supabase = createClientSupabase()
       
+      // DEBUG: Log current campaign status
+      console.log(`🔍 fetchLatestProgress for campaign ${campaign.id}: current status = ${campaign.status}`)
+      
       // Get updated campaign stats
       const { data: campaignData } = await supabase
         .from('campaigns')
@@ -191,14 +194,16 @@ export function CampaignProgressBar({
         if (newProgress.sent >= newProgress.total && newProgress.total > 0 && (campaign.status === 'sending' || campaign.status === 'running')) {
           console.log(`🎉 Campaign ${campaign.id} reached 100% (${newProgress.sent}/${newProgress.total}) but status is '${campaign.status}' - checking for completion`)
           
-          // Wait a moment for the database to update, then refresh campaign status
-          setTimeout(async () => {
+          // IMMEDIATE CHECK: Don't wait, check database immediately
+          const checkCompletion = async () => {
             try {
               const { data: updatedCampaign } = await supabase
                 .from('campaigns')
                 .select('status, completed_at')
                 .eq('id', campaign.id)
                 .single()
+              
+              console.log(`📊 Database status for campaign ${campaign.id}:`, updatedCampaign?.status)
               
               if (updatedCampaign && updatedCampaign.status === 'completed') {
                 console.log(`✅ Campaign ${campaign.id} status updated to completed - refreshing UI`)
@@ -208,11 +213,18 @@ export function CampaignProgressBar({
                   completed_at: updatedCampaign.completed_at,
                   updated_at: new Date().toISOString()
                 })
+              } else {
+                console.log(`⏳ Campaign ${campaign.id} not completed yet, will retry in 3 seconds`)
+                // Retry after 3 seconds
+                setTimeout(checkCompletion, 3000)
               }
             } catch (error) {
               console.log(`⚠️ Could not check completion status for campaign ${campaign.id}:`, error)
             }
-          }, 2000) // Wait 2 seconds for database update
+          }
+          
+          // Check immediately
+          checkCompletion()
         }
       }
 
@@ -318,10 +330,14 @@ export function CampaignProgressBar({
           )}
           {(campaign.status === 'sending' || campaign.status === 'running') && (
             <button
-              onClick={fetchLatestProgress}
+              onClick={() => {
+                fetchLatestProgress()
+                // Also force check completion status when refresh is clicked
+                console.log(`🔄 Manual refresh - also checking completion status for ${campaign.id}`)
+              }}
               disabled={isLoading}
               className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-              title="Refresh progress"
+              title="Refresh progress and check completion"
             >
               <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
