@@ -255,16 +255,6 @@ export class CampaignProcessor {
           // Generate tracking ID
           const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
 
-          // Extract sender name from campaign description (if stored as JSON)
-          let senderName = ''
-          try {
-            const descriptionData = JSON.parse(campaign.description || '{}')
-            senderName = descriptionData.sender_name || ''
-          } catch (e) {
-            // If description is not JSON, it's just a regular description
-            senderName = ''
-          }
-
           // Personalize content
           const personalizedSubject = this.personalizeContent(campaign.email_subject, contact)
           const personalizedContent = this.personalizeContent(campaign.html_content, contact)
@@ -275,8 +265,7 @@ export class CampaignProcessor {
             subject: personalizedSubject,
             content: personalizedContent,
             emailAccount: emailAccount,
-            trackingId: trackingId,
-            senderName: senderName
+            trackingId: trackingId
           })
 
           if (result.status === 'sent') {
@@ -305,20 +294,6 @@ export class CampaignProcessor {
               .eq('id', campaign.id)
 
             console.log(`📊 Email ${emailsSent}/${contacts.length} sent and tracked`)
-
-            // Check if this was the last email - if so, mark campaign as completed immediately
-            if (emailsSent === contacts.length) {
-              console.log(`🎉 Last email sent! Marking campaign ${campaign.id} as completed`)
-              await supabase
-                .from('campaigns')
-                .update({
-                  status: 'completed',
-                  completed_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', campaign.id)
-              console.log(`✅ Campaign ${campaign.id} marked as completed immediately`)
-            }
 
           } else {
             emailsFailed++
@@ -372,26 +347,19 @@ export class CampaignProcessor {
         }
       }
 
-      // Update campaign statistics and mark as completed
-      const campaignStatus = emailsSent > 0 ? 'completed' : 'paused'
-      const updateData: any = {
-        total_contacts: contacts.length,
-        status: campaignStatus,
-        updated_at: new Date().toISOString()
-      }
-      
-      // Add completion timestamp if completed
-      if (campaignStatus === 'completed') {
-        updateData.completed_at = new Date().toISOString()
-      }
-      
+      // Update campaign statistics
       await supabase
         .from('campaigns')
-        .update(updateData)
+        .update({
+          emails_sent: emailsSent,
+          total_contacts: contacts.length,
+          status: emailsSent > 0 ? 'completed' : 'paused',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', campaign.id)
 
-      console.log(`🎉 Campaign ${campaign.name} ${campaignStatus}! Sent: ${emailsSent}, Failed: ${emailsFailed}`)
-      console.log(`📊 Campaign status updated to: ${campaignStatus}`)
+      console.log(`🎉 Campaign ${campaign.name} completed! Sent: ${emailsSent}, Failed: ${emailsFailed}`)
 
     } catch (error) {
       console.error(`❌ Error in simple campaign processing:`, error)
@@ -418,7 +386,6 @@ export class CampaignProcessor {
     content: string
     emailAccount: any
     trackingId: string
-    senderName?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
     
@@ -451,11 +418,8 @@ export class CampaignProcessor {
           htmlContent = `${htmlContent}${trackingPixel}`
         }
 
-        // Determine sender name priority: custom sender_name > email account display_name > default
-        const senderName = params.senderName || params.emailAccount.display_name || 'ColdReach Pro'
-        
         const info = await transporter.sendMail({
-          from: `"${senderName}" <${params.emailAccount.email}>`,
+          from: `"${params.emailAccount.display_name || 'ColdReach Pro'}" <${params.emailAccount.email}>`,
           to: params.to,
           subject: params.subject,
           text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version

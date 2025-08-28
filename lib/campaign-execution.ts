@@ -944,7 +944,6 @@ export class CampaignExecutionEngine {
     content: string
     emailAccount: any
     trackingId: string
-    senderName?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
     
@@ -977,11 +976,8 @@ export class CampaignExecutionEngine {
           htmlContent = `${htmlContent}${trackingPixel}`
         }
 
-        // Determine sender name priority: custom sender_name > email account display_name > default
-        const senderName = params.senderName || params.emailAccount.display_name || 'ColdReach Pro'
-        
         const info = await transporter.sendMail({
-          from: `"${senderName}" <${params.emailAccount.email}>`,
+          from: `"${params.emailAccount.display_name || 'ColdReach Pro'}" <${params.emailAccount.email}>`,
           to: params.to,
           subject: params.subject,
           text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version
