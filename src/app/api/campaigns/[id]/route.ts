@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withAuth } from '@/lib/auth-middleware'
 
-export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
+export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
+    const { id: campaignId } = await params
 
     const { data: campaign, error } = await supabase
       .from('campaigns')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', campaignId)
       .eq('user_id', user.id)
       .single()
 
@@ -31,8 +32,9 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }, { p
   }
 })
 
-const updateCampaign = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
+const updateCampaign = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
+    const { id: campaignId } = await params
 
     const body = await request.json()
     console.log('PATCH request body:', body)
@@ -71,7 +73,7 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
     const { data: campaign, error } = await supabase
       .from('campaigns')
       .update(updates)
-      .eq('id', params.id)
+      .eq('id', campaignId)
       .eq('user_id', user.id)
       .select()
       .single()
@@ -89,18 +91,18 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
       if (body.status === 'active' || body.status === 'running') {
         // Resume campaign execution
         const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
-        await CampaignExecutionEngine.resumeCampaign(params.id, supabase)
-        console.log(`Resumed campaign ${params.id}`)
+        await CampaignExecutionEngine.resumeCampaign(campaignId, supabase)
+        console.log(`Resumed campaign ${campaignId}`)
       } else if (body.status === 'paused') {
         // Pause campaign execution
         const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
-        await CampaignExecutionEngine.pauseCampaign(params.id, supabase)
-        console.log(`Paused campaign ${params.id}`)
+        await CampaignExecutionEngine.pauseCampaign(campaignId, supabase)
+        console.log(`Paused campaign ${campaignId}`)
       } else if (body.status === 'stopped') {
         // Stop campaign execution permanently
         const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
-        await CampaignExecutionEngine.stopCampaign(params.id, supabase)
-        console.log(`Stopped campaign ${params.id}`)
+        await CampaignExecutionEngine.stopCampaign(campaignId, supabase)
+        console.log(`Stopped campaign ${campaignId}`)
       }
     } catch (executionError) {
       console.error('Campaign execution error:', executionError)
@@ -123,14 +125,15 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
 export const PATCH = updateCampaign
 export const PUT = updateCampaign
 
-export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: { id: string } }) => {
+export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
+    const { id: campaignId } = await params
 
     // Check if campaign exists and belongs to user
     const { data: campaign, error: fetchError } = await supabase
       .from('campaigns')
       .select('id, status')
-      .eq('id', params.id)
+      .eq('id', campaignId)
       .eq('user_id', user.id)
       .single()
 
@@ -144,7 +147,7 @@ export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, 
 
     // Auto-stop active campaigns before deletion
     if (['running', 'sending', 'active'].includes(campaign.status)) {
-      console.log(`Auto-stopping campaign ${params.id} before deletion`)
+      console.log(`Auto-stopping campaign ${campaignId} before deletion`)
       
       try {
         // Stop the campaign first
@@ -155,14 +158,14 @@ export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, 
             stopped_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
-          .eq('id', params.id)
+          .eq('id', campaignId)
           .eq('user_id', user.id)
 
         // Try to stop campaign execution
         try {
           const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
-          await CampaignExecutionEngine.stopCampaign(params.id, supabase)
-          console.log(`Stopped campaign execution for ${params.id}`)
+          await CampaignExecutionEngine.stopCampaign(campaignId, supabase)
+          console.log(`Stopped campaign execution for ${campaignId}`)
         } catch (executionError) {
           console.warn('Campaign execution stop error (continuing with deletion):', executionError)
           // Continue with deletion even if execution stop fails
@@ -181,7 +184,7 @@ export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, 
       await supabase
         .from('email_tracking')
         .delete()
-        .eq('campaign_id', params.id)
+        .eq('campaign_id', campaignId)
     } catch (trackingError) {
       console.warn('Error deleting email tracking data:', trackingError)
       // Continue with campaign deletion even if tracking cleanup fails
@@ -191,7 +194,7 @@ export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, 
     const { error: deleteError } = await supabase
       .from('campaigns')
       .delete()
-      .eq('id', params.id)
+      .eq('id', campaignId)
       .eq('user_id', user.id)
 
     if (deleteError) {
@@ -199,7 +202,7 @@ export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, 
       return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 })
     }
 
-    console.log(`Campaign ${params.id} deleted successfully by user ${user.id}`)
+    console.log(`Campaign ${campaignId} deleted successfully by user ${user.id}`)
 
     return NextResponse.json({ message: 'Campaign deleted successfully' })
 

@@ -5,9 +5,9 @@ import { withAuth } from '@/lib/auth-middleware'
  * Check and update campaign completion status
  * Automatically marks campaigns as completed when all emails are sent
  */
-export const POST = withAuth(async (request: NextRequest, { user, supabase, params }) => {
+export const POST = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const campaignId = params.id
+    const { id: campaignId } = await params
     
     if (!campaignId) {
       return NextResponse.json({ error: 'Campaign ID is required' }, { status: 400 })
@@ -63,7 +63,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
       })
     }
 
-    // Count actual sent emails from tracking table
+    // Count actual sent emails from email_tracking table
     const { data: emailStats, error: statsError } = await supabase
       .from('email_tracking')
       .select('sent_at')

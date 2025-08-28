@@ -435,70 +435,76 @@ export interface Database {
       email_sends: {
         Row: {
           id: string
-          campaign_id: string
+          user_id: string
+          campaign_id: string | null
           contact_id: string
           email_account_id: string
           step_number: number
-          subject: string | null
-          content: string | null
-          personalized_content: string | null
-          scheduled_for: string | null
-          status: string
-          sent_at: string | null
-          delivered_at: string | null
+          subject: string
+          content: string
+          message_id: string | null
+          send_status: string
           opened_at: string | null
           clicked_at: string | null
           replied_at: string | null
           bounced_at: string | null
-          bounce_reason: string | null
-          reply_content: string | null
+          unsubscribed_at: string | null
           tracking_data: Json
+          error_message: string | null
+          retry_count: number
+          ab_variant: string | null
+          scheduled_at: string | null
+          sent_at: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          campaign_id: string
+          user_id: string
+          campaign_id?: string | null
           contact_id: string
           email_account_id: string
-          step_number: number
-          subject?: string | null
-          content?: string | null
-          personalized_content?: string | null
-          scheduled_for?: string | null
-          status?: string
-          sent_at?: string | null
-          delivered_at?: string | null
+          step_number?: number
+          subject: string
+          content: string
+          message_id?: string | null
+          send_status?: string
           opened_at?: string | null
           clicked_at?: string | null
           replied_at?: string | null
           bounced_at?: string | null
-          bounce_reason?: string | null
-          reply_content?: string | null
+          unsubscribed_at?: string | null
           tracking_data?: Json
+          error_message?: string | null
+          retry_count?: number
+          ab_variant?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          campaign_id?: string
+          user_id?: string
+          campaign_id?: string | null
           contact_id?: string
           email_account_id?: string
           step_number?: number
-          subject?: string | null
-          content?: string | null
-          personalized_content?: string | null
-          scheduled_for?: string | null
-          status?: string
-          sent_at?: string | null
-          delivered_at?: string | null
+          subject?: string
+          content?: string
+          message_id?: string | null
+          send_status?: string
           opened_at?: string | null
           clicked_at?: string | null
           replied_at?: string | null
           bounced_at?: string | null
-          bounce_reason?: string | null
-          reply_content?: string | null
+          unsubscribed_at?: string | null
           tracking_data?: Json
+          error_message?: string | null
+          retry_count?: number
+          ab_variant?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
           created_at?: string
           updated_at?: string
         }

@@ -11,18 +11,20 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       .from('email_accounts')
       .select('*')
       .eq('user_id', user.id)
-      .eq('is_active', true)
 
     if (accountsError) {
       console.error('Error fetching email accounts:', accountsError)
       return handleApiError(accountsError)
     }
 
+    // Filter active accounts - fallback to all accounts if is_active column doesn't exist
+    const activeEmailAccounts = emailAccounts?.filter(acc => acc.is_active !== false) || []
+
     // Get current date for daily usage calculation
     const today = new Date().toISOString().split('T')[0]
 
     // Calculate account health for each email account
-    const accountHealthPromises = emailAccounts?.map(async (account) => {
+    const accountHealthPromises = activeEmailAccounts?.map(async (account) => {
       // Get today's email count for this account
       const { data: todayEmails, error: emailError } = await supabase
         .from('email_tracking')

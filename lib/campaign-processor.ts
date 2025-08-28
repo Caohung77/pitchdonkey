@@ -69,8 +69,8 @@ export class CampaignProcessor {
       const supabase = createServerSupabaseClient()
       console.log('📡 Supabase client created successfully')
       
-      // Get campaigns that need processing
-      console.log('🔎 Querying campaigns with status: sending, scheduled')
+      // Get campaigns that need processing (exclude campaigns that are already fully processed)
+      console.log('🔎 Querying campaigns with status: sending, scheduled (excluding already completed ones)')
       const { data: campaigns, error } = await supabase
         .from('campaigns')
         .select('*')
@@ -96,7 +96,42 @@ export class CampaignProcessor {
         console.log(`  ${i+1}. ${campaign.name} (${campaign.id}) - Status: ${campaign.status}`)
       })
 
+      // Filter out campaigns that are already fully processed but status wasn't updated
+      const campaignsToProcess = []
       for (const campaign of campaigns) {
+        // Check if campaign already has all emails sent
+        const { data: emailStats } = await supabase
+          .from('email_tracking')
+          .select('sent_at')
+          .eq('campaign_id', campaign.id)
+        
+        const sentCount = emailStats?.filter(e => e.sent_at !== null).length || 0
+        const totalContacts = campaign.total_contacts || 0
+        
+        if (sentCount >= totalContacts && totalContacts > 0) {
+          console.log(`⏭️  Skipping ${campaign.name} - already completed (${sentCount}/${totalContacts} sent)`)
+          
+          // Mark as completed if not already
+          if (campaign.status !== 'completed') {
+            await supabase
+              .from('campaigns')
+              .update({
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', campaign.id)
+            console.log(`✅ Marked ${campaign.name} as completed`)
+          }
+        } else {
+          console.log(`🔄 Will process ${campaign.name} (${sentCount}/${totalContacts} sent)`)
+          campaignsToProcess.push(campaign)
+        }
+      }
+
+      console.log(`🎯 Processing ${campaignsToProcess.length} campaigns that need work`)
+
+      for (const campaign of campaignsToProcess) {
         console.log(`\n🎯 === PROCESSING CAMPAIGN: ${campaign.name} ===`)
         await this.processCampaign(campaign)
       }

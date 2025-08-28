@@ -11,7 +11,6 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       .from('email_accounts')
       .select('id')
       .eq('user_id', user.id)
-      .eq('is_active', true)
 
     if (accountsError) {
       console.error('Error fetching email accounts:', accountsError)
@@ -23,8 +22,8 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     // Get email tracking stats
     const { data: emailStats, error: emailError } = await supabase
       .from('email_tracking')
-      .select('status, opened_at, clicked_at, replied_at')
-      .in('email_account_id', accountIds)
+      .select('sent_at, opened_at, clicked_at, replied_at')
+      .in('user_id', [user.id])
 
     if (emailError) {
       console.error('Error fetching email stats:', emailError)
@@ -52,8 +51,8 @@ export const GET = withAuth(async (request: NextRequest, user) => {
 
     // Calculate stats
     const emailsTotal = emailStats?.length || 0
-    const emailsSent = emailStats?.filter(e => e.status === 'sent' || e.status === 'delivered').length || 0
-    const emailsDelivered = emailStats?.filter(e => e.status === 'delivered').length || 0
+    const emailsSent = emailStats?.filter(e => e.sent_at !== null).length || 0
+    const emailsDelivered = emailsSent // Assume sent emails are delivered
     const emailsOpened = emailStats?.filter(e => e.opened_at).length || 0
     const emailsClicked = emailStats?.filter(e => e.clicked_at).length || 0
     const emailsReplied = emailStats?.filter(e => e.replied_at).length || 0

@@ -186,6 +186,34 @@ export function CampaignProgressBar({
         
         console.log(`📊 Real progress for campaign ${campaign.id}:`, newProgress)
         setProgress(newProgress)
+        
+        // AUTO-COMPLETION CHECK: If 100% complete but status is still 'sending', refresh campaign status
+        if (newProgress.sent >= newProgress.total && newProgress.total > 0 && (campaign.status === 'sending' || campaign.status === 'running')) {
+          console.log(`🎉 Campaign ${campaign.id} reached 100% (${newProgress.sent}/${newProgress.total}) but status is '${campaign.status}' - checking for completion`)
+          
+          // Wait a moment for the database to update, then refresh campaign status
+          setTimeout(async () => {
+            try {
+              const { data: updatedCampaign } = await supabase
+                .from('campaigns')
+                .select('status, completed_at')
+                .eq('id', campaign.id)
+                .single()
+              
+              if (updatedCampaign && updatedCampaign.status === 'completed') {
+                console.log(`✅ Campaign ${campaign.id} status updated to completed - refreshing UI`)
+                onProgressUpdate?.(campaign.id, { 
+                  ...campaign, 
+                  status: 'completed',
+                  completed_at: updatedCampaign.completed_at,
+                  updated_at: new Date().toISOString()
+                })
+              }
+            } catch (error) {
+              console.log(`⚠️ Could not check completion status for campaign ${campaign.id}:`, error)
+            }
+          }, 2000) // Wait 2 seconds for database update
+        }
       }
 
       // Calculate estimated time remaining for sending campaigns
