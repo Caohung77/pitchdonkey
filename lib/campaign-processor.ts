@@ -307,32 +307,51 @@ export class CampaignProcessor {
             senderName = emailAccount.name || 'ColdReach Pro'
           }
 
-          // Send email directly using our implementation
+          // Create email tracking record FIRST to get the tracking_pixel_id
+          const { data: trackingRecord, error: trackingError } = await supabase
+            .from('email_tracking')
+            .insert({
+              user_id: campaign.user_id,
+              campaign_id: campaign.id,
+              contact_id: contact.id,
+              message_id: trackingId,
+              subject_line: personalizedSubject,
+              email_body: personalizedContent,
+              // Don't set sent_at yet - will be set after successful send
+            })
+            .select('tracking_pixel_id')
+            .single()
+
+          if (trackingError) {
+            console.error('❌ Error creating tracking record:', trackingError)
+            continue // Skip this contact
+          }
+
+          const pixelId = trackingRecord.tracking_pixel_id
+          console.log(`📡 Created tracking record with pixel ID: ${pixelId}`)
+
+          // Send email with the actual tracking pixel ID
           const result = await this.sendEmail({
             to: contact.email,
             subject: personalizedSubject,
             content: personalizedContent,
             emailAccount: emailAccount,
             senderName: senderName,
-            trackingId: trackingId
+            trackingId: trackingId,
+            pixelId: pixelId  // Add the actual pixel ID
           })
 
           if (result.status === 'sent') {
             emailsSent++
             console.log(`✅ Email ${i+1}/${contacts.length} sent to ${contact.email}`)
 
-            // Record successful send in tracking table (using ACTUAL database schema)
+            // Update tracking record with sent timestamp
             await supabase
               .from('email_tracking')
-              .insert({
-                user_id: campaign.user_id,
-                campaign_id: campaign.id,
-                contact_id: contact.id,
-                message_id: trackingId,
-                subject_line: personalizedSubject,
-                email_body: personalizedContent,
+              .update({
                 sent_at: new Date().toISOString()
               })
+              .eq('tracking_pixel_id', pixelId)
 
             // Update campaign total_contacts if not set and trigger UI refresh
             await supabase
@@ -349,19 +368,14 @@ export class CampaignProcessor {
             emailsFailed++
             console.log(`❌ Failed to send email ${i+1}/${contacts.length} to ${contact.email}: ${result.error}`)
 
-            // Record failed send (using ACTUAL database schema)
+            // Update existing tracking record with failure info
             await supabase
               .from('email_tracking')
-              .insert({
-                user_id: campaign.user_id,
-                campaign_id: campaign.id,
-                contact_id: contact.id,
-                message_id: `failed_${trackingId}`,
-                subject_line: personalizedSubject,
-                email_body: personalizedContent,
+              .update({
                 bounced_at: new Date().toISOString(),
                 bounce_reason: result.error
               })
+              .eq('tracking_pixel_id', pixelId)
 
             // Update campaign total_contacts if not set and trigger UI refresh
             await supabase
@@ -437,6 +451,7 @@ export class CampaignProcessor {
     emailAccount: any
     senderName: string
     trackingId: string
+    pixelId?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
     
@@ -455,8 +470,9 @@ export class CampaignProcessor {
           },
         })
 
-        // Generate tracking pixel URL for this email
-        const trackingPixelUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3003'}/api/tracking/pixel/${params.trackingId}`
+        // Generate tracking pixel URL for this email using the actual pixelId
+        const trackingPixelUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/tracking/pixel/${params.pixelId || params.trackingId}`
+        console.log(`📡 Using tracking pixel URL: ${trackingPixelUrl}`)
         
         // Insert tracking pixel into HTML content
         const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="">`

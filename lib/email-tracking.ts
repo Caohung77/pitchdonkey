@@ -208,64 +208,58 @@ export class EmailTracker {
     ipAddress?: string
   ): Promise<{ success: boolean; firstOpen: boolean }> {
     try {
+      // Import supabase client if not provided
+      if (!this.supabase) {
+        const { createServerSupabaseClient } = await import('./supabase-server')
+        this.supabase = createServerSupabaseClient()
+      }
 
-      // Get tracking pixel data
-      const { data: pixel, error } = await this.supabase
-        .from('tracking_pixels')
+      console.log(`🎯 Tracking email open for pixel ID: ${pixelId}`)
+
+      // Get email tracking record using tracking_pixel_id
+      const { data: emailRecord, error } = await this.supabase
+        .from('email_tracking')
         .select('*')
-        .eq('id', pixelId)
+        .eq('tracking_pixel_id', pixelId)
         .single()
 
-      if (error || !pixel) {
+      if (error || !emailRecord) {
+        console.error(`❌ No email tracking record found for pixel ID: ${pixelId}`, error)
         return { success: false, firstOpen: false }
       }
 
-      const isFirstOpen = !pixel.opened
+      const isFirstOpen = !emailRecord.opened_at
       const now = new Date().toISOString()
 
-      // Update tracking pixel
-      await this.supabase
-        .from('tracking_pixels')
-        .update({
-          opened: true,
-          opened_at: pixel.opened_at || now,
-          open_count: pixel.open_count + 1,
-          last_opened_at: now,
-          user_agent: userAgent,
-          ip_address: ipAddress
-        })
-        .eq('id', pixelId)
+      console.log(`📊 Email open tracking: First open: ${isFirstOpen}, Email ID: ${emailRecord.id}`)
 
-      // Store open event
-      await this.supabase
-        .from('email_events')
-        .insert({
-          id: this.generateEventId(),
-          message_id: pixel.message_id,
-          type: 'opened',
-          timestamp: now,
-          recipient_email: pixel.recipient_email,
-          provider_id: 'tracking',
-          event_data: {
-            pixelId,
-            userAgent,
-            ipAddress,
-            isFirstOpen
-          },
-          campaign_id: pixel.campaign_id,
-          contact_id: pixel.contact_id
+      // Update email tracking record with open data
+      const { error: updateError } = await this.supabase
+        .from('email_tracking')
+        .update({
+          status: 'opened',
+          opened_at: emailRecord.opened_at || now,
+          tracking_data: {
+            ...emailRecord.tracking_data || {},
+            open_count: (emailRecord.tracking_data?.open_count || 0) + 1,
+            last_opened_at: now,
+            user_agent: userAgent,
+            ip_address: ipAddress
+          }
         })
+        .eq('tracking_pixel_id', pixelId)
+
+      if (updateError) {
+        console.error('❌ Error updating email tracking record:', updateError)
+        return { success: false, firstOpen: false }
+      }
 
       // Update contact engagement if first open
-      if (isFirstOpen && pixel.contact_id) {
-        await this.updateContactEngagement(pixel.contact_id, 'opened', now)
+      if (isFirstOpen && emailRecord.contact_id) {
+        await this.updateContactEngagement(emailRecord.contact_id, 'opened', now)
       }
 
-      // Update campaign stats
-      if (pixel.campaign_id) {
-        await this.updateCampaignStats(pixel.campaign_id, 'opened', isFirstOpen)
-      }
-
+      console.log(`✅ Email open tracked successfully: ${pixelId}`)
       return { success: true, firstOpen: isFirstOpen }
 
     } catch (error) {
