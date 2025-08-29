@@ -54,6 +54,28 @@ const urlOrEmpty = z.union([
   z.undefined()
 ]).optional()
 
+// More lenient URL validation for CSV imports
+const lenientUrlOrEmpty = z.union([
+  z.string().refine(
+    (val) => {
+      if (!val || val === '') return true
+      // Allow any string that looks like it could be a domain
+      return val.includes('.') && val.length > 2
+    },
+    { message: "Invalid website format" }
+  ),
+  z.literal(''),
+  z.undefined(),
+  z.literal(null)
+]).optional().transform((val) => {
+  if (!val || val === '' || val === null) return null
+  // Basic cleanup - ensure it has a protocol
+  if (!val.startsWith('http')) {
+    return `https://${val}`
+  }
+  return val
+})
+
 // Base contact schema without refinement
 const baseContactSchema = z.object({
   email: z.string().email(),
@@ -65,6 +87,9 @@ const baseContactSchema = z.object({
   phone: z.string().optional(),
   linkedin_url: urlOrEmpty,
   twitter_url: urlOrEmpty,
+  address: z.string().optional(),
+  postcode: z.string().optional(),
+  city: z.string().optional(),
   country: z.string().optional(),
   city: z.string().optional(),
   timezone: z.string().optional(),
@@ -79,17 +104,42 @@ const baseContactSchema = z.object({
   enriched_tone_style: z.string().optional(),
 })
 
-// Contact validation schema with refinement
-export const contactSchema = baseContactSchema.refine(data => data.first_name || data.last_name, {
-  message: "Either first name or last name is required",
-  path: ["first_name"]
+// Contact validation schema - only email is required
+export const contactSchema = baseContactSchema
+
+// Lenient contact schema for CSV imports
+export const csvContactSchema = z.object({
+  email: z.string().email(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  company: z.string().optional(),
+  position: z.string().optional(),
+  website: lenientUrlOrEmpty,
+  phone: z.string().optional(),
+  linkedin_url: lenientUrlOrEmpty,
+  twitter_url: lenientUrlOrEmpty,
+  address: z.string().optional(),
+  postcode: z.string().optional(),
+  city: z.string().optional(),
+  country: z.string().optional(),
+  city: z.string().optional(),
+  timezone: z.string().optional(),
+  custom_fields: z.record(z.any()).default({}),
+  tags: z.array(z.string()).default([]),
+  source: z.string().optional(),
+  // Enrichment fields - optional for manual editing
+  enriched_industry: z.string().optional(),
+  enriched_products_services: z.string().optional(),
+  enriched_target_audience: z.string().optional(),
+  enriched_unique_points: z.string().optional(),
+  enriched_tone_style: z.string().optional(),
 })
 
 // Update schema using base schema
 export const updateContactSchema = baseContactSchema.partial()
 
 export const bulkContactsSchema = z.object({
-  contacts: z.array(contactSchema),
+  contacts: z.array(csvContactSchema), // Use lenient schema for bulk imports
   skip_duplicates: z.boolean().default(true),
   validate_emails: z.boolean().default(true),
 })
@@ -213,6 +263,7 @@ export type User = z.infer<typeof userSchema>
 export type UpdateUser = z.infer<typeof updateUserSchema>
 export type EmailAccount = z.infer<typeof emailAccountSchema>
 export type Contact = z.infer<typeof contactSchema>
+export type CSVContact = z.infer<typeof csvContactSchema>
 export type UpdateContact = z.infer<typeof updateContactSchema>
 export type BulkContacts = z.infer<typeof bulkContactsSchema>
 export type Campaign = z.infer<typeof campaignSchema>

@@ -306,6 +306,9 @@ export interface Database {
           industry: string | null
           phone: string | null
           linkedin_url: string | null
+          address: string | null
+          postcode: string | null
+          city: string | null
           custom_fields: Json
           tags: string[]
           status: 'active' | 'unsubscribed' | 'bounced' | 'deleted'
@@ -338,6 +341,9 @@ export interface Database {
           industry?: string | null
           phone?: string | null
           linkedin_url?: string | null
+          address?: string | null
+          postcode?: string | null
+          city?: string | null
           custom_fields?: Json
           tags?: string[]
           status?: 'active' | 'unsubscribed' | 'bounced' | 'deleted'
@@ -370,6 +376,9 @@ export interface Database {
           industry?: string | null
           phone?: string | null
           linkedin_url?: string | null
+          address?: string | null
+          postcode?: string | null
+          city?: string | null
           custom_fields?: Json
           tags?: string[]
           status?: 'active' | 'unsubscribed' | 'bounced' | 'deleted'

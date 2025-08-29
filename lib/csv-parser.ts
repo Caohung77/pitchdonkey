@@ -1,3 +1,5 @@
+import { AddressParser, ParsedAddress } from './address-parser'
+
 interface CSVParseResult {
   headers: string[]
   rows: Record<string, string>[]
@@ -12,6 +14,7 @@ interface FieldMapping {
   csvField: string
   contactField: string
   required: boolean
+  confidence?: number
   example?: string
 }
 
@@ -25,13 +28,20 @@ interface CSVProcessingOptions {
 export class CSVParser {
   private static readonly CONTACT_FIELDS = {
     email: { required: true, label: 'Email Address' },
-    first_name: { required: true, label: 'First Name' },
-    last_name: { required: true, label: 'Last Name' },
+    first_name: { required: false, label: 'First Name' },
+    last_name: { required: false, label: 'Last Name' },
     company: { required: false, label: 'Company Name' },
     position: { required: false, label: 'Position' },
     website: { required: false, label: 'Website' },
     phone: { required: false, label: 'Phone Number' },
-    linkedin_url: { required: false, label: 'LinkedIn URL' }
+    linkedin_url: { required: false, label: 'LinkedIn URL' },
+    twitter_url: { required: false, label: 'Twitter URL' },
+    address: { required: false, label: 'Address' },
+    postcode: { required: false, label: 'Postcode/Zip Code' },
+    country: { required: false, label: 'Country' },
+    city: { required: false, label: 'City' },
+    timezone: { required: false, label: 'Timezone' },
+    source: { required: false, label: 'Source' }
   }
 
   private static readonly FIELD_ALIASES = {
@@ -42,7 +52,14 @@ export class CSVParser {
     position: ['position', 'job_title', 'title', 'role', 'job'],
     website: ['website', 'url', 'web', 'site', 'homepage'],
     phone: ['phone', 'phone_number', 'tel', 'telephone', 'mobile', 'cell'],
-    linkedin_url: ['linkedin_url', 'linkedin', 'linkedin_profile', 'li_url']
+    linkedin_url: ['linkedin_url', 'linkedin', 'linkedin_profile', 'li_url'],
+    twitter_url: ['twitter_url', 'twitter', 'twitter_profile', 'twitter_handle'],
+    address: ['address', 'street_address', 'street', 'location_address', 'addr'],
+    postcode: ['postcode', 'postal_code', 'zip_code', 'zip', 'postal'],
+    country: ['country', 'nation', 'location_country'],
+    city: ['city', 'location', 'location_city'],
+    timezone: ['timezone', 'tz', 'time_zone'],
+    source: ['source', 'import_source', 'data_source']
   }
 
   /**
@@ -180,52 +197,88 @@ export class CSVParser {
   }
 
   /**
-   * Automatically detect field mappings based on header names
+   * Automatically detect field mappings based on header names with confidence scoring
    */
   static detectFieldMappings(headers: string[]): FieldMapping[] {
     const mappings: FieldMapping[] = []
     const normalizedHeaders = headers.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, '_'))
+    const usedHeaders = new Set<string>()
 
     // Try to map each contact field
     Object.entries(this.CONTACT_FIELDS).forEach(([contactField, config]) => {
       const aliases = this.FIELD_ALIASES[contactField as keyof typeof this.FIELD_ALIASES] || []
-      let matchedHeader = ''
-      let matchedIndex = -1
+      let bestMatch = { header: '', index: -1, confidence: 0 }
 
-      // Look for exact matches first
+      // Calculate confidence for each header
       for (let i = 0; i < normalizedHeaders.length; i++) {
+        if (usedHeaders.has(headers[i])) continue // Skip already used headers
+        
         const normalizedHeader = normalizedHeaders[i]
-        if (aliases.includes(normalizedHeader)) {
-          matchedHeader = headers[i]
-          matchedIndex = i
-          break
-        }
-      }
+        let confidence = 0
 
-      // If no exact match, look for partial matches
-      if (!matchedHeader) {
-        for (let i = 0; i < normalizedHeaders.length; i++) {
-          const normalizedHeader = normalizedHeaders[i]
+        // Exact match - highest confidence
+        if (aliases.includes(normalizedHeader)) {
+          confidence = 1.0
+        } else {
+          // Partial match scoring
           for (const alias of aliases) {
-            if (normalizedHeader.includes(alias) || alias.includes(normalizedHeader)) {
-              matchedHeader = headers[i]
-              matchedIndex = i
-              break
+            if (normalizedHeader.includes(alias)) {
+              // Header contains alias (e.g., "contact_email" contains "email")
+              confidence = Math.max(confidence, 0.8)
+            } else if (alias.includes(normalizedHeader)) {
+              // Alias contains header (e.g., "email" contains "mail")
+              confidence = Math.max(confidence, 0.6)
+            } else {
+              // Levenshtein-like similarity
+              const similarity = this.calculateSimilarity(normalizedHeader, alias)
+              if (similarity > 0.7) {
+                confidence = Math.max(confidence, similarity * 0.7)
+              }
             }
           }
-          if (matchedHeader) break
+        }
+
+        if (confidence > bestMatch.confidence) {
+          bestMatch = { header: headers[i], index: i, confidence }
         }
       }
 
-      mappings.push({
-        csvField: matchedHeader,
-        contactField,
-        required: config.required,
-        example: matchedHeader ? `Example from "${matchedHeader}"` : undefined
-      })
+      // Only use matches with reasonable confidence
+      if (bestMatch.confidence > 0.3) {
+        usedHeaders.add(bestMatch.header)
+        mappings.push({
+          csvField: bestMatch.header,
+          contactField,
+          required: config.required,
+          confidence: bestMatch.confidence,
+          example: bestMatch.header ? `Example from "${bestMatch.header}"` : undefined
+        })
+      } else {
+        // No good match found
+        mappings.push({
+          csvField: '',
+          contactField,
+          required: config.required,
+          confidence: 0,
+          example: undefined
+        })
+      }
     })
 
     return mappings
+  }
+
+  /**
+   * Calculate string similarity using simple character overlap
+   */
+  private static calculateSimilarity(str1: string, str2: string): number {
+    const longer = str1.length > str2.length ? str1 : str2
+    const shorter = str1.length > str2.length ? str2 : str1
+    
+    if (longer.length === 0) return 1.0
+    
+    const matches = shorter.split('').filter(char => longer.includes(char)).length
+    return matches / longer.length
   }
 
   /**
@@ -272,10 +325,10 @@ export class CSVParser {
       errors: string[]
     }> = []
 
-    // Create mapping lookup
+    // Create mapping lookup (skip fields marked as __skip__)
     const mappingLookup = new Map<string, string>()
     mappings.forEach(mapping => {
-      if (mapping.csvField && mapping.contactField) {
+      if (mapping.csvField && mapping.contactField && mapping.contactField !== '__skip__') {
         mappingLookup.set(mapping.csvField, mapping.contactField)
       }
     })
@@ -316,9 +369,49 @@ export class CSVParser {
         errors.push(`Invalid email format: ${contact.email}`)
       }
 
-      // Website URL validation
-      if (contact.website && !this.isValidURL(contact.website)) {
-        errors.push(`Invalid website URL: ${contact.website}`)
+      // Website URL validation - be more lenient for CSV imports
+      if (contact.website && contact.website.trim()) {
+        const cleanedUrl = this.cleanURL(contact.website)
+        if (!this.isValidURL(cleanedUrl)) {
+          // Don't error on invalid URLs, just clean them or skip
+          contact.website = cleanedUrl || null
+        } else {
+          contact.website = cleanedUrl
+        }
+      }
+
+      // Address parsing - extract postcode and city if address is provided
+      if (contact.address && contact.address.trim()) {
+        const parsedAddress = AddressParser.parseAddressWithConfidence(contact.address)
+        
+        // Only use parsed results if confidence is high enough and fields aren't already set
+        if (parsedAddress.confidence > 0.5) {
+          // Set postcode if not already provided and successfully parsed
+          if (parsedAddress.postcode && AddressParser.isValidPostcode(parsedAddress.postcode)) {
+            if (!contact.postcode || !contact.postcode.trim()) {
+              contact.postcode = parsedAddress.postcode
+            }
+          }
+          
+          // Set city if not already provided and successfully parsed
+          if (parsedAddress.city && AddressParser.isValidCity(parsedAddress.city)) {
+            if (!contact.city || !contact.city.trim()) {
+              contact.city = parsedAddress.city
+            }
+          }
+          
+          // Set country if parsed and not already provided
+          if (parsedAddress.country && parsedAddress.country.trim()) {
+            if (!contact.country || !contact.country.trim()) {
+              contact.country = parsedAddress.country
+            }
+          }
+          
+          // Optionally update address to street-only version if parsing was successful
+          if (parsedAddress.street && parsedAddress.street.trim()) {
+            contact.address = parsedAddress.street
+          }
+        }
       }
 
       results.push({
@@ -340,12 +433,41 @@ export class CSVParser {
   }
 
   /**
-   * Basic URL validation
+   * Clean and normalize URL for validation
+   */
+  private static cleanURL(url: string): string | null {
+    if (!url || !url.trim()) return null
+    
+    // Clean the URL
+    let cleanedUrl = url.trim().toLowerCase()
+    
+    // Remove common prefixes that might be invalid
+    cleanedUrl = cleanedUrl.replace(/^(https?:\/\/)?(www\.)?/, '')
+    
+    // Basic domain validation - must contain at least one dot
+    if (!cleanedUrl.includes('.') || cleanedUrl.length < 3) {
+      return null
+    }
+    
+    // Remove trailing slashes and common suffixes
+    cleanedUrl = cleanedUrl.replace(/\/+$/, '')
+    
+    // Add https prefix
+    return `https://${cleanedUrl}`
+  }
+
+  /**
+   * Lenient URL validation for CSV imports
    */
   private static isValidURL(url: string): boolean {
+    if (!url || !url.trim()) return false
+    
     try {
-      new URL(url.startsWith('http') ? url : `https://${url}`)
-      return true
+      const urlObj = new URL(url)
+      // Basic checks - must have hostname and valid protocol
+      return urlObj.hostname.length > 0 && 
+             (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') &&
+             urlObj.hostname.includes('.')
     } catch {
       return false
     }

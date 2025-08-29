@@ -119,8 +119,8 @@ function ContactImportDialog({ onImportComplete }: ContactImportDialogProps) {
             <h4 className="font-medium text-blue-900 mb-2">CSV Format Requirements</h4>
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• First row should contain column headers</li>
-              <li>• Required columns: email, first_name, last_name</li>
-              <li>• Optional columns: company, position, phone</li>
+              <li>• <strong>Required column:</strong> email (only field that's mandatory)</li>
+              <li>• <strong>Optional columns:</strong> first_name, last_name, company, position, phone</li>
               <li>• Maximum file size: 10MB</li>
             </ul>
           </div>

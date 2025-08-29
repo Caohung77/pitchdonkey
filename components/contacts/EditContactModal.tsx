@@ -22,6 +22,8 @@ interface Contact {
   website?: string
   linkedin_url?: string
   twitter_url?: string
+  address?: string
+  postcode?: string
   country?: string
   city?: string
   timezone?: string
@@ -59,6 +61,8 @@ interface ContactFormData {
   website: string
   linkedin_url: string
   twitter_url: string
+  address: string
+  postcode: string
   country: string
   city: string
   timezone: string
@@ -85,6 +89,8 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
     website: '',
     linkedin_url: '',
     twitter_url: '',
+    address: '',
+    postcode: '',
     country: '',
     city: '',
     timezone: '',
@@ -111,6 +117,8 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         website: contact.website || '',
         linkedin_url: contact.linkedin_url || '',
         twitter_url: contact.twitter_url || '',
+        address: contact.address || '',
+        postcode: contact.postcode || '',
         country: contact.country || '',
         city: contact.city || '',
         timezone: contact.timezone || '',
@@ -144,10 +152,7 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
       return false
     }
 
-    if (!formData.first_name && !formData.last_name) {
-      setError('Please enter at least a first name or last name')
-      return false
-    }
+    // Note: Only email is required now, first_name and last_name are optional
 
     return true
   }
@@ -336,6 +341,30 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
                   value={formData.twitter_url}
                   onChange={handleInputChange}
                   placeholder="https://twitter.com/johndoe"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  placeholder="123 Main Street"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="postcode">Postcode/Zip Code</Label>
+                <Input
+                  id="postcode"
+                  name="postcode"
+                  value={formData.postcode}
+                  onChange={handleInputChange}
+                  placeholder="12345 or SW1A 1AA"
                 />
               </div>
               

@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { ContactService } from '@/lib/contacts'
 import { CSVParser } from '@/lib/csv-parser'
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -139,29 +133,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      data: finalResult
-    })
+    return createSuccessResponse(finalResult)
 
   } catch (error) {
     console.error('CSV import error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error, 'CSV import failed')
   }
-}
+})
 
 // Handle CSV preview without importing
-export async function PUT(request: NextRequest) {
+export const PUT = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -204,24 +186,18 @@ export async function PUT(request: NextRequest) {
     // Transform sample data to show preview
     const previewResults = CSVParser.transformRowsToContacts(sampleData, fieldMappings)
     
-    return NextResponse.json({
-      success: true,
-      data: {
-        headers: parseResult.headers,
-        sampleRows: sampleData,
-        fieldMappings,
-        previewContacts: previewResults,
-        totalRows: parseResult.totalRows,
-        parseErrors: parseResult.errors,
-        detectedDelimiter: delimiter
-      }
+    return createSuccessResponse({
+      headers: parseResult.headers,
+      sampleRows: sampleData,
+      fieldMappings,
+      previewContacts: previewResults,
+      totalRows: parseResult.totalRows,
+      parseErrors: parseResult.errors,
+      detectedDelimiter: delimiter
     })
 
   } catch (error) {
     console.error('CSV preview error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error, 'CSV preview failed')
   }
-}
+})

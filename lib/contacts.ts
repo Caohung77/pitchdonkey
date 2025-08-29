@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { z } from 'zod'
 import { EmailValidationService } from './email-validation'
-import { contactSchema, updateContactSchema } from './validations'
+import { contactSchema, updateContactSchema, csvContactSchema } from './validations'
 
 export interface Contact {
   id: string
@@ -392,8 +392,8 @@ export class ContactService {
       const contact = contacts[i]
       
       try {
-        // Validate using Zod schema
-        const validatedContact = this.validateContactData(contact)
+        // Validate using Zod schema (use CSV schema for bulk imports)
+        const validatedContact = this.validateContactData(contact, true)
         const normalizedEmail = EmailValidationService.normalizeEmail(validatedContact.email)
         
         // Skip duplicates if enabled
@@ -578,9 +578,10 @@ export class ContactService {
   /**
    * Validate contact data using Zod schema
    */
-  validateContactData(contactData: any) {
+  validateContactData(contactData: any, useCsvSchema: boolean = false) {
     try {
-      return contactSchema.parse(contactData)
+      const schema = useCsvSchema ? csvContactSchema : contactSchema
+      return schema.parse(contactData)
     } catch (error) {
       if (error instanceof z.ZodError) {
         const errorMessages = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
