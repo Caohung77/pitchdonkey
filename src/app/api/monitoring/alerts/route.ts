@@ -81,7 +81,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   return asyncHandler(async () => {
     const supabase = createClient()

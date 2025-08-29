@@ -58,7 +58,7 @@ export class PerplexityService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'sonar',
+          model: 'sonar-reasoning',
           messages: [
             {
               role: 'system',

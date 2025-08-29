@@ -6,9 +6,10 @@ import { BulkPersonalizationService } from '@/lib/bulk-personalization'
 // GET /api/ai/bulk-personalize/[id]/results - Get job results
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = createRouteHandlerClient({ cookies })
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
@@ -25,7 +26,7 @@ export async function GET(
     const bulkService = new BulkPersonalizationService()
     
     // Check if job exists and user owns it
-    const job = await bulkService.getJobStatus(params.id, supabase)
+    const job = await bulkService.getJobStatus(id, supabase)
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
@@ -37,13 +38,13 @@ export async function GET(
     // Handle CSV export
     if (format === 'csv') {
       try {
-        const csvContent = await bulkService.exportJobResults(params.id, supabase)
+        const csvContent = await bulkService.exportJobResults(id, supabase)
         
         return new NextResponse(csvContent, {
           status: 200,
           headers: {
             'Content-Type': 'text/csv',
-            'Content-Disposition': `attachment; filename=\"bulk-personalization-${params.id}.csv\"`
+            'Content-Disposition': `attachment; filename=\"bulk-personalization-${id}.csv\"`
           }
         })
       } catch (error) {
@@ -56,7 +57,7 @@ export async function GET(
 
     // Get paginated results
     const { results, total } = await bulkService.getJobResults(
-      params.id,
+      id,
       { status, limit, offset },
       supabase
     )

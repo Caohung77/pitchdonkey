@@ -8,7 +8,7 @@ import { DMARCGenerator } from '@/lib/dns-record-generators/dmarc-generator'
 // GET /api/email-accounts/[id]/verify-domain - Get domain authentication status
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createServerSupabaseClient()
@@ -98,7 +98,7 @@ export async function GET(
 // POST /api/email-accounts/[id]/verify-domain - Verify domain authentication
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createServerSupabaseClient()

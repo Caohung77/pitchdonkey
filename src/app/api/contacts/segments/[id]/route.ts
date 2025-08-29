@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 // GET /api/contacts/segments/[id] - Get a specific segment
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createServerSupabaseClient()
@@ -64,7 +64,7 @@ export async function GET(
 // DELETE /api/contacts/segments/[id] - Delete a segment
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createServerSupabaseClient()

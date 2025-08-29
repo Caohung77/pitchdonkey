@@ -6,6 +6,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EditContactModal } from './EditContactModal'
 import { BulkActionsBar } from './BulkActionsBar'
+import { BulkEnrichmentModal } from './BulkEnrichmentModal'
+import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 
 // Simple Contact interface to avoid import issues
 interface Contact {
@@ -16,6 +18,9 @@ interface Contact {
   last_name: string
   company?: string
   position?: string
+  website?: string
+  enrichment_status?: 'completed' | 'pending' | 'failed' | null
+  enrichment_updated_at?: string
   status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
   tags: string[]
   created_at: string
@@ -56,6 +61,9 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   // Modal states
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isBulkEnrichModalOpen, setIsBulkEnrichModalOpen] = useState(false)
+  const [isProgressModalOpen, setIsProgressModalOpen] = useState(false)
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
 
   // Selection states
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
@@ -133,6 +141,26 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
 
   const handleClearSelection = () => {
     setSelectedContacts([])
+  }
+
+  // Bulk enrichment handler
+  const handleBulkEnrich = async () => {
+    if (selectedContacts.length === 0) return
+
+    console.log('ContactsList: Starting bulk enrichment for contacts:', selectedContacts)
+    setIsBulkEnrichModalOpen(true)
+  }
+
+  const handleEnrichmentStarted = (jobId: string) => {
+    console.log('ContactsList: Enrichment job started with ID:', jobId)
+    setCurrentJobId(jobId)
+    setIsProgressModalOpen(true)
+    setSelectedContacts([]) // Clear selection after starting
+  }
+
+  const handleProgressComplete = () => {
+    console.log('ContactsList: Bulk enrichment completed, refreshing contacts')
+    fetchContacts(state.pagination.page) // Refresh contacts to show updated data
   }
 
   // Bulk action handlers
@@ -368,6 +396,7 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         selectedCount={selectedContacts.length}
         onBulkDelete={handleBulkDelete}
         onBulkAddTag={handleBulkAddTag}
+        onBulkEnrich={handleBulkEnrich}
         onClearSelection={handleClearSelection}
       />
 
@@ -502,6 +531,24 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         onClose={handleCloseEditModal}
         onContactUpdated={handleContactUpdated}
       />
+
+      {/* Bulk Enrichment Modal */}
+      <BulkEnrichmentModal
+        isOpen={isBulkEnrichModalOpen}
+        onClose={() => setIsBulkEnrichModalOpen(false)}
+        selectedContacts={state.contacts.filter(c => selectedContacts.includes(c.id))}
+        onEnrichmentStarted={handleEnrichmentStarted}
+      />
+
+      {/* Bulk Enrichment Progress Modal */}
+      {currentJobId && (
+        <BulkEnrichmentProgressModal
+          jobId={currentJobId}
+          isOpen={isProgressModalOpen}
+          onClose={() => setIsProgressModalOpen(false)}
+          onComplete={handleProgressComplete}
+        />
+      )}
     </div>
   )
 }

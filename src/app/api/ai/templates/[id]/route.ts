@@ -16,7 +16,7 @@ const updateTemplateSchema = z.object({
 // GET /api/ai/templates/[id] - Get specific template
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
@@ -46,7 +46,7 @@ export async function GET(
 // PUT /api/ai/templates/[id] - Update template
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
@@ -85,7 +85,7 @@ export async function PUT(
 // DELETE /api/ai/templates/[id] - Delete template
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies })

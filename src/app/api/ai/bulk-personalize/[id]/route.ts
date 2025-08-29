@@ -6,9 +6,10 @@ import { BulkPersonalizationService } from '@/lib/bulk-personalization'
 // GET /api/ai/bulk-personalize/[id] - Get job status and details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = createRouteHandlerClient({ cookies })
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
@@ -17,7 +18,7 @@ export async function GET(
     }
 
     const bulkService = new BulkPersonalizationService()
-    const job = await bulkService.getJobStatus(params.id, supabase)
+    const job = await bulkService.getJobStatus(id, supabase)
 
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
@@ -45,9 +46,10 @@ export async function GET(
 // DELETE /api/ai/bulk-personalize/[id] - Delete a job
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = createRouteHandlerClient({ cookies })
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
@@ -58,7 +60,7 @@ export async function DELETE(
     const bulkService = new BulkPersonalizationService()
     
     // Check if job exists and user owns it
-    const job = await bulkService.getJobStatus(params.id, supabase)
+    const job = await bulkService.getJobStatus(id, supabase)
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
@@ -67,7 +69,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await bulkService.deleteJob(params.id, supabase)
+    await bulkService.deleteJob(id, supabase)
 
     return NextResponse.json({
       success: true,

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { createServerSupabaseClient } from '@/lib/supabase'
 
-export const POST = withAuth(async (request: NextRequest, user, { params }: { params: { id: string } }) => {
+export const POST = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const supabase = createServerSupabaseClient()
     const notificationId = params.id

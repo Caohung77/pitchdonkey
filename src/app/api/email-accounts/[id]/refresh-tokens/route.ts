@@ -8,7 +8,7 @@ import { handleApiError, AuthenticationError, NotFoundError } from '@/lib/errors
 // POST /api/email-accounts/[id]/refresh-tokens - Refresh OAuth tokens
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies })

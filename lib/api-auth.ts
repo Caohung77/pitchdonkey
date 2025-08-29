@@ -174,6 +174,11 @@ export function withAuth<T = any>(
 export function handleApiError(error: any): NextResponse {
   console.error('API Error:', error)
   
+  // Handle ValidationError from errors.ts
+  if (error.constructor?.name === 'ValidationError' || error.type === 'validation') {
+    return createErrorResponse(error.message, 400)
+  }
+  
   if (error.message?.includes('JWT')) {
     return createErrorResponse('Session expired', 401)
   }
@@ -190,5 +195,8 @@ export function handleApiError(error: any): NextResponse {
     return createErrorResponse(error.message, 400)
   }
   
-  return createErrorResponse('Internal server error', 500)
+  return createErrorResponse(
+    error.message || 'Internal server error', 
+    error.statusCode || 500
+  )
 }

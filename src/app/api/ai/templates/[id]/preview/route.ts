@@ -12,7 +12,7 @@ const previewSchema = z.object({
 // POST /api/ai/templates/[id]/preview - Preview template with variables
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies })

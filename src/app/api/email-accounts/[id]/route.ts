@@ -23,7 +23,7 @@ const updateEmailAccountSchema = z.object({
 export const GET = withAuth(async (
   request: NextRequest,
   { user, supabase },
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     await withRateLimit(user, 100, 60000) // 100 requests per minute
@@ -69,7 +69,7 @@ export const GET = withAuth(async (
 export const PUT = withAuth(async (
   request: NextRequest,
   { user, supabase },
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     await withRateLimit(user, 20, 60000) // 20 updates per minute
@@ -174,7 +174,7 @@ export const PUT = withAuth(async (
 export const DELETE = withAuth(async (
   request: NextRequest,
   { user, supabase },
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     await withRateLimit(user, 10, 60000) // 10 deletes per minute
