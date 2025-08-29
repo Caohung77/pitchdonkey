@@ -70,8 +70,8 @@ const baseContactSchema = z.object({
   timezone: z.string().optional(),
   custom_fields: z.record(z.any()).default({}),
   tags: z.array(z.string()).default([]),
-  // Enrichment fields - optional for manual editing
-  enriched_company_name: z.string().optional(),
+  source: z.string().optional(),
+  // Enrichment fields - optional for manual editing (company overwrites normal company field)
   enriched_industry: z.string().optional(),
   enriched_products_services: z.string().optional(),
   enriched_target_audience: z.string().optional(),

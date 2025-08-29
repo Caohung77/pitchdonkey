@@ -322,6 +322,7 @@ export interface Database {
           enrichment_data: Json | null
           enrichment_status: 'pending' | 'completed' | 'failed' | null
           enrichment_updated_at: string | null
+          source: string | null
           created_at: string
           updated_at: string
         }
@@ -353,6 +354,7 @@ export interface Database {
           enrichment_data?: Json | null
           enrichment_status?: 'pending' | 'completed' | 'failed' | null
           enrichment_updated_at?: string | null
+          source?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -384,6 +386,7 @@ export interface Database {
           enrichment_data?: Json | null
           enrichment_status?: 'pending' | 'completed' | 'failed' | null
           enrichment_updated_at?: string | null
+          source?: string | null
           created_at?: string
           updated_at?: string
         }

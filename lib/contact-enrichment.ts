@@ -85,10 +85,11 @@ export class ContactEnrichmentService {
       // 5. Analyze website with Perplexity
       const enrichmentData = await this.perplexityService.analyzeWebsite(websiteUrl)
 
-      // 6. Save enrichment data to database
+      // 6. Save enrichment data to database and overwrite company field
       const { error: updateError } = await supabase
         .from('contacts')
         .update({
+          company: enrichmentData.company_name || contact.company, // Overwrite company with enriched data
           enrichment_data: enrichmentData,
           enrichment_status: 'completed',
           enrichment_updated_at: new Date().toISOString(),

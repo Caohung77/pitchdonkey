@@ -26,6 +26,7 @@ interface ContactFormData {
   country: string
   city: string
   timezone: string
+  source: string
 }
 
 export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddContactModalProps) {
@@ -45,7 +46,8 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddCon
     twitter_url: '',
     country: '',
     city: '',
-    timezone: ''
+    timezone: '',
+    source: 'manual' // Default to manual for new contacts
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,7 +143,8 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddCon
         twitter_url: '',
         country: '',
         city: '',
-        timezone: ''
+        timezone: '',
+        source: 'manual'
       })
     }
   }

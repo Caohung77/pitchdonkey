@@ -39,6 +39,7 @@ interface Contact {
   } | null
   enrichment_status?: 'pending' | 'completed' | 'failed' | null
   enrichment_updated_at?: string | null
+  source?: string
 }
 
 interface EditContactModalProps {
@@ -61,13 +62,13 @@ interface ContactFormData {
   country: string
   city: string
   timezone: string
-  // Enrichment fields
-  enriched_company_name: string
+  // Enrichment fields (company is merged with normal company field)
   enriched_industry: string
   enriched_products_services: string
   enriched_target_audience: string
   enriched_unique_points: string
   enriched_tone_style: string
+  source: string
 }
 
 export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }: EditContactModalProps) {
@@ -87,13 +88,13 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
     country: '',
     city: '',
     timezone: '',
-    // Enrichment fields
-    enriched_company_name: '',
+    // Enrichment fields (company is merged with normal company field)
     enriched_industry: '',
     enriched_products_services: '',
     enriched_target_audience: '',
     enriched_unique_points: '',
-    enriched_tone_style: ''
+    enriched_tone_style: '',
+    source: ''
   })
 
   // Update form data when contact changes
@@ -104,7 +105,7 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         email: contact.email || '',
         first_name: contact.first_name || '',
         last_name: contact.last_name || '',
-        company: contact.company || '',
+        company: enrichmentData?.company_name || contact.company || '',
         position: contact.position || '',
         phone: contact.phone || '',
         website: contact.website || '',
@@ -113,13 +114,13 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         country: contact.country || '',
         city: contact.city || '',
         timezone: contact.timezone || '',
-        // Populate enrichment fields if available
-        enriched_company_name: enrichmentData?.company_name || '',
+        // Populate enrichment fields if available (company overwrites normal company field)
         enriched_industry: enrichmentData?.industry || '',
         enriched_products_services: enrichmentData?.products_services?.join(', ') || '',
         enriched_target_audience: enrichmentData?.target_audience?.join(', ') || '',
         enriched_unique_points: enrichmentData?.unique_points?.join(', ') || '',
-        enriched_tone_style: enrichmentData?.tone_style || ''
+        enriched_tone_style: enrichmentData?.tone_style || '',
+        source: contact.source || 'manual'
       })
       
       // Show enrichment fields if we have enrichment data
@@ -374,6 +375,24 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
               </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="source">Source</Label>
+                <Input
+                  id="source"
+                  name="source"
+                  value={formData.source}
+                  onChange={handleInputChange}
+                  placeholder="manual"
+                  className="bg-gray-50"
+                  title="How this contact was created (manual, import:filename, etc.)"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  How this contact was added to your system
+                </p>
+              </div>
+            </div>
+
             {/* Enrichment Section */}
             {contact?.enrichment_status === 'completed' && (
               <div className="border-t pt-6 mt-6">
@@ -417,28 +436,19 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
                 {/* Editable enrichment fields */}
                 {showEnrichmentFields && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="enriched_company_name">Company Name</Label>
-                        <Input
-                          id="enriched_company_name"
-                          name="enriched_company_name"
-                          value={formData.enriched_company_name}
-                          onChange={handleInputChange}
-                          placeholder="Company Name"
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="enriched_industry">Industry</Label>
-                        <Input
-                          id="enriched_industry"
-                          name="enriched_industry"
-                          value={formData.enriched_industry}
-                          onChange={handleInputChange}
-                          placeholder="Industry"
-                        />
-                      </div>
+                    <div className="text-sm text-gray-600 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <strong>Note:</strong> The company name from enrichment overwrites the main company field above.
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="enriched_industry">Industry</Label>
+                      <Input
+                        id="enriched_industry"
+                        name="enriched_industry"
+                        value={formData.enriched_industry}
+                        onChange={handleInputChange}
+                        placeholder="Industry"
+                      />
                     </div>
 
                     <div>

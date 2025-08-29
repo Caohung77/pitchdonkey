@@ -114,7 +114,8 @@ export async function POST(request: NextRequest) {
       validContacts,
       {
         skipDuplicates: importOptions.skipDuplicates,
-        validateEmails: importOptions.validateEmails
+        validateEmails: importOptions.validateEmails,
+        source: `import:${file.name}` // Use filename as source
       }
     )
 

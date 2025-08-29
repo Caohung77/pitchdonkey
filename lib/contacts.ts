@@ -22,6 +22,7 @@ export interface Contact {
   tags: string[]
   segments: string[]
   status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
+  source?: string
   unsubscribed_at?: string
   last_contacted_at?: string
   last_opened_at?: string
@@ -79,6 +80,7 @@ export class ContactService {
         status: 'active',
         custom_fields: validatedData.custom_fields || {},
         tags: validatedData.tags || [],
+        source: validatedData.source || 'manual', // Default to manual if not specified
       })
       .select()
       .single()
@@ -113,20 +115,37 @@ export class ContactService {
     
     // Check if any enrichment fields are being updated
     const enrichmentFields = [
-      'enriched_company_name', 'enriched_industry', 'enriched_products_services',
+      'enriched_industry', 'enriched_products_services',
       'enriched_target_audience', 'enriched_unique_points', 'enriched_tone_style'
     ]
     
     const hasEnrichmentUpdate = enrichmentFields.some(field => field in validatedUpdates)
     
+    const supabase = await this.getSupabase()
+
     if (hasEnrichmentUpdate) {
-      // Convert enrichment fields to JSONB format
-      const enrichmentData: any = {}
-      
-      if (validatedUpdates.enriched_company_name !== undefined) {
-        enrichmentData.company_name = validatedUpdates.enriched_company_name
-        delete updatePayload.enriched_company_name
+      // First, get the current contact to preserve existing enrichment data
+      const { data: currentContact, error: fetchError } = await supabase
+        .from('contacts')
+        .select('enrichment_data, company')
+        .eq('id', contactId)
+        .eq('user_id', userId)
+        .single()
+
+      if (fetchError) {
+        console.warn('Could not fetch current contact for enrichment update:', fetchError)
       }
+
+      // Start with existing enrichment data or empty object
+      const existingEnrichmentData = currentContact?.enrichment_data || {}
+      const enrichmentData: any = { ...existingEnrichmentData }
+      
+      // Update company name in enrichment data if company field is being updated
+      if (validatedUpdates.company !== undefined) {
+        enrichmentData.company_name = validatedUpdates.company
+      }
+      
+      // Update other enrichment fields
       if (validatedUpdates.enriched_industry !== undefined) {
         enrichmentData.industry = validatedUpdates.enriched_industry
         delete updatePayload.enriched_industry
@@ -159,8 +178,6 @@ export class ContactService {
       updatePayload.enrichment_status = 'completed'
       updatePayload.enrichment_updated_at = new Date().toISOString()
     }
-
-    const supabase = await this.getSupabase()
     const { data, error } = await supabase
       .from('contacts')
       .update({
@@ -326,8 +343,9 @@ export class ContactService {
   async bulkCreateContacts(userId: string, contacts: Partial<Contact>[], options: {
     skipDuplicates?: boolean
     validateEmails?: boolean
+    source?: string
   } = {}) {
-    const { skipDuplicates = true, validateEmails = true } = options
+    const { skipDuplicates = true, validateEmails = true, source = 'import' } = options
     
     const results = {
       created: 0,
@@ -407,6 +425,7 @@ export class ContactService {
           status: 'active',
           custom_fields: validatedContact.custom_fields || {},
           tags: validatedContact.tags || [],
+          source: source, // Set import source
         })
 
         // Add to existing emails to prevent duplicates within the same batch
