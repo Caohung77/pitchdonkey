@@ -319,6 +319,9 @@ export interface Database {
           emails_clicked: number
           emails_replied: number
           emails_bounced: number
+          enrichment_data: Json | null
+          enrichment_status: 'pending' | 'completed' | 'failed' | null
+          enrichment_updated_at: string | null
           created_at: string
           updated_at: string
         }
@@ -347,6 +350,9 @@ export interface Database {
           emails_clicked?: number
           emails_replied?: number
           emails_bounced?: number
+          enrichment_data?: Json | null
+          enrichment_status?: 'pending' | 'completed' | 'failed' | null
+          enrichment_updated_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -375,6 +381,9 @@ export interface Database {
           emails_clicked?: number
           emails_replied?: number
           emails_bounced?: number
+          enrichment_data?: Json | null
+          enrichment_status?: 'pending' | 'completed' | 'failed' | null
+          enrichment_updated_at?: string | null
           created_at?: string
           updated_at?: string
         }

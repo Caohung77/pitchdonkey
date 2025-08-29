@@ -45,17 +45,30 @@ export class ApiClient {
       body: JSON.stringify(data),
     })
     if (!response.ok) {
-      let errorMessage = `API Error: ${response.status}`
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`
       try {
         const errorData = await response.json()
+        console.error('API Error Response:', errorData)
         if (errorData.error) {
           errorMessage = errorData.error
         }
         if (errorData.details) {
           errorMessage += ` - ${errorData.details}`
         }
+        if (errorData.message) {
+          errorMessage = errorData.message
+        }
       } catch (e) {
-        // If we can't parse the error response, use the status message
+        // If we can't parse the error response, try text
+        try {
+          const errorText = await response.text()
+          console.error('API Error Text:', errorText)
+          if (errorText) {
+            errorMessage += ` - ${errorText}`
+          }
+        } catch (textError) {
+          console.error('Failed to read error response as text:', textError)
+        }
       }
       throw new Error(errorMessage)
     }

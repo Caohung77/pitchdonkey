@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -34,6 +34,7 @@ import {
 import { RescheduleCampaignDialog } from '@/components/campaigns/RescheduleCampaignDialog'
 import { StopCampaignDialog } from '@/components/campaigns/StopCampaignDialog'
 import { CampaignProgressBar } from '@/components/campaigns/CampaignProgressBar'
+import { Pagination } from '@/components/ui/pagination'
 
 interface Campaign {
   id: string
@@ -83,6 +84,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [currentPage, setCurrentPage] = useState(1)
   const [fixingStuckCampaigns, setFixingStuckCampaigns] = useState(false)
   const [rescheduleDialog, setRescheduleDialog] = useState<{
     open: boolean
@@ -92,6 +94,8 @@ export default function CampaignsPage() {
     open: boolean
     campaign: Campaign | null
   }>({ open: false, campaign: null })
+
+  const ITEMS_PER_PAGE = 10
 
   // Handle real-time campaign progress updates
   const handleProgressUpdate = (campaignId: string, updatedData: any) => {
@@ -282,6 +286,23 @@ export default function CampaignsPage() {
     return matchesSearch && matchesStatus
   })
 
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter])
+
+  // Paginated campaigns
+  const totalFilteredCampaigns = filteredCampaigns.length
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const endIndex = startIndex + ITEMS_PER_PAGE
+  const paginatedCampaigns = filteredCampaigns.slice(startIndex, endIndex)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    // Scroll to top of campaigns list
+    document.getElementById('campaigns-list')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
   const getStatusActions = (campaign: Campaign) => {
     switch (campaign.status) {
       case 'draft':
@@ -443,9 +464,11 @@ export default function CampaignsPage() {
       </div>
 
       {/* Campaigns List */}
-      {filteredCampaigns.length > 0 ? (
-        <div className="grid gap-4">
-          {filteredCampaigns.map((campaign) => (
+      <div id="campaigns-list">
+        {totalFilteredCampaigns > 0 ? (
+          <div className="space-y-6">
+            <div className="grid gap-4">
+              {paginatedCampaigns.map((campaign) => (
             <Card key={campaign.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
@@ -574,39 +597,52 @@ export default function CampaignsPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <BarChart3 className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {searchTerm || statusFilter !== 'all' ? 'No campaigns found' : 'No campaigns yet'}
-            </h3>
-            <p className="text-gray-600 text-center mb-6">
-              {searchTerm || statusFilter !== 'all' 
-                ? 'Try adjusting your search or filter criteria'
-                : 'Create your first email campaign to start reaching out to prospects'
-              }
-            </p>
-            {(!searchTerm && statusFilter === 'all') && (
-              <div className="flex items-center space-x-3">
-                <Button asChild>
-                  <Link href="/dashboard/campaigns/simple">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Simple Campaign
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link href="/dashboard/campaigns/new">
-                    Advanced Campaign
-                  </Link>
-                </Button>
-              </div>
+              ))}
+            </div>
+            
+            {/* Pagination */}
+            {totalFilteredCampaigns > ITEMS_PER_PAGE && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={totalFilteredCampaigns}
+                itemsPerPage={ITEMS_PER_PAGE}
+                onPageChange={handlePageChange}
+                showInfo={true}
+              />
             )}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <BarChart3 className="h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {searchTerm || statusFilter !== 'all' ? 'No campaigns found' : 'No campaigns yet'}
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                {searchTerm || statusFilter !== 'all' 
+                  ? 'Try adjusting your search or filter criteria'
+                  : 'Create your first email campaign to start reaching out to prospects'
+                }
+              </p>
+              {(!searchTerm && statusFilter === 'all') && (
+                <div className="flex items-center space-x-3">
+                  <Button asChild>
+                    <Link href="/dashboard/campaigns/simple">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Simple Campaign
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link href="/dashboard/campaigns/new">
+                      Advanced Campaign
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Reschedule Dialog */}
       {rescheduleDialog.campaign && (

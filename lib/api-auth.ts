@@ -147,11 +147,12 @@ export function createSuccessResponse<T>(
 
 /**
  * Wrapper for authenticated API routes
+ * Supports both simple handlers and handlers that expect route parameters
  */
 export function withAuth<T = any>(
-  handler: (request: NextRequest, user: User) => Promise<NextResponse>
+  handler: (request: NextRequest, user: User, context?: { params: any }) => Promise<NextResponse>
 ) {
-  return async (request: NextRequest): Promise<NextResponse> => {
+  return async (request: NextRequest, context?: { params: any }): Promise<NextResponse> => {
     const auth = await authenticateRequest(request)
     
     if (auth.error || !auth.user) {
@@ -159,7 +160,7 @@ export function withAuth<T = any>(
     }
     
     try {
-      return await handler(request, auth.user)
+      return await handler(request, auth.user, context)
     } catch (error) {
       console.error('API handler error:', error)
       return createErrorResponse('Internal server error', 500)

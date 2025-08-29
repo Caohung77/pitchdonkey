@@ -24,6 +24,8 @@ interface AIGeneratorModalProps {
       last_name: string
       company_name: string
       email: string
+      enrichment_data?: any
+      enrichment_status?: string
     }>
   }>
 }
@@ -34,6 +36,8 @@ interface Contact {
   last_name: string
   company_name: string
   email: string
+  enrichment_data?: any
+  enrichment_status?: string
 }
 
 export function AIGeneratorModal({ isOpen, onClose, onGenerated, contactLists = [] }: AIGeneratorModalProps) {
@@ -67,11 +71,18 @@ export function AIGeneratorModal({ isOpen, onClose, onGenerated, contactLists = 
 
     setIsGenerating(true)
     try {
-      const response = await ApiClient.post('/api/ai/generate-outreach', {
+      // Include contact ID if a contact is selected for enrichment context
+      const requestData: any = {
         purpose,
         language,
         signature
-      })
+      }
+      
+      if (selectedContactId) {
+        requestData.contact_id = selectedContactId
+      }
+
+      const response = await ApiClient.post('/api/ai/generate-outreach', requestData)
 
       if (response.success && response.data) {
         // Pass generated content back to parent
@@ -166,7 +177,7 @@ export function AIGeneratorModal({ isOpen, onClose, onGenerated, contactLists = 
                 >
                   {availableContacts.map(contact => (
                     <option key={contact.id} value={contact.id}>
-                      {contact.first_name} {contact.last_name} {contact.company_name ? `(${contact.company_name})` : ''}
+                      {contact.first_name} {contact.last_name} {contact.company_name ? `(${contact.company_name})` : ''} {contact.enrichment_status === 'completed' ? '✨' : ''}
                     </option>
                   ))}
                 </select>

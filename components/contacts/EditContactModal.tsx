@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, X } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { AlertCircle, X, Sparkles, Eye, EyeOff } from 'lucide-react'
+import { EnrichmentDisplay } from './EnrichmentDisplay'
 
 // Simple Contact interface to avoid import issues
 interface Contact {
@@ -27,6 +29,16 @@ interface Contact {
   tags: string[]
   created_at: string
   updated_at: string
+  enrichment_data?: {
+    company_name: string
+    industry: string
+    products_services: string[]
+    target_audience: string[]
+    unique_points: string[]
+    tone_style: string
+  } | null
+  enrichment_status?: 'pending' | 'completed' | 'failed' | null
+  enrichment_updated_at?: string | null
 }
 
 interface EditContactModalProps {
@@ -49,11 +61,19 @@ interface ContactFormData {
   country: string
   city: string
   timezone: string
+  // Enrichment fields
+  enriched_company_name: string
+  enriched_industry: string
+  enriched_products_services: string
+  enriched_target_audience: string
+  enriched_unique_points: string
+  enriched_tone_style: string
 }
 
 export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }: EditContactModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showEnrichmentFields, setShowEnrichmentFields] = useState(false)
   const [formData, setFormData] = useState<ContactFormData>({
     email: '',
     first_name: '',
@@ -66,12 +86,20 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
     twitter_url: '',
     country: '',
     city: '',
-    timezone: ''
+    timezone: '',
+    // Enrichment fields
+    enriched_company_name: '',
+    enriched_industry: '',
+    enriched_products_services: '',
+    enriched_target_audience: '',
+    enriched_unique_points: '',
+    enriched_tone_style: ''
   })
 
   // Update form data when contact changes
   useEffect(() => {
     if (contact) {
+      const enrichmentData = contact.enrichment_data
       setFormData({
         email: contact.email || '',
         first_name: contact.first_name || '',
@@ -84,12 +112,22 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         twitter_url: contact.twitter_url || '',
         country: contact.country || '',
         city: contact.city || '',
-        timezone: contact.timezone || ''
+        timezone: contact.timezone || '',
+        // Populate enrichment fields if available
+        enriched_company_name: enrichmentData?.company_name || '',
+        enriched_industry: enrichmentData?.industry || '',
+        enriched_products_services: enrichmentData?.products_services?.join(', ') || '',
+        enriched_target_audience: enrichmentData?.target_audience?.join(', ') || '',
+        enriched_unique_points: enrichmentData?.unique_points?.join(', ') || '',
+        enriched_tone_style: enrichmentData?.tone_style || ''
       })
+      
+      // Show enrichment fields if we have enrichment data
+      setShowEnrichmentFields(!!enrichmentData && contact.enrichment_status === 'completed')
     }
   }, [contact])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
   }
@@ -137,7 +175,8 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to update contact')
+        const errorMessage = data.error?.message || data.error || 'Failed to update contact'
+        throw new Error(errorMessage)
       }
 
       console.log('EditContactModal: Contact updated successfully:', data)
@@ -334,6 +373,124 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
                 />
               </div>
             </div>
+
+            {/* Enrichment Section */}
+            {contact?.enrichment_status === 'completed' && (
+              <div className="border-t pt-6 mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="h-5 w-5 text-blue-600" />
+                    <h3 className="text-lg font-medium text-gray-900">Enriched Information</h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowEnrichmentFields(!showEnrichmentFields)}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    {showEnrichmentFields ? (
+                      <>
+                        <EyeOff className="h-4 w-4 mr-1" />
+                        Hide Fields
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-4 w-4 mr-1" />
+                        Show Fields
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Display enrichment data */}
+                {contact?.enrichment_data && !showEnrichmentFields && (
+                  <div className="mb-4">
+                    <EnrichmentDisplay
+                      enrichmentData={contact.enrichment_data}
+                      enrichmentStatus={contact.enrichment_status}
+                      enrichmentUpdatedAt={contact.enrichment_updated_at}
+                    />
+                  </div>
+                )}
+
+                {/* Editable enrichment fields */}
+                {showEnrichmentFields && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="enriched_company_name">Company Name</Label>
+                        <Input
+                          id="enriched_company_name"
+                          name="enriched_company_name"
+                          value={formData.enriched_company_name}
+                          onChange={handleInputChange}
+                          placeholder="Company Name"
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="enriched_industry">Industry</Label>
+                        <Input
+                          id="enriched_industry"
+                          name="enriched_industry"
+                          value={formData.enriched_industry}
+                          onChange={handleInputChange}
+                          placeholder="Industry"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="enriched_products_services">Products & Services</Label>
+                      <Textarea
+                        id="enriched_products_services"
+                        name="enriched_products_services"
+                        value={formData.enriched_products_services}
+                        onChange={handleInputChange}
+                        placeholder="Comma-separated list of products and services"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="enriched_target_audience">Target Audience</Label>
+                      <Textarea
+                        id="enriched_target_audience"
+                        name="enriched_target_audience"
+                        value={formData.enriched_target_audience}
+                        onChange={handleInputChange}
+                        placeholder="Comma-separated list of target audience"
+                        rows={2}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="enriched_unique_points">Unique Points</Label>
+                      <Textarea
+                        id="enriched_unique_points"
+                        name="enriched_unique_points"
+                        value={formData.enriched_unique_points}
+                        onChange={handleInputChange}
+                        placeholder="Comma-separated list of unique selling points"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="enriched_tone_style">Communication Tone & Style</Label>
+                      <Input
+                        id="enriched_tone_style"
+                        name="enriched_tone_style"
+                        value={formData.enriched_tone_style}
+                        onChange={handleInputChange}
+                        placeholder="Communication tone and style"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Form Actions */}
             <div className="flex justify-end space-x-3 pt-4">

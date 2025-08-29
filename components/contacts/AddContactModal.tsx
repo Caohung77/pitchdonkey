@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle, Plus, X } from 'lucide-react'
+import { EnrichmentButton } from './EnrichmentButton'
 
 interface AddContactModalProps {
   onContactAdded: () => void
+  onNavigateToContacts?: () => void
 }
 
 interface ContactFormData {
@@ -26,10 +28,11 @@ interface ContactFormData {
   timezone: string
 }
 
-export function AddContactModal({ onContactAdded }: AddContactModalProps) {
+export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddContactModalProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [createdContactId, setCreatedContactId] = useState<string | null>(null)
   const [formData, setFormData] = useState<ContactFormData>({
     email: '',
     first_name: '',
@@ -93,12 +96,39 @@ export function AddContactModal({ onContactAdded }: AddContactModalProps) {
       const data = await response.json()
 
       if (!response.ok) {
+        // Handle different error types
+        if (response.status === 409 && data.code === 'DUPLICATE_CONTACT') {
+          throw new Error(`A contact with email "${formData.email}" already exists. Please use a different email address.`)
+        }
         throw new Error(data.error || 'Failed to create contact')
       }
 
       console.log('AddContactModal: Contact created successfully:', data)
       
-      // Reset form and close modal
+      // Store the created contact ID for potential enrichment
+      if (data.data && data.data.id) {
+        setCreatedContactId(data.data.id)
+      } else if (data.id) {
+        setCreatedContactId(data.id)
+      }
+      
+      // Call parent callback
+      onContactAdded()
+
+    } catch (error) {
+      console.error('AddContactModal: Error creating contact:', error)
+      setError(error instanceof Error ? error.message : 'Failed to create contact')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClose = () => {
+    setIsOpen(false)
+    setError(null)
+    setCreatedContactId(null)
+    // Reset form data when closing after successful creation
+    if (createdContactId) {
       setFormData({
         email: '',
         first_name: '',
@@ -113,21 +143,14 @@ export function AddContactModal({ onContactAdded }: AddContactModalProps) {
         city: '',
         timezone: ''
       })
-      setIsOpen(false)
-      onContactAdded()
-
-    } catch (error) {
-      console.error('AddContactModal: Error creating contact:', error)
-      setError(error instanceof Error ? error.message : 'Failed to create contact')
-    } finally {
-      setLoading(false)
     }
   }
 
-  const handleClose = () => {
-    setIsOpen(false)
-    setError(null)
-    // Don't reset form data in case user wants to continue editing
+  const handleViewContacts = () => {
+    handleClose()
+    if (onNavigateToContacts) {
+      onNavigateToContacts()
+    }
   }
 
   if (!isOpen) {
@@ -312,14 +335,62 @@ export function AddContactModal({ onContactAdded }: AddContactModalProps) {
               </div>
             </div>
 
+            {/* Success Message and Enrichment */}
+            {createdContactId && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-800 font-medium">✅ Contact created successfully!</p>
+                      <p className="text-green-700 text-sm mt-1">
+                        {formData.first_name} {formData.last_name} has been added to your contacts.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {formData.website && (
+                    <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <div>
+                        <p className="text-blue-800 text-sm font-medium">Website Analysis Available</p>
+                        <p className="text-blue-700 text-xs mt-1">
+                          Get AI insights from their website for better email personalization.
+                        </p>
+                      </div>
+                      <EnrichmentButton
+                        contactId={createdContactId}
+                        hasWebsite={true}
+                        size="sm"
+                        onEnrichmentComplete={() => {
+                          console.log('Enrichment completed for new contact')
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Form Actions */}
             <div className="flex justify-end space-x-3 pt-4">
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? 'Creating...' : 'Create Contact'}
-              </Button>
+              {createdContactId ? (
+                <>
+                  <Button type="button" variant="outline" onClick={handleClose}>
+                    Add Another Contact
+                  </Button>
+                  <Button type="button" onClick={handleViewContacts}>
+                    View All Contacts
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" variant="outline" onClick={handleClose}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? 'Creating...' : 'Create Contact'}
+                  </Button>
+                </>
+              )}
             </div>
           </form>
         </CardContent>

@@ -54,7 +54,9 @@ export class ContactService {
     // Check for duplicates
     const duplicate = await this.findDuplicateContact(userId, validatedData.email)
     if (duplicate) {
-      throw new Error(`Contact with email ${validatedData.email} already exists`)
+      const error = new Error(`Contact with email ${validatedData.email} already exists`)
+      error.name = 'DuplicateContactError'
+      throw error
     }
 
     // Validate email if requested
@@ -106,11 +108,63 @@ export class ContactService {
       }
     }
 
+    // Handle enrichment data conversion
+    const updatePayload = { ...validatedUpdates } as any
+    
+    // Check if any enrichment fields are being updated
+    const enrichmentFields = [
+      'enriched_company_name', 'enriched_industry', 'enriched_products_services',
+      'enriched_target_audience', 'enriched_unique_points', 'enriched_tone_style'
+    ]
+    
+    const hasEnrichmentUpdate = enrichmentFields.some(field => field in validatedUpdates)
+    
+    if (hasEnrichmentUpdate) {
+      // Convert enrichment fields to JSONB format
+      const enrichmentData: any = {}
+      
+      if (validatedUpdates.enriched_company_name !== undefined) {
+        enrichmentData.company_name = validatedUpdates.enriched_company_name
+        delete updatePayload.enriched_company_name
+      }
+      if (validatedUpdates.enriched_industry !== undefined) {
+        enrichmentData.industry = validatedUpdates.enriched_industry
+        delete updatePayload.enriched_industry
+      }
+      if (validatedUpdates.enriched_products_services !== undefined) {
+        enrichmentData.products_services = validatedUpdates.enriched_products_services
+          ? validatedUpdates.enriched_products_services.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : []
+        delete updatePayload.enriched_products_services
+      }
+      if (validatedUpdates.enriched_target_audience !== undefined) {
+        enrichmentData.target_audience = validatedUpdates.enriched_target_audience
+          ? validatedUpdates.enriched_target_audience.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : []
+        delete updatePayload.enriched_target_audience
+      }
+      if (validatedUpdates.enriched_unique_points !== undefined) {
+        enrichmentData.unique_points = validatedUpdates.enriched_unique_points
+          ? validatedUpdates.enriched_unique_points.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : []
+        delete updatePayload.enriched_unique_points
+      }
+      if (validatedUpdates.enriched_tone_style !== undefined) {
+        enrichmentData.tone_style = validatedUpdates.enriched_tone_style
+        delete updatePayload.enriched_tone_style
+      }
+      
+      // Update enrichment data and status
+      updatePayload.enrichment_data = enrichmentData
+      updatePayload.enrichment_status = 'completed'
+      updatePayload.enrichment_updated_at = new Date().toISOString()
+    }
+
     const supabase = await this.getSupabase()
     const { data, error } = await supabase
       .from('contacts')
       .update({
-        ...validatedUpdates,
+        ...updatePayload,
         updated_at: new Date().toISOString(),
       })
       .eq('id', contactId)

@@ -52,6 +52,10 @@ function ContactsPageContent() {
     // due to their useEffect dependencies
   }
 
+  const handleNavigateToContacts = () => {
+    setState(prev => ({ ...prev, activeTab: 'contacts' }))
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -128,7 +132,10 @@ function ContactsPageContent() {
             </div>
             <div className="flex space-x-3">
               <ImportContactsModal onImportComplete={handleContactAdded} />
-              <AddContactModal onContactAdded={handleContactAdded} />
+              <AddContactModal 
+                onContactAdded={handleContactAdded} 
+                onNavigateToContacts={handleNavigateToContacts}
+              />
             </div>
           </div>
         </div>

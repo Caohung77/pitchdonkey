@@ -1,117 +1,60 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { ContactService } from '@/lib/contacts'
 import { updateContactSchema } from '@/lib/validations'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const GET = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { id: contactId } = await params
 
     const contactService = new ContactService()
-    const contact = await contactService.getContact(params.id, user.id)
+    const contact = await contactService.getContact(contactId, user.id)
 
     if (!contact) {
-      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+      return createSuccessResponse({ error: 'Contact not found' }, 404)
     }
 
-    return NextResponse.json({
-      success: true,
-      data: contact
-    })
+    return createSuccessResponse({ contact })
 
   } catch (error) {
     console.error('Get contact error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const PUT = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
+    const { id: contactId } = await params
     const body = await request.json()
+    
+    console.log('PUT /api/contacts/[id] - Updating contact:', contactId, body)
     
     // Validate input
     const validatedData = updateContactSchema.parse(body)
 
     const contactService = new ContactService()
-    const contact = await contactService.updateContact(params.id, user.id, validatedData)
+    const contact = await contactService.updateContact(contactId, user.id, validatedData)
 
-    return NextResponse.json({
-      success: true,
-      data: contact
-    })
+    return createSuccessResponse({ contact }, 200)
 
   } catch (error) {
     console.error('Update contact error:', error)
-    
-    if (error instanceof Error) {
-      if (error.message.includes('already exists')) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 409 }
-        )
-      }
-      if (error.message.includes('Validation failed')) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 400 }
-        )
-      }
-    }
-
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available')
+    return handleApiError(error)
   }
-}
+})
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const DELETE = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { id: contactId } = await params
 
     const contactService = new ContactService()
-    await contactService.deleteContact(params.id, user.id)
+    await contactService.deleteContact(contactId, user.id)
 
-    return NextResponse.json({
-      success: true,
-      message: 'Contact deleted successfully'
-    })
+    return createSuccessResponse({ message: 'Contact deleted successfully' })
 
   } catch (error) {
     console.error('Delete contact error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
-}
+})

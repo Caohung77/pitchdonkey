@@ -2,11 +2,13 @@ import { NextRequest } from 'next/server'
 import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { ValidationError } from '@/lib/errors'
+import { ContactEnrichmentService } from '@/lib/contact-enrichment'
 
 interface OutreachGenerationRequest {
   purpose: string
   language: 'English' | 'German'
   signature: string
+  contact_id?: string
 }
 
 // Expert outreach email agent prompt
@@ -57,8 +59,28 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     console.log('🤖 Generating outreach email:', { 
       purpose: body.purpose.substring(0, 100) + '...',
       language: body.language,
-      signatureLength: body.signature.length
+      signatureLength: body.signature.length,
+      contactId: body.contact_id || 'none'
     })
+
+    // Get enrichment data if contact ID is provided
+    let enrichmentContext = ''
+    if (body.contact_id) {
+      try {
+        console.log('📊 Fetching enrichment data for contact:', body.contact_id)
+        const enrichmentService = new ContactEnrichmentService()
+        const enrichmentData = await enrichmentService.getEnrichmentData(body.contact_id, user.id)
+        
+        if (enrichmentData.enrichment_data && enrichmentData.enrichment_status === 'completed') {
+          console.log('✅ Using enrichment data for email generation')
+          enrichmentContext = `\n\nCOMPANY INSIGHTS (use this information to personalize the email):\n${JSON.stringify(enrichmentData.enrichment_data, null, 2)}`
+        } else {
+          console.log('ℹ️ No enrichment data available for this contact')
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to fetch enrichment data, continuing without it:', error)
+      }
+    }
 
     // Initialize Google Gemini AI
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
@@ -70,11 +92,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY)
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
-    // Prepare the prompt with user inputs
+    // Prepare the prompt with user inputs and enrichment context
     const prompt = OUTREACH_AGENT_PROMPT
       .replace('{{purpose}}', body.purpose)
       .replace('{{language}}', body.language)
-      .replace('{{signature}}', body.signature)
+      .replace('{{signature}}', body.signature) + enrichmentContext
 
     console.log('📝 Generated prompt length:', prompt.length)
 

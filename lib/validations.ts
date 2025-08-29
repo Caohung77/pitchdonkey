@@ -70,6 +70,13 @@ const baseContactSchema = z.object({
   timezone: z.string().optional(),
   custom_fields: z.record(z.any()).default({}),
   tags: z.array(z.string()).default([]),
+  // Enrichment fields - optional for manual editing
+  enriched_company_name: z.string().optional(),
+  enriched_industry: z.string().optional(),
+  enriched_products_services: z.string().optional(),
+  enriched_target_audience: z.string().optional(),
+  enriched_unique_points: z.string().optional(),
+  enriched_tone_style: z.string().optional(),
 })
 
 // Contact validation schema with refinement

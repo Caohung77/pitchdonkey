@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { ContactService } from '@/lib/contacts'
 import { contactSchema } from '@/lib/validations'
@@ -57,6 +57,19 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
   } catch (error) {
     console.error('Create contact error:', error)
+    
+    // Handle duplicate contact error with specific status code
+    if (error instanceof Error && error.name === 'DuplicateContactError') {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: error.message,
+          code: 'DUPLICATE_CONTACT'
+        },
+        { status: 409 } // Conflict
+      )
+    }
+    
     return handleApiError(error)
   }
 })
