@@ -21,6 +21,14 @@ interface Contact {
   website?: string
   enrichment_status?: 'completed' | 'pending' | 'failed' | null
   enrichment_updated_at?: string
+  enrichment_data?: {
+    company_name?: string
+    industry?: string
+    products_services?: string[]
+    target_audience?: string[]
+    unique_points?: string[]
+    tone_style?: string
+  }
   status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
   tags: string[]
   created_at: string
@@ -457,6 +465,50 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                       : contact.position || contact.company
                     }
                   </p>
+                )}
+
+                {/* Enrichment Data Display */}
+                {contact.enrichment_data && contact.enrichment_status === 'completed' && (
+                  <div className="bg-blue-50 rounded-lg p-2 mt-2 space-y-1">
+                    <div className="flex items-center gap-1 mb-1">
+                      <span className="text-xs font-medium text-blue-700">AI Enriched</span>
+                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">✨</span>
+                    </div>
+                    
+                    {contact.enrichment_data.industry && (
+                      <p className="text-xs text-blue-600">
+                        <span className="font-medium">Industry:</span> {contact.enrichment_data.industry}
+                      </p>
+                    )}
+                    
+                    {contact.enrichment_data.products_services && contact.enrichment_data.products_services.length > 0 && (
+                      <p className="text-xs text-blue-600">
+                        <span className="font-medium">Services:</span> {contact.enrichment_data.products_services.slice(0, 2).join(', ')}
+                        {contact.enrichment_data.products_services.length > 2 && `... (+${contact.enrichment_data.products_services.length - 2} more)`}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Enrichment Status Badge */}
+                {contact.enrichment_status && (
+                  <div className="flex items-center gap-2 mt-2">
+                    {contact.enrichment_status === 'completed' && contact.enrichment_data && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">
+                        ✓ Enriched
+                      </span>
+                    )}
+                    {contact.enrichment_status === 'pending' && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
+                        ⏳ Processing
+                      </span>
+                    )}
+                    {contact.enrichment_status === 'failed' && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">
+                        ✗ Failed
+                      </span>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between">

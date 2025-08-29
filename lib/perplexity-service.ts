@@ -109,19 +109,20 @@ export class PerplexityService {
    * Build the enrichment prompt with website URL
    */
   private buildEnrichmentPrompt(websiteUrl: string): string {
-    return `Please analyze the website "${websiteUrl}" and extract relevant company information for email personalization.
+    return `Search the web and analyze the company website: ${websiteUrl}
 
-Focus specifically on information from this company's website: ${websiteUrl}
+TASK: Visit and analyze the company website at ${websiteUrl} to extract business information for email personalization.
 
-Search for and analyze the content from this website to understand:
-- What the company does
-- What industry they operate in  
-- Their products or services
-- Who their target customers are
-- What makes them unique
-- Their communication style and tone
+REQUIRED: Search and read the actual website content, including:
+- Homepage content and company description
+- About page and company background  
+- Products/services offered
+- Target market and customers
+- Company values and unique selling points
 
-Please provide the analysis in the exact JSON format specified in your instructions.`
+IMPORTANT: You must actually search and access the website content at ${websiteUrl} to provide accurate information. Do not make assumptions.
+
+Output the findings in the exact JSON format specified in your system instructions.`
   }
 
   /**
@@ -188,23 +189,40 @@ Please provide the analysis in the exact JSON format specified in your instructi
    */
   private parseEnrichmentResponse(content: string): EnrichmentData {
     try {
-      // Look for JSON in the response
-      const jsonMatch = content.match(/\{[\s\S]*"company_name"[\s\S]*"tone_style"[\s\S]*\}/)
+      console.log('🔍 Full response content:', content.substring(0, 500) + '...')
+      
+      // Remove thinking tags if present (for sonar-reasoning model)
+      let cleanContent = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+      console.log('🧹 Cleaned content:', cleanContent.substring(0, 300) + '...')
+      
+      // Look for JSON in the response - try multiple patterns
+      let jsonMatch = cleanContent.match(/\{[\s\S]*?"company_name"[\s\S]*?"tone_style"[\s\S]*?\}/);
+      
+      if (!jsonMatch) {
+        // Try broader JSON pattern
+        jsonMatch = cleanContent.match(/\{[\s\S]*?\}/);
+      }
+      
       if (jsonMatch) {
+        console.log('📝 Found JSON match:', jsonMatch[0].substring(0, 200) + '...')
         const parsed = JSON.parse(jsonMatch[0])
         
         // Validate the structure
         if (this.validateEnrichmentData(parsed)) {
+          console.log('✅ Successfully parsed enrichment data:', parsed)
           return parsed
+        } else {
+          console.warn('⚠️ JSON structure validation failed')
         }
       }
 
-      // If JSON parsing fails, try to extract manually
+      // If JSON parsing fails, try to extract manually from the content
       console.warn('⚠️ JSON parsing failed, attempting manual extraction')
-      return this.extractManually(content)
+      return this.extractManually(cleanContent)
 
     } catch (error) {
       console.error('❌ Failed to parse enrichment response:', error)
+      console.error('❌ Content that failed to parse:', content)
       throw new Error('Failed to parse enrichment data from API response')
     }
   }
@@ -228,7 +246,51 @@ Please provide the analysis in the exact JSON format specified in your instructi
    * Manual extraction fallback
    */
   private extractManually(content: string): EnrichmentData {
-    // Fallback: create empty structure
+    console.log('🔧 Attempting manual extraction from content')
+    
+    // Try to extract company name
+    let company_name = ''
+    const companyMatches = content.match(/company[:\s]+(.*?)(?:\n|\.|\,|$)/i)
+    if (companyMatches) {
+      company_name = companyMatches[1].trim().substring(0, 100)
+    }
+    
+    // Try to extract industry information
+    let industry = ''
+    const industryMatches = content.match(/industry[:\s]+(.*?)(?:\n|\.|\,|$)/i) ||
+                           content.match(/sector[:\s]+(.*?)(?:\n|\.|\,|$)/i) ||
+                           content.match(/business[:\s]+(.*?)(?:\n|\.|\,|$)/i)
+    if (industryMatches) {
+      industry = industryMatches[1].trim().substring(0, 100)
+    }
+    
+    // Try to extract products/services
+    let products_services: string[] = []
+    const productsText = content.match(/products?[:\s]+(.*?)(?:\n\n|\.|$)/i) ||
+                        content.match(/services?[:\s]+(.*?)(?:\n\n|\.|$)/i)
+    if (productsText) {
+      products_services = productsText[1].split(/[,;]/).map(s => s.trim()).filter(s => s.length > 0).slice(0, 5)
+    }
+    
+    // If we found any information, create a structured response
+    if (company_name || industry || products_services.length > 0) {
+      const extractedData = {
+        company_name,
+        industry,
+        products_services,
+        target_audience: [],
+        unique_points: [],
+        tone_style: ''
+      }
+      
+      console.log('🎯 Manual extraction result:', extractedData)
+      return extractedData
+    }
+    
+    // Last fallback: create empty structure but log the issue
+    console.warn('❌ Manual extraction failed - no useful data found in content')
+    console.log('📄 Content preview for debugging:', content.substring(0, 1000))
+    
     return {
       company_name: '',
       industry: '',
