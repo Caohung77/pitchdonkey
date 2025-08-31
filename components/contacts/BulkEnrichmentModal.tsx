@@ -23,7 +23,7 @@ interface BulkEnrichmentModalProps {
   isOpen: boolean
   onClose: () => void
   selectedContacts: Contact[]
-  onEnrichmentStarted: (jobId: string | { jobId: string; totalContacts: number; contactIds: string[] } | null) => void
+  onEnrichmentStarted: (jobData: string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null) => void
 }
 
 interface EnrichmentEligibility {
@@ -159,10 +159,21 @@ export function BulkEnrichmentModal({
 
       console.log('✅ Bulk enrichment job started:', data.job_id)
       
-      // Update with real job ID if we got one
+      // Update with real job data if we got one
       if (data.job_id) {
-        console.log('🔄 BulkEnrichmentModal: Updating with real job ID:', data.job_id)
-        onEnrichmentStarted(data.job_id)
+        console.log('🔄 BulkEnrichmentModal: Updating with real job data:', data)
+        
+        // Always pass the job_id, calculate eligible contacts from our temp data if summary is missing
+        const realJobData = {
+          job_id: data.job_id,
+          summary: {
+            eligible_contacts: data.summary?.eligible_contacts || totalContacts,
+            total_requested: data.summary?.total_requested || totalContacts
+          }
+        }
+        
+        console.log('🔄 BulkEnrichmentModal: Sending real job data:', realJobData)
+        onEnrichmentStarted(realJobData)
       }
 
     } catch (error) {

@@ -71,7 +71,7 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isBulkEnrichModalOpen, setIsBulkEnrichModalOpen] = useState(false)
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false)
-  const [currentJobId, setCurrentJobId] = useState<string | { jobId: string; totalContacts: number; contactIds: string[] } | null>(null)
+  const [currentJobId, setCurrentJobId] = useState<string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null>(null)
 
   // Selection states
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
@@ -159,15 +159,15 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
     setIsBulkEnrichModalOpen(true)
   }
 
-  const handleEnrichmentStarted = (jobInfo: string | { jobId: string; totalContacts: number; contactIds: string[] } | null) => {
-    console.log('ContactsList: Enrichment job started:', jobInfo)
+  const handleEnrichmentStarted = (jobData: string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null) => {
+    console.log('ContactsList: Enrichment job started:', jobData)
     console.log('ContactsList: Current modal states before update:', { 
       isProgressModalOpen, 
       isBulkEnrichModalOpen,
       currentJobId 
     })
     
-    if (jobInfo === null) {
+    if (jobData === null) {
       // Close progress modal
       setCurrentJobId(null)
       setIsProgressModalOpen(false)
@@ -175,11 +175,12 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       return
     }
     
-    // Handle both string (legacy) and object (new) formats
-    const jobId = typeof jobInfo === 'string' ? jobInfo : jobInfo.jobId
+    // Handle multiple formats: string, temp object, or real job data
+    const jobId = typeof jobData === 'string' ? jobData : 
+                 'jobId' in jobData ? jobData.jobId : jobData.job_id
     
-    // Always update the job ID (this handles both temp and real IDs)
-    setCurrentJobId(jobInfo) // Pass the full object for progress tracking
+    // Always update the job data (this handles temp, real, and legacy formats)
+    setCurrentJobId(jobData) // Pass the full data for progress tracking
     
     // Only set modal open if it's not already open (for initial temp ID)
     if (!isProgressModalOpen) {
@@ -187,7 +188,7 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       setSelectedContacts([]) // Clear selection after starting
     }
     
-    console.log('ContactsList: State updates called - jobInfo set to:', jobInfo, 'isProgressModalOpen:', isProgressModalOpen || 'set to true')
+    console.log('ContactsList: State updates called - jobData set to:', jobData, 'isProgressModalOpen:', isProgressModalOpen || 'set to true')
   }
 
   const handleProgressComplete = () => {
