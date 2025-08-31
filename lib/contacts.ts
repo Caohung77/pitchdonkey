@@ -20,6 +20,7 @@ export interface Contact {
   timezone?: string
   custom_fields: Record<string, any>
   tags: string[]
+  lists?: string[]
   segments: string[]
   status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
   source?: string

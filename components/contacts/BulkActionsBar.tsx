@@ -2,13 +2,14 @@
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Trash2, Tag, X, Globe } from 'lucide-react'
+import { Trash2, Tag, X, Globe, List } from 'lucide-react'
 
 interface BulkActionsBarProps {
   selectedCount: number
   onBulkDelete: () => void
   onBulkAddTag: () => void
   onBulkEnrich: () => void
+  onBulkAddToList: () => void
   onClearSelection: () => void
 }
 
@@ -17,6 +18,7 @@ export function BulkActionsBar({
   onBulkDelete, 
   onBulkAddTag, 
   onBulkEnrich,
+  onBulkAddToList,
   onClearSelection 
 }: BulkActionsBarProps) {
   if (selectedCount === 0) {
@@ -51,6 +53,16 @@ export function BulkActionsBar({
             >
               <Globe className="h-4 w-4" />
               <span>Enrich Selected</span>
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onBulkAddToList}
+              className="flex items-center space-x-1 bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+            >
+              <List className="h-4 w-4" />
+              <span>Add to List</span>
             </Button>
             
             <Button

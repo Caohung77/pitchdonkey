@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, AlertCircle, Edit, Trash2, Tag } from 'lucide-react'
+import { Users, AlertCircle, Edit, Trash2, Tag, List } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EditContactModal } from './EditContactModal'
@@ -11,6 +11,7 @@ import { BulkActionsBar } from './BulkActionsBar'
 import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 import { BulkTagManagementModal } from './BulkTagManagementModal'
+import { BulkListManagementModal } from './BulkListManagementModal'
 import { Contact } from '@/lib/contacts'
 
 interface ContactsListProps {
@@ -55,6 +56,7 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null>(null)
   const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false)
+  const [isBulkListModalOpen, setIsBulkListModalOpen] = useState(false)
 
   // Selection states
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
@@ -238,6 +240,18 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
     setIsBulkTagModalOpen(true)
   }
 
+  const handleBulkAddToList = () => {
+    if (selectedContacts.length === 0) return
+    console.log('ContactsList: Opening bulk list management for contacts:', selectedContacts.length)
+    setIsBulkListModalOpen(true)
+  }
+
+  const handleListsUpdated = () => {
+    console.log('ContactsList: Lists updated, refreshing contacts list')
+    fetchContacts(state.pagination.page)
+    setSelectedContacts([])
+  }
+
   useEffect(() => {
     fetchContacts()
   }, [userId, searchTerm, statusFilter])
@@ -401,6 +415,7 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         onBulkDelete={handleBulkDelete}
         onBulkAddTag={handleBulkAddTag}
         onBulkEnrich={handleBulkEnrich}
+        onBulkAddToList={handleBulkAddToList}
         onClearSelection={handleClearSelection}
       />
 
@@ -541,11 +556,18 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                     {contact.status}
                   </span>
                   
-                  {contact.tags && contact.tags.length > 0 && (
-                    <span className="text-xs text-gray-500">
-                      {contact.tags.length} tag{contact.tags.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
+                  <div className="flex items-center space-x-2 text-xs text-gray-500">
+                    {contact.tags && contact.tags.length > 0 && (
+                      <span>
+                        {contact.tags.length} tag{contact.tags.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {contact.lists && contact.lists.length > 0 && (
+                      <span>
+                        {contact.lists.length} list{contact.lists.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Tags Display */}
@@ -563,6 +585,26 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                     {contact.tags.length > 3 && (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                         +{contact.tags.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Lists Display */}
+                {contact.lists && contact.lists.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {contact.lists.slice(0, 3).map((listName: string, index: number) => (
+                      <span 
+                        key={index} 
+                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                      >
+                        <List className="h-3 w-3 mr-1" />
+                        {listName}
+                      </span>
+                    ))}
+                    {contact.lists.length > 3 && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                        +{contact.lists.length - 3} more lists
                       </span>
                     )}
                   </div>
@@ -677,6 +719,15 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         selectedContacts={selectedContacts}
         selectedContactsCount={selectedContacts.length}
         onTagsUpdated={handleTagsUpdated}
+      />
+
+      {/* Bulk List Management Modal */}
+      <BulkListManagementModal
+        isOpen={isBulkListModalOpen}
+        onClose={() => setIsBulkListModalOpen(false)}
+        selectedContactIds={selectedContacts}
+        selectedContactCount={selectedContacts.length}
+        onListsUpdated={handleListsUpdated}
       />
     </div>
   )
