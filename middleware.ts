@@ -28,19 +28,17 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Protected routes that require authentication
-  const protectedRoutes = [
-    '/dashboard',
-    '/api/email-accounts',
-    '/api/campaigns',
-    '/api/contacts',
-    '/api/ai',
-    '/api/user'
-  ]
+  // Protected page routes that require authentication (exclude API routes)
+  const protectedPageRoutes = ['/dashboard']
 
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
+  const isProtectedPageRoute = protectedPageRoutes.some(route => pathname.startsWith(route))
   
-  if (isProtectedRoute) {
+  // Skip middleware auth for API routes - let them handle their own authentication
+  if (pathname.startsWith('/api/')) {
+    return response
+  }
+  
+  if (isProtectedPageRoute) {
     try {
       // Create Supabase client for session verification
       const supabase = createClient(
@@ -48,51 +46,46 @@ export async function middleware(request: NextRequest) {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      // Check for authentication in different ways
+      // Check for authentication via cookies for page routes
       let isAuthenticated = false
 
-      // Method 1: Check Authorization header for API routes
-      if (pathname.startsWith('/api/')) {
-        const authHeader = request.headers.get('authorization')
-        
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7)
-          const { data: { user }, error } = await supabase.auth.getUser(token)
-          isAuthenticated = !error && !!user
-        }
-      }
-
-      // Method 2: Check cookies for page routes (dashboard)
-      if (!isAuthenticated && pathname.startsWith('/dashboard')) {
-        // Check for session in cookies
-        const sessionCookie = request.cookies.get('supabase-auth-token')
-        
-        if (sessionCookie) {
+      // Check for Supabase session cookies (standard format)
+      const authCookies = request.cookies.getAll()
+        .filter(cookie => cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token'))
+      
+      if (authCookies.length > 0) {
+        try {
+          // Try to extract access token from the most recent auth cookie
+          const authCookie = authCookies[0]
+          let accessToken = null
+          
           try {
-            const { data: { user }, error } = await supabase.auth.getUser(sessionCookie.value)
-            isAuthenticated = !error && !!user
-          } catch {
-            // Invalid session cookie
-            isAuthenticated = false
+            // Parse the cookie value which should be JSON
+            const cookieData = JSON.parse(authCookie.value)
+            accessToken = cookieData?.access_token || cookieData?.accessToken
+          } catch (parseError) {
+            // If JSON parsing fails, try to use the value directly
+            console.warn('Cookie parsing failed, trying direct value:', parseError)
+            accessToken = authCookie.value
           }
+          
+          if (accessToken) {
+            const { data: { user }, error } = await supabase.auth.getUser(accessToken)
+            isAuthenticated = !error && !!user
+          }
+        } catch (error) {
+          console.warn('Session cookie validation failed:', error)
+          isAuthenticated = false
         }
       }
 
-      // Handle unauthenticated requests
+      // Handle unauthenticated requests for page routes
       if (!isAuthenticated) {
-        if (pathname.startsWith('/api/')) {
-          // Return 401 for API routes
-          return NextResponse.json(
-            { error: 'Authentication required', code: 'UNAUTHORIZED' },
-            { status: 401 }
-          )
-        } else {
-          // Redirect to signin for page routes
-          const url = request.nextUrl.clone()
-          url.pathname = '/auth/signin'
-          url.searchParams.set('redirectTo', pathname)
-          return NextResponse.redirect(url)
-        }
+        // Redirect to signin for page routes
+        const url = request.nextUrl.clone()
+        url.pathname = '/auth/signin'
+        url.searchParams.set('redirectTo', pathname)
+        return NextResponse.redirect(url)
       }
 
       // Add user info to request headers for downstream use (if needed)
@@ -102,17 +95,10 @@ export async function middleware(request: NextRequest) {
     } catch (error) {
       console.error('Middleware auth error:', error)
       
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json(
-          { error: 'Authentication service unavailable', code: 'AUTH_ERROR' },
-          { status: 503 }
-        )
-      } else {
-        // Redirect to error page for critical auth failures
-        const url = request.nextUrl.clone()
-        url.pathname = '/auth/error'
-        return NextResponse.redirect(url)
-      }
+      // Redirect to error page for critical auth failures on page routes
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/error'
+      return NextResponse.redirect(url)
     }
   }
 

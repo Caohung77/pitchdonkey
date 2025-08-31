@@ -13,10 +13,10 @@ interface Params {
   id: string
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Params }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<Params> }) {
   try {
     const { user } = await requireAuth(request)
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     
     const validatedData = updateTagSchema.parse(body)
@@ -55,10 +55,10 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Params }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<Params> }) {
   try {
     const { user } = await requireAuth(request)
-    const { id } = params
+    const { id } = await params
     
     await deleteTag(user.id, id)
     

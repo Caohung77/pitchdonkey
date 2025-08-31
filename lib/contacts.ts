@@ -476,53 +476,113 @@ export class ContactService {
   }
 
   async addTagsToContacts(contactIds: string[], userId: string, tags: string[]) {
-    // Get current contacts
+    // Get current contacts with validation
     const supabase = await this.getSupabase()
-    const { data: contacts } = await supabase
+    const { data: contacts, error: selectError } = await supabase
       .from('contacts')
       .select('id, tags')
       .in('id', contactIds)
       .eq('user_id', userId)
+      .neq('status', 'deleted')
 
-    if (!contacts) return
+    if (selectError) {
+      console.error('Error fetching contacts for tag update:', selectError)
+      throw new Error('Failed to fetch contacts')
+    }
 
-    // Update each contact with new tags
-    const updates = contacts.map(contact => ({
-      id: contact.id,
-      tags: Array.from(new Set([...contact.tags, ...tags])), // Merge and deduplicate
-      updated_at: new Date().toISOString(),
-    }))
+    if (!contacts || contacts.length === 0) {
+      console.warn('No contacts found for tag update')
+      return
+    }
 
-    const { error } = await supabase
-      .from('contacts')
-      .upsert(updates)
+    console.log(`Adding tags to ${contacts.length} contacts:`, { tags, contactIds })
 
-    if (error) throw error
+    // Update each contact individually to avoid constraint violations
+    const errors = []
+    for (const contact of contacts) {
+      try {
+        const updatedTags = Array.from(new Set([...contact.tags, ...tags])) // Merge and deduplicate
+        
+        const { error: updateError } = await supabase
+          .from('contacts')
+          .update({
+            tags: updatedTags,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', contact.id)
+          .eq('user_id', userId)
+
+        if (updateError) {
+          console.error(`Error updating contact ${contact.id}:`, updateError)
+          errors.push({ contactId: contact.id, error: updateError.message })
+        }
+      } catch (error) {
+        console.error(`Failed to update contact ${contact.id}:`, error)
+        errors.push({ contactId: contact.id, error: error instanceof Error ? error.message : 'Unknown error' })
+      }
+    }
+
+    if (errors.length > 0) {
+      console.error('Some contacts failed to update:', errors)
+      throw new Error(`Failed to update ${errors.length} out of ${contacts.length} contacts`)
+    }
+
+    console.log('Successfully added tags to all contacts')
   }
 
   async removeTagsFromContacts(contactIds: string[], userId: string, tags: string[]) {
-    // Get current contacts
+    // Get current contacts with validation
     const supabase = await this.getSupabase()
-    const { data: contacts } = await supabase
+    const { data: contacts, error: selectError } = await supabase
       .from('contacts')
       .select('id, tags')
       .in('id', contactIds)
       .eq('user_id', userId)
+      .neq('status', 'deleted')
 
-    if (!contacts) return
+    if (selectError) {
+      console.error('Error fetching contacts for tag removal:', selectError)
+      throw new Error('Failed to fetch contacts')
+    }
 
-    // Update each contact by removing tags
-    const updates = contacts.map(contact => ({
-      id: contact.id,
-      tags: contact.tags.filter((tag: string) => !tags.includes(tag)),
-      updated_at: new Date().toISOString(),
-    }))
+    if (!contacts || contacts.length === 0) {
+      console.warn('No contacts found for tag removal')
+      return
+    }
 
-    const { error } = await supabase
-      .from('contacts')
-      .upsert(updates)
+    console.log(`Removing tags from ${contacts.length} contacts:`, { tags, contactIds })
 
-    if (error) throw error
+    // Update each contact individually to avoid constraint violations
+    const errors = []
+    for (const contact of contacts) {
+      try {
+        const updatedTags = contact.tags.filter((tag: string) => !tags.includes(tag))
+        
+        const { error: updateError } = await supabase
+          .from('contacts')
+          .update({
+            tags: updatedTags,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', contact.id)
+          .eq('user_id', userId)
+
+        if (updateError) {
+          console.error(`Error updating contact ${contact.id}:`, updateError)
+          errors.push({ contactId: contact.id, error: updateError.message })
+        }
+      } catch (error) {
+        console.error(`Failed to update contact ${contact.id}:`, error)
+        errors.push({ contactId: contact.id, error: error instanceof Error ? error.message : 'Unknown error' })
+      }
+    }
+
+    if (errors.length > 0) {
+      console.error('Some contacts failed to update:', errors)
+      throw new Error(`Failed to update ${errors.length} out of ${contacts.length} contacts`)
+    }
+
+    console.log('Successfully removed tags from all contacts')
   }
 
   async bulkUpdateContactStatus(contactIds: string[], userId: string, status: string) {

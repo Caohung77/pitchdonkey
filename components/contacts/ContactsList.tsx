@@ -10,6 +10,7 @@ import { TagManagementModal } from './TagManagementModal'
 import { BulkActionsBar } from './BulkActionsBar'
 import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
+import { BulkTagManagementModal } from './BulkTagManagementModal'
 
 // Simple Contact interface to avoid import issues
 interface Contact {
@@ -78,6 +79,7 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   const [isBulkEnrichModalOpen, setIsBulkEnrichModalOpen] = useState(false)
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null>(null)
+  const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false)
 
   // Selection states
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
@@ -255,41 +257,10 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
     }
   }
 
-  const handleBulkAddTag = async () => {
+  const handleBulkAddTag = () => {
     if (selectedContacts.length === 0) return
-
-    const tag = prompt('Enter tag to add to selected contacts:')
-    if (!tag) return
-
-    try {
-      console.log('ContactsList: Bulk adding tag to contacts:', selectedContacts, tag)
-      
-      const response = await fetch('/api/contacts/bulk', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'add_tag',
-          contact_ids: selectedContacts,
-          data: { tags: [tag.trim()] }
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to add tag to contacts')
-      }
-
-      console.log('ContactsList: Tag added successfully')
-      
-      // Refresh contacts to show updated tags
-      fetchContacts(state.pagination.page)
-      setSelectedContacts([])
-
-    } catch (error) {
-      console.error('ContactsList: Error bulk adding tag:', error)
-      alert('Failed to add tag to contacts. Please try again.')
-    }
+    console.log('ContactsList: Opening bulk tag management for contacts:', selectedContacts.length)
+    setIsBulkTagModalOpen(true)
   }
 
   useEffect(() => {
@@ -723,6 +694,15 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
           />
         )
       })()}
+
+      {/* Bulk Tag Management Modal */}
+      <BulkTagManagementModal
+        isOpen={isBulkTagModalOpen}
+        onClose={() => setIsBulkTagModalOpen(false)}
+        selectedContacts={selectedContacts}
+        selectedContactsCount={selectedContacts.length}
+        onTagsUpdated={handleTagsUpdated}
+      />
     </div>
   )
 }

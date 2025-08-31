@@ -12,14 +12,14 @@ const addRemoveTagsSchema = z.object({
 })
 
 interface Params {
-  id: string // contact id
+  id: string
 }
 
 // GET /api/contacts/[id]/tags - Get all tags for a contact
-export async function GET(request: NextRequest, { params }: { params: Params }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<Params> }) {
   try {
     const { user } = await requireAuth(request)
-    const { id: contactId } = params
+    const { id: contactId } = await params
     
     // TODO: Add contact ownership verification
     
@@ -51,10 +51,10 @@ export async function GET(request: NextRequest, { params }: { params: Params }) 
 }
 
 // PUT /api/contacts/[id]/tags - Set all tags for a contact (replaces existing)
-export async function PUT(request: NextRequest, { params }: { params: Params }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<Params> }) {
   try {
     const { user } = await requireAuth(request)
-    const { id: contactId } = params
+    const { id: contactId } = await params
     const body = await request.json()
     
     const validatedData = setTagsSchema.parse(body)
@@ -105,10 +105,10 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
 }
 
 // POST /api/contacts/[id]/tags - Add tags to a contact
-export async function POST(request: NextRequest, { params }: { params: Params }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<Params> }) {
   try {
     const { user } = await requireAuth(request)
-    const { id: contactId } = params
+    const { id: contactId } = await params
     const body = await request.json()
     
     const validatedData = addRemoveTagsSchema.parse(body)
@@ -146,10 +146,10 @@ export async function POST(request: NextRequest, { params }: { params: Params })
 }
 
 // DELETE /api/contacts/[id]/tags - Remove tags from a contact
-export async function DELETE(request: NextRequest, { params }: { params: Params }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<Params> }) {
   try {
     const { user } = await requireAuth(request)
-    const { id: contactId } = params
+    const { id: contactId } = await params
     const body = await request.json()
     
     const validatedData = addRemoveTagsSchema.parse(body)
