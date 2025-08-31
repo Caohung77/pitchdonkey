@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EditContactModal } from './EditContactModal'
 import { ContactViewModal } from './ContactViewModal'
+import { TagManagementModal } from './TagManagementModal'
 import { BulkActionsBar } from './BulkActionsBar'
 import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
@@ -72,6 +73,8 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [viewingContact, setViewingContact] = useState<Contact | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [tagManagementContact, setTagManagementContact] = useState<Contact | null>(null)
+  const [isTagManagementModalOpen, setIsTagManagementModalOpen] = useState(false)
   const [isBulkEnrichModalOpen, setIsBulkEnrichModalOpen] = useState(false)
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null>(null)
@@ -120,12 +123,17 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   }
 
   const handleAddTag = (contactId: string) => {
-    const tag = prompt('Enter tag to add:')
-    if (!tag) return
+    console.log('ContactsList: Opening tag management for contact:', contactId)
+    const contact = state.contacts.find(c => c.id === contactId)
+    if (contact) {
+      setTagManagementContact(contact)
+      setIsTagManagementModalOpen(true)
+    }
+  }
 
-    console.log('ContactsList: Adding tag to contact:', contactId, tag)
-    // TODO: Implement tag addition API call
-    alert(`Tag "${tag}" would be added to contact (not implemented yet)`)
+  const handleTagsUpdated = () => {
+    console.log('ContactsList: Tags updated, refreshing contacts list')
+    fetchContacts(state.pagination.page)
   }
 
   const handleContactUpdated = () => {
@@ -555,28 +563,6 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                   ) : null
                 })()}
 
-                {/* Enrichment Data Display */}
-                {contact.enrichment_data && contact.enrichment_status === 'completed' && (
-                  <div className="bg-blue-50 rounded-lg p-2 mt-2 space-y-1">
-                    <div className="flex items-center gap-1 mb-1">
-                      <span className="text-xs font-medium text-blue-700">AI Enriched</span>
-                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">✨</span>
-                    </div>
-                    
-                    {contact.enrichment_data.industry && (
-                      <p className="text-xs text-blue-600">
-                        <span className="font-medium">Industry:</span> {contact.enrichment_data.industry}
-                      </p>
-                    )}
-                    
-                    {contact.enrichment_data.products_services && contact.enrichment_data.products_services.length > 0 && (
-                      <p className="text-xs text-blue-600">
-                        <span className="font-medium">Services:</span> {contact.enrichment_data.products_services.slice(0, 2).join(', ')}
-                        {contact.enrichment_data.products_services.length > 2 && `... (+${contact.enrichment_data.products_services.length - 2} more)`}
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 {/* Enrichment Status Badge */}
                 {contact.enrichment_status && (
@@ -616,11 +602,34 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                   )}
                 </div>
 
+                {/* Tags Display */}
+                {contact.tags && contact.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {contact.tags.slice(0, 3).map((tag: string, index: number) => (
+                      <span 
+                        key={index} 
+                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        <Tag className="h-3 w-3 mr-1" />
+                        {tag}
+                      </span>
+                    ))}
+                    {contact.tags.length > 3 && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                        +{contact.tags.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* Add Tag Button */}
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleAddTag(contact.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleAddTag(contact.id)
+                  }}
                   className="w-full h-6 text-xs text-gray-600 hover:text-gray-900"
                 >
                   <Tag className="h-3 w-3 mr-1" />
@@ -684,6 +693,14 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         isOpen={isEditModalOpen}
         onClose={handleCloseEditModal}
         onContactUpdated={handleContactUpdated}
+      />
+
+      {/* Tag Management Modal */}
+      <TagManagementModal
+        contact={tagManagementContact}
+        isOpen={isTagManagementModalOpen}
+        onClose={() => setIsTagManagementModalOpen(false)}
+        onTagsUpdated={handleTagsUpdated}
       />
 
       {/* Bulk Enrichment Modal */}
