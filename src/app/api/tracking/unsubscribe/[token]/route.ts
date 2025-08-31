@@ -3,10 +3,11 @@ import { emailTracker } from '@/lib/email-tracking'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const { token } = params
+    const resolvedParams = await params
+    const { token } = resolvedParams
     
     // Get user agent and IP address
     const userAgent = request.headers.get('user-agent') || undefined
@@ -242,7 +243,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   // Handle one-click unsubscribe (List-Unsubscribe-Post header)
   return GET(request, { params })

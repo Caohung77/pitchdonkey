@@ -3,10 +3,11 @@ import { emailTracker } from '@/lib/email-tracking'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { clickId: string } }
+  { params }: { params: Promise<{ clickId: string }> }
 ) {
   try {
-    const { clickId } = params
+    const resolvedParams = await params
+    const { clickId } = resolvedParams
     
     // Get user agent and IP address
     const userAgent = request.headers.get('user-agent') || undefined

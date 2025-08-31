@@ -217,14 +217,14 @@ export function CampaignProgressBar({
                 throw queryError
               }
               
-              console.log(`📊 Database status for campaign ${campaign.id}:`, updatedCampaign?.status)
+              console.log(`📊 Database status for campaign ${campaign.id}:`, updatedCampaign && 'status' in updatedCampaign ? updatedCampaign.status : 'unknown')
               
-              if (updatedCampaign && updatedCampaign.status === 'completed') {
+              if (updatedCampaign && 'status' in updatedCampaign && updatedCampaign.status === 'completed') {
                 console.log(`✅ Campaign ${campaign.id} status updated to completed - refreshing UI`)
                 onProgressUpdate?.(campaign.id, { 
                   ...campaign, 
                   status: 'completed',
-                  completed_at: updatedCampaign.completed_at,
+                  completed_at: updatedCampaign && 'completed_at' in updatedCampaign ? updatedCampaign.completed_at : new Date().toISOString(),
                   updated_at: new Date().toISOString()
                 })
               } else {

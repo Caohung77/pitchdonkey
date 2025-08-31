@@ -5,7 +5,7 @@ import { DomainAuthService } from '@/lib/domain-auth'
 // POST /api/domains/[domain]/verify - Verify domain authentication records
 export async function POST(
   request: NextRequest,
-  { params }: { params: { domain: string } }
+  { params }: { params: Promise<{ domain: string }> }
 ) {
   try {
     const supabase = createServerSupabaseClient()
@@ -15,7 +15,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const domain = decodeURIComponent(params.domain)
+    const resolvedParams = await params
+    const domain = decodeURIComponent(resolvedParams.domain)
     const domainAuthService = new DomainAuthService()
 
     // Get or create domain auth record

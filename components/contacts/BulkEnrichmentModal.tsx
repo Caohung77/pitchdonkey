@@ -309,7 +309,7 @@ export function BulkEnrichmentModal({
             <Checkbox 
               id="force-refresh" 
               checked={forceRefresh}
-              onCheckedChange={setForceRefresh}
+              onCheckedChange={(checked) => setForceRefresh(checked === true)}
             />
             <Label htmlFor="force-refresh">
               Force refresh (re-enrich recently analyzed websites)

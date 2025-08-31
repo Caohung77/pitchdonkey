@@ -183,6 +183,7 @@ export function BulkTagManagementModal({
     
     // Legacy fallback: return tag without ID (will be handled as string)
     return {
+      id: '', // Empty ID indicates legacy tag
       name: name,
       color: '#3B82F6'
     }
@@ -216,7 +217,7 @@ export function BulkTagManagementModal({
               </div>
             ) : (
               <SimpleTagInput
-                tags={selectedTags}
+                value={selectedTags}
                 onChange={setSelectedTags}
                 suggestions={availableTags}
                 onCreateTag={handleCreateTag}

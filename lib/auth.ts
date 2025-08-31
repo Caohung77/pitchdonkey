@@ -53,7 +53,7 @@ export async function checkUserPermissions(userId: string, resource: string, act
     },
   }
 
-  const userPlan = user.plan as keyof typeof planPermissions
+  const userPlan = ('plan' in user ? user.plan : user.subscription_tier) as keyof typeof planPermissions
   const permissions = planPermissions[userPlan]
 
   if (!permissions) {

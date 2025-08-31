@@ -9,10 +9,11 @@ const PIXEL_DATA = Buffer.from(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { pixelId: string } }
+  { params }: { params: Promise<{ pixelId: string }> }
 ) {
   try {
-    const { pixelId } = params
+    const resolvedParams = await params
+    const { pixelId } = resolvedParams
     
     // Get user agent and IP address
     const userAgent = request.headers.get('user-agent') || undefined

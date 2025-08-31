@@ -90,7 +90,7 @@ export function ContactCard({
                   {formatName(contact)}
                 </h3>
                 {/* AI Enriched indicator */}
-                {contact.enrichment_status === 'completed' && (
+                {('enrichment_status' in contact) && contact.enrichment_status === 'completed' && (
                   <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 flex items-center gap-1">
                     <Sparkles className="h-3 w-3" />
                     AI Enriched

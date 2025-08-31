@@ -6,11 +6,11 @@ import { DomainAuthService } from '@/lib/domain-auth'
 export const GET = withAuth(async (
   request: NextRequest,
   { user, supabase },
-  { params }: { params: { domain: string } }
+  { params }: { params: Promise<{ domain: string }> }
 ) => {
   try {
-
-    const domain = decodeURIComponent(params.domain)
+    const resolvedParams = await params
+    const domain = decodeURIComponent(resolvedParams.domain)
     const domainAuthService = new DomainAuthService()
 
     // Get domain authentication record

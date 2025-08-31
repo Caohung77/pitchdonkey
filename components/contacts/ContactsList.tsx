@@ -11,32 +11,7 @@ import { BulkActionsBar } from './BulkActionsBar'
 import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 import { BulkTagManagementModal } from './BulkTagManagementModal'
-
-// Simple Contact interface to avoid import issues
-interface Contact {
-  id: string
-  user_id: string
-  email: string
-  first_name: string
-  last_name: string
-  company?: string
-  position?: string
-  website?: string
-  enrichment_status?: 'completed' | 'pending' | 'failed' | null
-  enrichment_updated_at?: string
-  enrichment_data?: {
-    company_name?: string
-    industry?: string
-    products_services?: string[]
-    target_audience?: string[]
-    unique_points?: string[]
-    tone_style?: string
-  }
-  status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
-  tags: string[]
-  created_at: string
-  updated_at: string
-}
+import { Contact } from '@/lib/contacts'
 
 interface ContactsListProps {
   userId: string
@@ -536,9 +511,9 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
 
 
                 {/* Enrichment Status Badge */}
-                {contact.enrichment_status && (
+                {'enrichment_status' in contact && contact.enrichment_status && (
                   <div className="flex items-center gap-2 mt-2">
-                    {contact.enrichment_status === 'completed' && contact.enrichment_data && (
+                    {contact.enrichment_status === 'completed' && 'enrichment_data' in contact && contact.enrichment_data && (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">
                         ✓ Enriched
                       </span>
