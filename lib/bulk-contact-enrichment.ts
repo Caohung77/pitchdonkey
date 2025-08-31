@@ -205,7 +205,7 @@ export class BulkContactEnrichmentService {
       console.log(`🚀 Starting bulk enrichment job ${jobId} for ${job.contact_ids.length} contacts`)
 
       // Process contacts in batches
-      const batches = this.createBatches(job.contact_ids, job.options.batch_size || 3)
+      const batches = this.createBatches(job.contact_ids, (job.options as any)?.batch_size || 3)
       let totalCompleted = 0
       let totalFailed = 0
 
@@ -416,7 +416,7 @@ export class BulkContactEnrichmentService {
       return null
     }
 
-    return job as BulkEnrichmentJob
+    return job as unknown as BulkEnrichmentJob
   }
 
   /**
@@ -494,7 +494,7 @@ export class BulkContactEnrichmentService {
 
     if (job) {
       const updatedProgress = {
-        ...job.progress,
+        ...(job.progress as Record<string, any> || {}),
         ...progressUpdate
       }
 
@@ -536,7 +536,7 @@ export class BulkContactEnrichmentService {
       }
 
       if (existingIndex >= 0) {
-        results[existingIndex] = { ...results[existingIndex], ...resultData }
+        results[existingIndex] = { ...(results[existingIndex] as Record<string, any>), ...resultData }
       } else {
         results.push(resultData)
       }
