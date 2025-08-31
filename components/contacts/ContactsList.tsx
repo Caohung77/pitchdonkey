@@ -5,6 +5,7 @@ import { Users, AlertCircle, Edit, Trash2, Tag } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EditContactModal } from './EditContactModal'
+import { ContactViewModal } from './ContactViewModal'
 import { BulkActionsBar } from './BulkActionsBar'
 import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
@@ -69,6 +70,8 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   // Modal states
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [viewingContact, setViewingContact] = useState<Contact | null>(null)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isBulkEnrichModalOpen, setIsBulkEnrichModalOpen] = useState(false)
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null>(null)
@@ -77,6 +80,11 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
 
   // Contact action handlers
+  const handleView = (contact: Contact) => {
+    setViewingContact(contact)
+    setIsViewModalOpen(true)
+  }
+
   const handleEdit = (contact: Contact) => {
     setEditingContact(contact)
     setIsEditModalOpen(true)
@@ -445,8 +453,8 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       {/* Contacts grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {state.contacts.map((contact) => (
-          <Card key={contact.id} className={`hover:shadow-md transition-shadow ${selectedContacts.includes(contact.id) ? 'ring-2 ring-blue-500' : ''}`}>
-            <CardContent className="p-4">
+          <Card key={contact.id} className={`hover:shadow-md transition-shadow cursor-pointer ${selectedContacts.includes(contact.id) ? 'ring-2 ring-blue-500' : ''}`}>
+            <CardContent className="p-4" onClick={() => handleView(contact)}>
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3 flex-1 min-w-0">
@@ -455,17 +463,43 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                       type="checkbox"
                       checked={selectedContacts.includes(contact.id)}
                       onChange={(e) => handleSelectContact(contact.id, e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
                       className="mt-1 rounded border-gray-300"
                     />
                     
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-medium text-gray-900 truncate">
-                        {contact.first_name || contact.last_name 
-                          ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
-                          : contact.email.split('@')[0]
-                        }
+                        {(() => {
+                          // Priority 1: First Name + Last Name
+                          const firstName = contact.first_name || ''
+                          const lastName = contact.last_name || ''
+                          const fullName = `${firstName} ${lastName}`.trim()
+                          
+                          if (fullName) {
+                            return fullName
+                          }
+                          
+                          // Priority 2: Company Name
+                          if (contact.company && contact.company.trim()) {
+                            return contact.company.trim()
+                          }
+                          
+                          // Priority 3: Email (fallback)
+                          return contact.email
+                        })()}
                       </h3>
                       <p className="text-xs text-gray-600 truncate">{contact.email}</p>
+                      {/* Show subtle company indicator when displaying company name as main title */}
+                      {(() => {
+                        const firstName = contact.first_name || ''
+                        const lastName = contact.last_name || ''
+                        const fullName = `${firstName} ${lastName}`.trim()
+                        const isCompanyAsTitle = !fullName && contact.company && contact.company.trim()
+                        
+                        return isCompanyAsTitle ? (
+                          <p className="text-xs text-gray-500">Company</p>
+                        ) : null
+                      })()}
                     </div>
                   </div>
                   
@@ -474,7 +508,10 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleEdit(contact)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleEdit(contact)
+                      }}
                       className="h-6 w-6 p-0"
                       title="Edit contact"
                     >
@@ -483,7 +520,10 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(contact.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(contact.id)
+                      }}
                       className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
                       title="Delete contact"
                     >
@@ -492,14 +532,28 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                   </div>
                 </div>
                 
-                {(contact.company || contact.position) && (
-                  <p className="text-xs text-gray-600 truncate">
-                    {contact.position && contact.company 
-                      ? `${contact.position} at ${contact.company}`
-                      : contact.position || contact.company
-                    }
-                  </p>
-                )}
+                {(() => {
+                  // If we're displaying company name as the main title, only show position
+                  const firstName = contact.first_name || ''
+                  const lastName = contact.last_name || ''
+                  const fullName = `${firstName} ${lastName}`.trim()
+                  const isCompanyAsTitle = !fullName && contact.company && contact.company.trim()
+                  
+                  let displayText = ''
+                  if (isCompanyAsTitle && contact.position) {
+                    displayText = contact.position
+                  } else if (contact.position && contact.company) {
+                    displayText = `${contact.position} at ${contact.company}`
+                  } else if (contact.position) {
+                    displayText = contact.position
+                  } else if (contact.company && !isCompanyAsTitle) {
+                    displayText = contact.company
+                  }
+
+                  return displayText ? (
+                    <p className="text-xs text-gray-600 truncate">{displayText}</p>
+                  ) : null
+                })()}
 
                 {/* Enrichment Data Display */}
                 {contact.enrichment_data && contact.enrichment_status === 'completed' && (
@@ -611,6 +665,20 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       </div>
 
       {/* Edit Contact Modal */}
+      {/* Contact View Modal */}
+      <ContactViewModal
+        contact={viewingContact}
+        isOpen={isViewModalOpen}
+        onClose={() => setIsViewModalOpen(false)}
+        onEdit={(contact) => {
+          setViewingContact(null)
+          setIsViewModalOpen(false)
+          setEditingContact(contact)
+          setIsEditModalOpen(true)
+        }}
+      />
+
+      {/* Contact Edit Modal */}
       <EditContactModal
         contact={editingContact}
         isOpen={isEditModalOpen}

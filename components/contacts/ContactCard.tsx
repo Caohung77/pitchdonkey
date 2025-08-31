@@ -9,7 +9,8 @@ import {
   Building,
   Edit,
   Trash2,
-  Tag
+  Tag,
+  Sparkles
 } from 'lucide-react'
 
 interface ContactCardProps {
@@ -46,10 +47,22 @@ export function ContactCard({
   }
 
   const formatName = (contact: Contact) => {
+    // Priority 1: First Name + Last Name
     const firstName = contact.first_name || ''
     const lastName = contact.last_name || ''
     const fullName = `${firstName} ${lastName}`.trim()
-    return fullName || contact.email.split('@')[0]
+    
+    if (fullName) {
+      return fullName
+    }
+    
+    // Priority 2: Company Name
+    if (contact.company && contact.company.trim()) {
+      return contact.company.trim()
+    }
+    
+    // Priority 3: Email (fallback)
+    return contact.email
   }
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,8 +74,8 @@ export function ContactCard({
   return (
     <Card className={`hover:shadow-md transition-shadow ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start space-x-3 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start space-x-3 flex-1 min-w-0">
             {onSelect && (
               <input
                 type="checkbox"
@@ -72,13 +85,26 @@ export function ContactCard({
               />
             )}
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-gray-900 truncate">
-                {formatName(contact)}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium text-gray-900 truncate flex-1">
+                  {formatName(contact)}
+                </h3>
+                {/* AI Enriched indicator */}
+                {contact.enrichment_status === 'completed' && (
+                  <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    AI Enriched
+                  </Badge>
+                )}
+              </div>
               <div className="flex items-center mt-1">
                 <Mail className="h-3 w-3 text-gray-400 mr-1" />
                 <p className="text-xs text-gray-600 truncate">{contact.email}</p>
               </div>
+              {/* Show additional context when displaying company name as main title */}
+              {!contact.first_name && !contact.last_name && contact.company && (
+                <p className="text-xs text-gray-500 mt-1">Company</p>
+              )}
             </div>
           </div>
           
@@ -106,17 +132,28 @@ export function ContactCard({
       <CardContent className="pt-0">
         <div className="space-y-2">
           {/* Company and Position */}
-          {(contact.company || contact.position) && (
-            <div className="flex items-center text-xs text-gray-600">
-              <Building className="h-3 w-3 mr-1" />
-              <span className="truncate">
-                {contact.position && contact.company 
-                  ? `${contact.position} at ${contact.company}`
-                  : contact.position || contact.company
-                }
-              </span>
-            </div>
-          )}
+          {(() => {
+            // If we're displaying company name as the main title, only show position
+            const isCompanyAsTitle = !contact.first_name && !contact.last_name && contact.company
+            
+            let displayText = ''
+            if (isCompanyAsTitle && contact.position) {
+              displayText = contact.position
+            } else if (contact.position && contact.company) {
+              displayText = `${contact.position} at ${contact.company}`
+            } else if (contact.position) {
+              displayText = contact.position
+            } else if (contact.company && !isCompanyAsTitle) {
+              displayText = contact.company
+            }
+
+            return displayText ? (
+              <div className="flex items-center text-xs text-gray-600">
+                <Building className="h-3 w-3 mr-1" />
+                <span className="truncate">{displayText}</span>
+              </div>
+            ) : null
+          })()}
 
           {/* Status Badge */}
           <div className="flex items-center justify-between">
