@@ -43,32 +43,6 @@ export default function SignInPage() {
     }
   }
 
-  const handleDemoLogin = async () => {
-    setLoading(true)
-    setError('')
-    
-    try {
-      // Try to sign in with the existing demo user
-      const supabase = createClientSupabase()
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: 'banbau@gmx.net',
-        password: 'demo123456', // You'll need to set this password
-      })
-
-      if (error) {
-        // If demo user doesn't work, just redirect anyway for demo purposes
-        console.warn('Demo login failed, redirecting anyway:', error.message)
-        router.push('/dashboard')
-      } else if (data.user) {
-        router.push('/dashboard')
-      }
-    } catch (error) {
-      console.warn('Demo login error, redirecting anyway:', error)
-      router.push('/dashboard')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -181,15 +155,6 @@ export default function SignInPage() {
                   disabled={loading}
                 >
                   {loading ? 'Signing in...' : 'Sign in'}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleDemoLogin}
-                >
-                  Try Demo (No Login Required)
                 </Button>
               </div>
             </form>

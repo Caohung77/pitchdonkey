@@ -69,10 +69,6 @@ export default function SignUpPage() {
     }
   }
 
-  const handleDemoSignup = () => {
-    // For demo purposes, just redirect to dashboard
-    router.push('/dashboard')
-  }
 
   const passwordRequirements = [
     { text: 'At least 8 characters', met: formData.password.length >= 8 },
@@ -257,15 +253,6 @@ export default function SignUpPage() {
                   disabled={loading}
                 >
                   {loading ? 'Creating account...' : 'Create account'}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleDemoSignup}
-                >
-                  Try Demo (No Signup Required)
                 </Button>
               </div>
             </form>

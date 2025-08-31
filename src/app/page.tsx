@@ -55,15 +55,15 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Link href="/auth/signin">
+            <Link href="/auth/signup">
               <Button size="lg" className="px-8">
-                Try Demo Dashboard
+                Get Started
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
             <Link href="/auth/signin">
               <Button size="lg" variant="outline" className="px-8">
-                Watch Demo
+                Sign In
               </Button>
             </Link>
           </div>
@@ -251,62 +251,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Demo Credentials Section */}
-      <section className="py-16 bg-blue-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Try the Demo Dashboard
-          </h2>
-          <p className="text-gray-600 mb-8">
-            Use these demo credentials to explore the full ColdReach Pro experience
-          </p>
-          
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Demo User Account</CardTitle>
-                <CardDescription>Professional plan features</CardDescription>
-              </CardHeader>
-              <CardContent className="text-left">
-                <div className="space-y-2 font-mono text-sm">
-                  <div>
-                    <span className="text-gray-500">Email:</span> demo@coldreachpro.com
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Password:</span> Demo123!@#
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Admin Account</CardTitle>
-                <CardDescription>Agency plan with full access</CardDescription>
-              </CardHeader>
-              <CardContent className="text-left">
-                <div className="space-y-2 font-mono text-sm">
-                  <div>
-                    <span className="text-gray-500">Email:</span> admin@coldreachpro.com
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Password:</span> Admin123!@#
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mt-8">
-            <Link href="/auth/signin">
-              <Button size="lg" className="px-8">
-                Access Demo Dashboard
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
 
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
