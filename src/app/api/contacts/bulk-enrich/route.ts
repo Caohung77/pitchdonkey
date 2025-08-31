@@ -23,6 +23,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Create bulk enrichment job
     const result = await enrichmentService.createBulkEnrichmentJob(user.id, contact_ids, options)
 
+    console.log('🔍 Full result from createBulkEnrichmentJob:', JSON.stringify(result, null, 2))
+
     if (!result.success) {
       console.log(`❌ Failed to create bulk enrichment job: ${result.error}`)
       throw new ValidationError(result.error || 'Failed to create bulk enrichment job')

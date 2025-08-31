@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress'
 import { CheckCircle, XCircle, Loader2, Globe, Clock, AlertCircle } from 'lucide-react'
 
 interface BulkEnrichmentProgressModalProps {
-  jobId: string
+  jobId: string | { jobId: string; totalContacts: number; contactIds: string[] }
   isOpen: boolean
   onClose: () => void
   onComplete: () => void    // Refresh contacts list
@@ -62,21 +62,54 @@ export function BulkEnrichmentProgressModal({
 
   // Poll job status every 2 seconds
   useEffect(() => {
-    if (!isOpen || !jobId || !isPolling) return
+    if (!isOpen || !jobId) return
+    
+    // Extract job ID and metadata
+    const actualJobId = typeof jobId === 'string' ? jobId : jobId.jobId
+    const jobMetadata = typeof jobId === 'object' ? jobId : null
+    
+    // Skip polling if this is a temporary ID (starts with "temp-")
+    if (actualJobId.startsWith('temp-')) {
+      console.log('Progress modal: Using temporary ID, showing loading state')
+      setJobStatus({
+        job_id: actualJobId,
+        status: 'pending',
+        progress: {
+          total: jobMetadata?.totalContacts || 0,
+          completed: 0,
+          failed: 0,
+          current_batch: 1,
+          percentage: 0
+        },
+        results: [],
+        created_at: new Date().toISOString()
+      })
+      setIsPolling(true) // Enable polling for when we get the real ID
+      return
+    }
+
+    // Real job ID - start polling
+    if (!isPolling) {
+      console.log('Progress modal: Switching to real job ID, starting polling')
+      setIsPolling(true)
+    }
 
     const pollStatus = async () => {
       try {
-        const response = await fetch(`/api/contacts/bulk-enrich/${jobId}/status`)
+        console.log('Progress modal: Polling job status for:', actualJobId)
+        const response = await fetch(`/api/contacts/bulk-enrich/${actualJobId}/status`)
         
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`)
         }
 
         const data = await response.json()
+        console.log('Progress modal: Received job status:', data)
         setJobStatus(data)
         setError(null)
         
         if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+          console.log('Progress modal: Job completed, stopping polling')
           setIsPolling(false)
         }
       } catch (error) {
@@ -85,20 +118,24 @@ export function BulkEnrichmentProgressModal({
       }
     }
 
-    // Initial fetch
-    pollStatus()
-    
-    // Set up polling
-    const interval = setInterval(pollStatus, 2000)
-    
-    return () => clearInterval(interval)
+    // Only start polling for real job IDs
+    if (isPolling && !actualJobId.startsWith('temp-')) {
+      // Initial fetch
+      pollStatus()
+      
+      // Set up polling
+      const interval = setInterval(pollStatus, 2000)
+      
+      return () => clearInterval(interval)
+    }
   }, [jobId, isOpen, isPolling])
 
   const handleCancelJob = async () => {
-    if (!jobId || !jobStatus || jobStatus.status !== 'running') return
+    const actualJobId = typeof jobId === 'string' ? jobId : jobId.jobId
+    if (!actualJobId || !jobStatus || jobStatus.status !== 'running') return
 
     try {
-      const response = await fetch(`/api/contacts/bulk-enrich/${jobId}/cancel`, {
+      const response = await fetch(`/api/contacts/bulk-enrich/${actualJobId}/cancel`, {
         method: 'POST'
       })
 
@@ -214,7 +251,7 @@ export function BulkEnrichmentProgressModal({
             <span>{getStatusTitle()}</span>
           </DialogTitle>
           <DialogDescription>
-            Job ID: {jobId}
+            Job ID: {typeof jobId === 'string' ? jobId : jobId.jobId}
           </DialogDescription>
         </DialogHeader>
 

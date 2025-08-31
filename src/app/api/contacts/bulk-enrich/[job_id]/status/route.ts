@@ -17,6 +17,12 @@ export const GET = withAuth(async (request: NextRequest, user, { params }: { par
 
     // Get job status
     const job = await enrichmentService.getJobStatus(jobId)
+    
+    console.log(`📊 Job status retrieved:`, job ? { 
+      id: job.id, 
+      status: job.status, 
+      progress: job.progress 
+    } : 'null')
 
     if (!job) {
       return createSuccessResponse({

@@ -23,7 +23,7 @@ interface BulkEnrichmentModalProps {
   isOpen: boolean
   onClose: () => void
   selectedContacts: Contact[]
-  onEnrichmentStarted: (jobId: string) => void
+  onEnrichmentStarted: (jobId: string | { jobId: string; totalContacts: number; contactIds: string[] } | null) => void
 }
 
 interface EnrichmentEligibility {
@@ -85,6 +85,26 @@ export function BulkEnrichmentModal({
 
     setIsStarting(true)
     
+    // Calculate total contacts for progress tracking
+    const totalContacts = forceRefresh 
+      ? eligibility.eligible.length + eligibility.already_enriched.length 
+      : eligibility.eligible.length
+
+    // Show progress modal immediately with contact info
+    const tempJobInfo = {
+      jobId: 'temp-' + Date.now(),
+      totalContacts,
+      contactIds: forceRefresh 
+        ? [...eligibility.eligible.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
+        : eligibility.eligible.map(c => c.id)
+    }
+    
+    console.log('🔄 BulkEnrichmentModal: Starting enrichment - showing progress modal immediately')
+    console.log('📊 Total contacts to process:', totalContacts)
+    
+    onEnrichmentStarted(tempJobInfo) // Pass job info object
+    onClose() // Close this modal
+    
     try {
       const contactIds = forceRefresh 
         ? [...eligibility.eligible.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
@@ -139,12 +159,17 @@ export function BulkEnrichmentModal({
 
       console.log('✅ Bulk enrichment job started:', data.job_id)
       
-      onEnrichmentStarted(data.job_id)
-      onClose()
+      // Update with real job ID if we got one
+      if (data.job_id) {
+        console.log('🔄 BulkEnrichmentModal: Updating with real job ID:', data.job_id)
+        onEnrichmentStarted(data.job_id)
+      }
 
     } catch (error) {
       console.error('Failed to start bulk enrichment:', error)
       alert(`Failed to start bulk enrichment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      // Close progress modal on error
+      onEnrichmentStarted(null)
     } finally {
       setIsStarting(false)
     }

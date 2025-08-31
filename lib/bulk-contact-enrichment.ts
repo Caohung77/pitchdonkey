@@ -116,6 +116,18 @@ export class BulkContactEnrichmentService {
       }
 
       // Create job record
+      console.log('🔍 Creating bulk enrichment job with data:', {
+        user_id: userId,
+        contact_ids: eligibleContactIds,
+        options: jobOptions,
+        progress: {
+          total: eligibleContactIds.length,
+          completed: 0,
+          failed: 0,
+          current_batch: 1
+        }
+      })
+
       const { data: job, error: jobError } = await supabase
         .from('bulk_enrichment_jobs')
         .insert({
@@ -133,6 +145,8 @@ export class BulkContactEnrichmentService {
         .select('id')
         .single()
 
+      console.log('🔍 Database insert result:', { job, jobError })
+
       if (jobError) {
         console.error('Failed to create bulk enrichment job:', jobError)
         return { success: false, error: 'Failed to create enrichment job' }
@@ -143,7 +157,7 @@ export class BulkContactEnrichmentService {
         console.error('Bulk enrichment job processing failed:', error)
       })
 
-      return {
+      const returnResult = {
         success: true,
         job_id: job.id,
         summary: {
@@ -153,6 +167,9 @@ export class BulkContactEnrichmentService {
           already_processing: eligibility.processing.length
         }
       }
+
+      console.log('🔍 Returning from createBulkEnrichmentJob:', returnResult)
+      return returnResult
 
     } catch (error) {
       console.error('Error creating bulk enrichment job:', error)
@@ -218,9 +235,9 @@ export class BulkContactEnrichmentService {
 
         console.log(`✅ Batch ${i + 1} completed: ${batchCompleted} successful, ${batchFailed} failed`)
 
-        // Rate limiting between batches (2 seconds)
+        // Rate limiting between batches (2 seconds) - increased to 3 seconds for better progress visibility
         if (i < batches.length - 1) {
-          await this.delay(2000)
+          await this.delay(3000)
         }
       }
 
@@ -245,8 +262,8 @@ export class BulkContactEnrichmentService {
   ): Promise<Array<{ contact_id: string; success: boolean; error?: string }>> {
     const results: Array<{ contact_id: string; success: boolean; error?: string }> = []
 
-    // Process contacts in parallel within the batch
-    const promises = contactIds.map(async (contactId) => {
+    // Process contacts sequentially within the batch for better progress visibility
+    for (const contactId of contactIds) {
       try {
         console.log(`🔍 Enriching contact ${contactId}`)
         
@@ -264,6 +281,16 @@ export class BulkContactEnrichmentService {
             scraped_at: new Date().toISOString()
           })
           results.push({ contact_id: contactId, success: true })
+          
+          // Update job progress after each successful contact
+          const currentCompleted = results.filter(r => r.success).length
+          const currentFailed = results.filter(r => !r.success).length
+          await this.updateJobProgress(jobId, {
+            completed: currentCompleted,
+            failed: currentFailed
+          })
+          console.log(`📊 Progress updated: ${currentCompleted} completed, ${currentFailed} failed`)
+          
         } else {
           console.log(`❌ Contact ${contactId} enrichment failed: ${result.error}`)
           await this.updateContactResult(jobId, contactId, 'failed', {
@@ -275,6 +302,15 @@ export class BulkContactEnrichmentService {
             website_url: result.website_url
           })
           results.push({ contact_id: contactId, success: false, error: result.error })
+          
+          // Update job progress after each failed contact
+          const currentCompleted = results.filter(r => r.success).length
+          const currentFailed = results.filter(r => !r.success).length
+          await this.updateJobProgress(jobId, {
+            completed: currentCompleted,
+            failed: currentFailed
+          })
+          console.log(`📊 Progress updated: ${currentCompleted} completed, ${currentFailed} failed`)
         }
 
       } catch (error) {
@@ -289,10 +325,22 @@ export class BulkContactEnrichmentService {
           }
         })
         results.push({ contact_id: contactId, success: false, error: errorMessage })
+        
+        // Update job progress after each failed contact
+        const currentCompleted = results.filter(r => r.success).length
+        const currentFailed = results.filter(r => !r.success).length
+        await this.updateJobProgress(jobId, {
+          completed: currentCompleted,
+          failed: currentFailed
+        })
+        console.log(`📊 Progress updated: ${currentCompleted} completed, ${currentFailed} failed`)
       }
-    })
 
-    await Promise.allSettled(promises)
+      // Small delay between contacts for better progress visibility (1 second)
+      if (contactIds.indexOf(contactId) < contactIds.length - 1) {
+        await this.delay(1000)
+      }
+    }
     return results
   }
 
