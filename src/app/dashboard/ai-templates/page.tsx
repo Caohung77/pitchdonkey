@@ -24,10 +24,19 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { ToastProvider, useToast } from '@/components/ui/toast'
 import { AITemplate } from '@/lib/ai-templates'
 
 export default function AITemplatesPage() {
-  return <AITemplatesContent />
+  // AI Templates page with full functionality: Preview, Edit, Delete
+  return (
+    <ToastProvider>
+      <AITemplatesContent />
+    </ToastProvider>
+  )
 }
 
 function AITemplatesContent() {
@@ -36,6 +45,17 @@ function AITemplatesContent() {
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
+  
+  // Modal states
+  const [previewTemplate, setPreviewTemplate] = useState<AITemplate | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<AITemplate | null>(null)
+  const [deletingTemplate, setDeletingTemplate] = useState<AITemplate | null>(null)
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  
+  // Toast hook
+  const { addToast } = useToast()
 
   const fetchTemplates = async () => {
     try {
@@ -64,25 +84,47 @@ function AITemplatesContent() {
     fetchTemplates()
   }, [categoryFilter])
 
-  const handleDelete = async (templateId: string) => {
-    if (!confirm('Are you sure you want to delete this template?')) {
-      return
-    }
+  const handleDelete = (template: AITemplate) => {
+    setDeletingTemplate(template)
+    setIsDeleteConfirmOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!deletingTemplate) return
 
     try {
-      const response = await fetch(`/api/ai/templates/${templateId}`, {
+      const response = await fetch(`/api/ai/templates/${deletingTemplate.id}`, {
         method: 'DELETE',
       })
 
       if (response.ok) {
-        setTemplates(templates.filter(t => t.id !== templateId))
+        setTemplates(templates.filter(t => t.id !== deletingTemplate.id))
+        addToast({
+          type: 'success',
+          message: 'Template deleted successfully'
+        })
       } else {
         throw new Error('Failed to delete template')
       }
     } catch (error) {
       console.error('Error deleting template:', error)
-      setError('Failed to delete template')
+      addToast({
+        type: 'error',
+        message: 'Failed to delete template. Please try again.'
+      })
+    } finally {
+      setDeletingTemplate(null)
     }
+  }
+
+  const handlePreview = (template: AITemplate) => {
+    setPreviewTemplate(template)
+    setIsPreviewModalOpen(true)
+  }
+
+  const handleEdit = (template: AITemplate) => {
+    setEditingTemplate(template)
+    setIsEditModalOpen(true)
   }
 
 
@@ -235,19 +277,28 @@ function AITemplatesContent() {
                     </div>
 
                     <div className="flex space-x-2">
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handlePreview(template)}
+                      >
                         <Eye className="h-4 w-4 mr-1" />
                         Preview
                       </Button>
                       {!template.is_default && (
                         <>
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleEdit(template)}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => handleDelete(template.id)}
+                            onClick={() => handleDelete(template)}
                             className="text-red-600"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -261,6 +312,38 @@ function AITemplatesContent() {
             ))}
           </div>
         )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        open={isDeleteConfirmOpen}
+        onOpenChange={setIsDeleteConfirmOpen}
+        title="Delete Template"
+        description={deletingTemplate ? `Are you sure you want to delete "${deletingTemplate.name}"? This action cannot be undone.` : ''}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+        onConfirm={confirmDelete}
+      />
+
+      {/* Preview Modal */}
+      {previewTemplate && (
+        <PreviewTemplateModal
+          isOpen={isPreviewModalOpen}
+          onClose={() => setIsPreviewModalOpen(false)}
+          template={previewTemplate}
+          getCategoryColor={getCategoryColor}
+        />
+      )}
+
+      {/* Edit Modal */}
+      {editingTemplate && (
+        <EditTemplateModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          template={editingTemplate}
+          onTemplateUpdated={fetchTemplates}
+        />
+      )}
     </div>
   )
 }
@@ -427,6 +510,378 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
                 <>
                   <Plus className="h-4 w-4 mr-2" />
                   Create Template
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PreviewTemplateModal({ 
+  isOpen, 
+  onClose, 
+  template,
+  getCategoryColor 
+}: { 
+  isOpen: boolean
+  onClose: () => void
+  template: AITemplate
+  getCategoryColor: (category: string) => string
+}) {
+  const [variables, setVariables] = useState<Record<string, string>>({})
+  const [preview, setPreview] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Initialize variables with sample data
+  useEffect(() => {
+    if (template && isOpen) {
+      const sampleVariables: Record<string, string> = {}
+      template.variables.forEach(variable => {
+        switch (variable) {
+          case 'first_name':
+            sampleVariables[variable] = 'John'
+            break
+          case 'last_name':
+            sampleVariables[variable] = 'Doe'
+            break
+          case 'company_name':
+            sampleVariables[variable] = 'Acme Corp'
+            break
+          case 'industry':
+            sampleVariables[variable] = 'Technology'
+            break
+          case 'position':
+            sampleVariables[variable] = 'CEO'
+            break
+          default:
+            sampleVariables[variable] = `[${variable}]`
+        }
+      })
+      setVariables(sampleVariables)
+      generatePreview(sampleVariables)
+    }
+  }, [template, isOpen])
+
+  const generatePreview = async (vars: Record<string, string>) => {
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/ai/templates/${template.id}/preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ variables: vars }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPreview(data.data.preview)
+      } else {
+        // Fallback to simple string replacement
+        let previewText = template.content
+        Object.entries(vars).forEach(([key, value]) => {
+          const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g')
+          previewText = previewText.replace(regex, value || `{{${key}}}`)
+        })
+        setPreview(previewText)
+      }
+    } catch (error) {
+      console.error('Preview error:', error)
+      // Fallback to simple string replacement
+      let previewText = template.content
+      Object.entries(vars).forEach(([key, value]) => {
+        const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g')
+        previewText = previewText.replace(regex, value || `{{${key}}}`)
+      })
+      setPreview(previewText)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVariableChange = (variable: string, value: string) => {
+    const newVariables = { ...variables, [variable]: value }
+    setVariables(newVariables)
+    generatePreview(newVariables)
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Preview Template: {template.name}</DialogTitle>
+          <DialogDescription>
+            Customize the variables below to see how your template will look
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Variables Input */}
+          {template.variables.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-medium text-sm">Template Variables:</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {template.variables.map((variable) => (
+                  <div key={variable} className="space-y-1">
+                    <Label htmlFor={variable} className="text-xs">
+                      {variable.replace('_', ' ')}
+                    </Label>
+                    <Input
+                      id={variable}
+                      value={variables[variable] || ''}
+                      onChange={(e) => handleVariableChange(variable, e.target.value)}
+                      placeholder={`Enter ${variable.replace('_', ' ')}`}
+                      className="text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preview */}
+          <div className="space-y-2">
+            <h3 className="font-medium text-sm">Preview:</h3>
+            <div className="border rounded-lg p-4 bg-gray-50 min-h-[200px]">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  Generating preview...
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono">
+                  {preview}
+                </pre>
+              )}
+            </div>
+          </div>
+
+          {/* Template Info */}
+          <div className="border-t pt-4 space-y-2">
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>Category: <Badge className={getCategoryColor(template.category)}>{template.category.replace('_', ' ')}</Badge></span>
+              <span>Used {template.usage_count} times</span>
+            </div>
+            {template.description && (
+              <p className="text-xs text-gray-600">{template.description}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end space-x-2 pt-4">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button 
+            onClick={() => {
+              navigator.clipboard.writeText(preview)
+            }}
+          >
+            <Copy className="h-4 w-4 mr-2" />
+            Copy Preview
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditTemplateModal({ 
+  isOpen, 
+  onClose, 
+  template,
+  onTemplateUpdated 
+}: { 
+  isOpen: boolean
+  onClose: () => void
+  template: AITemplate
+  onTemplateUpdated: () => void
+}) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [formData, setFormData] = useState({
+    name: template.name,
+    description: template.description || '',
+    category: template.category,
+    content: template.content,
+    custom_prompt: template.custom_prompt || '',
+  })
+  const { addToast } = useToast()
+
+  // Reset form when template changes
+  useEffect(() => {
+    if (template && isOpen) {
+      setFormData({
+        name: template.name,
+        description: template.description || '',
+        category: template.category,
+        content: template.content,
+        custom_prompt: template.custom_prompt || '',
+      })
+      setError('')
+    }
+  }, [template, isOpen])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const response = await fetch(`/api/ai/templates/${template.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to update template')
+      }
+
+      onClose()
+      onTemplateUpdated()
+      addToast({
+        type: 'success',
+        message: 'Template updated successfully'
+      })
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update template')
+      addToast({
+        type: 'error',
+        message: 'Failed to update template. Please try again.'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      name: template.name,
+      description: template.description || '',
+      category: template.category,
+      content: template.content,
+      custom_prompt: template.custom_prompt || '',
+    })
+    setError('')
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) {
+        onClose()
+        resetForm()
+      }
+    }}>
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Template: {template.name}</DialogTitle>
+          <DialogDescription>
+            Update your AI personalization template
+          </DialogDescription>
+        </DialogHeader>
+
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <span className="text-red-800">{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-name">Template Name *</Label>
+            <Input
+              id="edit-name"
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="My Custom Template"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-description">Description</Label>
+            <Input
+              id="edit-description"
+              value={formData.description}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Brief description of this template"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-category">Category</Label>
+            <Select 
+              value={formData.category} 
+              onValueChange={(value) => setFormData(prev => ({ ...prev, category: value as any }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cold_outreach">Cold Outreach</SelectItem>
+                <SelectItem value="follow_up">Follow Up</SelectItem>
+                <SelectItem value="introduction">Introduction</SelectItem>
+                <SelectItem value="meeting_request">Meeting Request</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-content">Template Content *</Label>
+            <Textarea
+              id="edit-content"
+              value={formData.content}
+              onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+              placeholder="Write your template here. Use {variable_name} for personalization..."
+              className="min-h-[200px]"
+              required
+            />
+            <p className="text-xs text-gray-500">
+              Use {`{{variable_name}}`} syntax for personalization variables
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-custom_prompt">Custom AI Prompt</Label>
+            <Textarea
+              id="edit-custom_prompt"
+              value={formData.custom_prompt}
+              onChange={(e) => setFormData(prev => ({ ...prev, custom_prompt: e.target.value }))}
+              placeholder="Optional: Custom instructions for AI personalization..."
+              rows={3}
+            />
+          </div>
+
+          <div className="flex space-x-3 pt-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                onClose()
+                resetForm()
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading} className="flex-1">
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Update Template
                 </>
               )}
             </Button>
