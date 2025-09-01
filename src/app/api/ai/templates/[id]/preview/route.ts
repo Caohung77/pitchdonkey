@@ -1,49 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { AITemplateService } from '@/lib/ai-templates'
-import { handleApiError, AuthenticationError, NotFoundError } from '@/lib/errors'
-import { z } from 'zod'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-const previewSchema = z.object({
-  variables: z.record(z.string()).default({}),
+// POST /api/ai/templates/[id]/preview
+// Body: { variables: Record<string,string> }
+export const POST = withAuth(async (request: NextRequest, user, context) => {
+  try {
+    const { params } = context || ({} as any)
+    const id = params?.id
+    if (!id) throw new Error('Template id is required')
+
+    const supabase = await createServerSupabaseClient()
+    const body = await request.json().catch(() => ({}))
+    const variables: Record<string, string> = body?.variables || {}
+
+    // Fetch the template (own or public)
+    const { data: tpl, error } = await supabase
+      .from('ai_templates')
+      .select('*')
+      .eq('id', id)
+      .or(`user_id.eq.${user.id},is_public.eq.true`)
+      .maybeSingle()
+
+    if (error) throw error
+    if (!tpl) throw new Error('Template not found')
+
+    const content: string = (tpl as any).content ?? tpl.body_template ?? ''
+    if (!content) return createSuccessResponse({ preview: '' })
+
+    // Replace {{variables}} with provided values
+    let preview = content
+    Object.entries(variables).forEach(([key, value]) => {
+      const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g')
+      preview = preview.replace(regex, value || `{{${key}}}`)
+    })
+
+    return createSuccessResponse({ preview })
+  } catch (error) {
+    return handleApiError(error)
+  }
 })
 
-// POST /api/ai/templates/[id]/preview - Preview template with variables
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      throw new AuthenticationError()
-    }
-
-    const body = await request.json()
-    const { variables } = previewSchema.parse(body)
-
-    const templateService = new AITemplateService()
-    const template = await templateService.getTemplate(params.id, user.id)
-
-    if (!template) {
-      throw new NotFoundError('Template not found')
-    }
-
-    const preview = templateService.previewTemplate(template.content, variables)
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        preview,
-        variables_used: template.variables,
-        missing_variables: template.variables.filter(v => !variables[v]),
-      },
-    })
-  } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
-  }
-}
