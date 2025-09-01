@@ -14,8 +14,12 @@ import {
   Edit,
   Sparkles,
   Calendar,
-  Tag
+  Tag,
+  Send,
+  List,
+  Clock
 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface ContactViewModalProps {
   contact: Contact | null
@@ -79,7 +83,7 @@ export function ContactViewModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" hideCloseButton={true}>
         <DialogHeader className="pb-4">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
@@ -102,9 +106,21 @@ export function ContactViewModal({
           </div>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="details" className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Contact Details
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="flex items-center gap-2">
+              <Send className="h-4 w-4" />
+              Campaigns & Lists
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details" className="space-y-6">
+            {/* Basic Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Contact Details */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
@@ -215,8 +231,8 @@ export function ContactViewModal({
             </div>
           )}
 
-          {/* AI Enrichment Data - TODO: Fix enrichment data types for proper display */}
-          {/*
+          {/* AI Enrichment Data */}
+          {contact.enrichment_data && contact.enrichment_status === 'completed' && (
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="h-4 w-4 text-blue-600" />
@@ -279,7 +295,7 @@ export function ContactViewModal({
                 )}
               </div>
             </div>
-          */}
+          )}
 
           {/* Timestamps */}
           <div className="border-t pt-4">
@@ -305,7 +321,100 @@ export function ContactViewModal({
               )}
             </div>
           </div>
-        </div>
+          </TabsContent>
+
+          <TabsContent value="activity" className="space-y-6">
+            {/* Lists Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <List className="h-4 w-4 text-gray-500" />
+                <h3 className="text-lg font-medium text-gray-900">Contact Lists</h3>
+              </div>
+              
+              {contact.lists && contact.lists.length > 0 ? (
+                <div className="space-y-2">
+                  {contact.lists.map((listName: string, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex items-center gap-2">
+                        <List className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-green-800">{listName}</span>
+                      </div>
+                      <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                        Active
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <List className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 mb-2">Not in any lists</p>
+                  <p className="text-sm text-gray-500">This contact hasn't been added to any contact lists yet</p>
+                </div>
+              )}
+            </div>
+
+            {/* Campaign History Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Send className="h-4 w-4 text-gray-500" />
+                <h3 className="text-lg font-medium text-gray-900">Campaign History</h3>
+              </div>
+              
+              {/* TODO: This will be populated with actual campaign data */}
+              <div className="text-center py-8 bg-gray-50 rounded-lg">
+                <Send className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-600 mb-2">No campaign history</p>
+                <p className="text-sm text-gray-500">This contact hasn't been included in any campaigns yet</p>
+              </div>
+
+              {/* Example of what campaign history would look like when implemented */}
+              {false && (
+                <div className="space-y-3">
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h4 className="font-semibold text-blue-900">Welcome Series Campaign</h4>
+                        <p className="text-sm text-blue-700">3-step email sequence</p>
+                      </div>
+                      <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                        Completed
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-2 mt-3">
+                      <div className="flex items-center justify-between p-2 bg-white rounded border">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm">Email 1: Welcome & Introduction</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>Sent 2 days ago</span>
+                          <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                            Opened
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between p-2 bg-white rounded border">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm">Email 2: Product Features</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>Sent 1 day ago</span>
+                          <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+                            Delivered
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* Footer Actions */}
         <div className="flex justify-between items-center pt-6 border-t">

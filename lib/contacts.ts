@@ -31,8 +31,20 @@ export interface Contact {
   last_replied_at?: string
   ai_research_data: Record<string, any>
   ai_personalization_score?: number
+  enrichment_data?: EnrichmentData | null
+  enrichment_status?: string | null
+  enrichment_updated_at?: string | null
   created_at: string
   updated_at: string
+}
+
+export interface EnrichmentData {
+  company_name: string
+  industry: string
+  products_services: string[]
+  target_audience: string[]
+  unique_points: string[]
+  tone_style: string
 }
 
 export interface ContactStats {

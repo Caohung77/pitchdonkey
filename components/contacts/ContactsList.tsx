@@ -1,9 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, AlertCircle, Edit, Trash2, Tag, List } from 'lucide-react'
+import { Users, AlertCircle, Edit, Trash2, Tag, List, MoreVertical, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { EditContactModal } from './EditContactModal'
 import { ContactViewModal } from './ContactViewModal'
 import { TagManagementModal } from './TagManagementModal'
@@ -420,60 +427,73 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       />
 
       {/* Contacts grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {state.contacts.map((contact) => (
-          <Card key={contact.id} className={`hover:shadow-md transition-shadow cursor-pointer ${selectedContacts.includes(contact.id) ? 'ring-2 ring-blue-500' : ''}`}>
-            <CardContent className="p-4" onClick={() => handleView(contact)}>
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-3 flex-1 min-w-0">
-                    {/* Selection checkbox */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {state.contacts.map((contact) => {
+          const formatName = () => {
+            const firstName = contact.first_name || ''
+            const lastName = contact.last_name || ''
+            const fullName = `${firstName} ${lastName}`.trim()
+            
+            if (fullName) return fullName
+            if (contact.company && contact.company.trim()) return contact.company.trim()
+            return contact.email
+          }
+
+          const getCompanyPosition = () => {
+            const firstName = contact.first_name || ''
+            const lastName = contact.last_name || ''
+            const fullName = `${firstName} ${lastName}`.trim()
+            const isCompanyAsTitle = !fullName && contact.company && contact.company.trim()
+            
+            if (isCompanyAsTitle && contact.position) return contact.position
+            if (contact.position && contact.company) return `${contact.position} at ${contact.company}`
+            if (contact.position) return contact.position
+            if (contact.company && !isCompanyAsTitle) return contact.company
+            return null
+          }
+
+          const listsCount = contact.lists?.length || 0
+          const tagsCount = contact.tags?.length || 0
+
+          return (
+            <Card 
+              key={contact.id} 
+              className={`hover:shadow-lg transition-all duration-200 border-0 shadow-sm transform hover:scale-[1.02] cursor-pointer ${
+                selectedContacts.includes(contact.id) 
+                  ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' 
+                  : 'bg-white hover:bg-gray-50/50'
+              }`}
+            >
+              <CardContent className="p-4" onClick={() => handleView(contact)}>
+                {/* Header Row */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    {/* Checkbox */}
                     <input
                       type="checkbox"
                       checked={selectedContacts.includes(contact.id)}
                       onChange={(e) => handleSelectContact(contact.id, e.target.checked)}
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-1 rounded border-gray-300"
+                      className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     
+                    {/* Contact Info */}
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-gray-900 truncate">
-                        {(() => {
-                          // Priority 1: First Name + Last Name
-                          const firstName = contact.first_name || ''
-                          const lastName = contact.last_name || ''
-                          const fullName = `${firstName} ${lastName}`.trim()
-                          
-                          if (fullName) {
-                            return fullName
-                          }
-                          
-                          // Priority 2: Company Name
-                          if (contact.company && contact.company.trim()) {
-                            return contact.company.trim()
-                          }
-                          
-                          // Priority 3: Email (fallback)
-                          return contact.email
-                        })()}
+                      <h3 className="text-base font-semibold text-gray-900 truncate mb-1">
+                        {formatName()}
                       </h3>
-                      <p className="text-xs text-gray-600 truncate">{contact.email}</p>
-                      {/* Show subtle company indicator when displaying company name as main title */}
-                      {(() => {
-                        const firstName = contact.first_name || ''
-                        const lastName = contact.last_name || ''
-                        const fullName = `${firstName} ${lastName}`.trim()
-                        const isCompanyAsTitle = !fullName && contact.company && contact.company.trim()
-                        
-                        return isCompanyAsTitle ? (
-                          <p className="text-xs text-gray-500">Company</p>
-                        ) : null
-                      })()}
+                      
+                      <p className="text-sm text-gray-600 truncate mb-2">{contact.email}</p>
+                      
+                      {/* Company/Position */}
+                      {getCompanyPosition() && (
+                        <p className="text-sm text-gray-600 truncate">{getCompanyPosition()}</p>
+                      )}
                     </div>
                   </div>
                   
-                  {/* Action buttons */}
-                  <div className="flex items-center space-x-1 ml-2">
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -481,152 +501,170 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                         e.stopPropagation()
                         handleEdit(contact)
                       }}
-                      className="h-6 w-6 p-0"
+                      className="h-7 w-7 p-0 hover:bg-blue-100 hover:text-blue-700 transition-colors"
                       title="Edit contact"
                     >
-                      <Edit className="h-3 w-3" />
+                      <Edit className="h-3.5 w-3.5" />
                     </Button>
+                    
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDelete(contact.id)
+                        handleAddTag(contact.id)
                       }}
-                      className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                      title="Delete contact"
+                      className="h-7 w-7 p-0 hover:bg-green-100 hover:text-green-700 transition-colors"
+                      title="Add tag"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Tag className="h-3.5 w-3.5" />
                     </Button>
-                  </div>
-                </div>
-                
-                {(() => {
-                  // If we're displaying company name as the main title, only show position
-                  const firstName = contact.first_name || ''
-                  const lastName = contact.last_name || ''
-                  const fullName = `${firstName} ${lastName}`.trim()
-                  const isCompanyAsTitle = !fullName && contact.company && contact.company.trim()
-                  
-                  let displayText = ''
-                  if (isCompanyAsTitle && contact.position) {
-                    displayText = contact.position
-                  } else if (contact.position && contact.company) {
-                    displayText = `${contact.position} at ${contact.company}`
-                  } else if (contact.position) {
-                    displayText = contact.position
-                  } else if (contact.company && !isCompanyAsTitle) {
-                    displayText = contact.company
-                  }
-
-                  return displayText ? (
-                    <p className="text-xs text-gray-600 truncate">{displayText}</p>
-                  ) : null
-                })()}
-
-
-                {/* Enrichment Status Badge */}
-                {'enrichment_status' in contact && contact.enrichment_status && (
-                  <div className="flex items-center gap-2 mt-2">
-                    {contact.enrichment_status === 'completed' && 'enrichment_data' in contact && contact.enrichment_data && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">
-                        ✓ Enriched
-                      </span>
-                    )}
-                    {contact.enrichment_status === 'pending' && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
-                        ⏳ Processing
-                      </span>
-                    )}
-                    {contact.enrichment_status === 'failed' && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">
-                        ✗ Failed
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    contact.status === 'active' ? 'bg-green-100 text-green-800' :
-                    contact.status === 'unsubscribed' ? 'bg-yellow-100 text-yellow-800' :
-                    contact.status === 'bounced' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {contact.status}
-                  </span>
-                  
-                  <div className="flex items-center space-x-2 text-xs text-gray-500">
-                    {contact.tags && contact.tags.length > 0 && (
-                      <span>
-                        {contact.tags.length} tag{contact.tags.length !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {contact.lists && contact.lists.length > 0 && (
-                      <span>
-                        {contact.lists.length} list{contact.lists.length !== 1 ? 's' : ''}
-                      </span>
-                    )}
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 hover:bg-gray-100 transition-colors"
+                          title="More actions"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(contact)
+                          }}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleAddTag(contact.id)
+                          }}
+                        >
+                          <Tag className="h-4 w-4 mr-2" />
+                          Add Tag
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(contact.id)
+                          }}
+                          className="text-red-600 focus:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
 
-                {/* Tags Display */}
+                {/* Meta Information Row */}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    {/* Status */}
+                    <Badge 
+                      variant="secondary" 
+                      className={`text-xs font-medium px-2 py-1 ${
+                        contact.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' :
+                        contact.status === 'unsubscribed' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                        contact.status === 'bounced' ? 'bg-red-100 text-red-700 border-red-200' :
+                        'bg-gray-100 text-gray-700 border-gray-200'
+                      }`}
+                    >
+                      {contact.status}
+                    </Badge>
+                    
+                    {/* AI Enriched */}
+                    {'enrichment_status' in contact && contact.enrichment_status === 'completed' && (
+                      <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 border-blue-200">
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Enriched
+                      </Badge>
+                    )}
+
+                    {/* Processing status */}
+                    {'enrichment_status' in contact && contact.enrichment_status === 'pending' && (
+                      <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-orange-100 text-orange-700 border-orange-200">
+                        Processing
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {/* Counts */}
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    {tagsCount > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Tag className="h-3 w-3" />
+                        <span>{tagsCount}</span>
+                      </div>
+                    )}
+                    {listsCount > 0 && (
+                      <div className="flex items-center gap-1">
+                        <List className="h-3 w-3" />
+                        <span>{listsCount}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tags */}
                 {contact.tags && contact.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {contact.tags.slice(0, 3).map((tag: string, index: number) => (
-                      <span 
+                      <Badge 
                         key={index} 
-                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        variant="outline" 
+                        className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors"
                       >
-                        <Tag className="h-3 w-3 mr-1" />
                         {tag}
-                      </span>
+                      </Badge>
                     ))}
                     {contact.tags.length > 3 && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                        +{contact.tags.length - 3} more
-                      </span>
+                      <Badge 
+                        variant="outline" 
+                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 border-gray-300"
+                      >
+                        +{contact.tags.length - 3}
+                      </Badge>
                     )}
                   </div>
                 )}
 
-                {/* Lists Display */}
+                {/* Lists */}
                 {contact.lists && contact.lists.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex flex-wrap gap-1">
                     {contact.lists.slice(0, 3).map((listName: string, index: number) => (
-                      <span 
+                      <Badge 
                         key={index} 
-                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                        variant="outline" 
+                        className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-200 hover:bg-green-100 transition-colors"
                       >
                         <List className="h-3 w-3 mr-1" />
                         {listName}
-                      </span>
+                      </Badge>
                     ))}
                     {contact.lists.length > 3 && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                        +{contact.lists.length - 3} more lists
-                      </span>
+                      <Badge 
+                        variant="outline" 
+                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 border-gray-300"
+                      >
+                        +{contact.lists.length - 3} lists
+                      </Badge>
                     )}
                   </div>
                 )}
-
-                {/* Add Tag Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleAddTag(contact.id)
-                  }}
-                  className="w-full h-6 text-xs text-gray-600 hover:text-gray-900"
-                >
-                  <Tag className="h-3 w-3 mr-1" />
-                  Add Tag
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {/* Pagination */}

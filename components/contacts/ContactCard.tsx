@@ -1,7 +1,7 @@
 'use client'
 
 import { Contact } from '@/lib/contacts'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -10,8 +10,16 @@ import {
   Edit,
   Trash2,
   Tag,
-  Sparkles
+  Sparkles,
+  List,
+  MoreVertical
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface ContactCardProps {
   contact: Contact
@@ -71,136 +79,176 @@ export function ContactCard({
     }
   }
 
+  // Get lists count for this contact
+  const listsCount = contact.lists?.length || 0
+
   return (
-    <Card className={`hover:shadow-md transition-shadow ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start space-x-3 flex-1 min-w-0">
+    <Card className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'}`}>
+      <CardContent className="p-4">
+        {/* Header Row */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Checkbox */}
             {onSelect && (
               <input
                 type="checkbox"
                 checked={isSelected}
                 onChange={handleSelectChange}
-                className="mt-1"
+                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
             )}
+            
+            {/* Contact Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-gray-900 truncate flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-base font-semibold text-gray-900 truncate flex-1">
                   {formatName(contact)}
                 </h3>
-                {/* AI Enriched indicator */}
-                {('enrichment_status' in contact) && contact.enrichment_status === 'completed' && (
-                  <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 flex items-center gap-1">
-                    <Sparkles className="h-3 w-3" />
-                    AI Enriched
-                  </Badge>
-                )}
               </div>
-              <div className="flex items-center mt-1">
-                <Mail className="h-3 w-3 text-gray-400 mr-1" />
-                <p className="text-xs text-gray-600 truncate">{contact.email}</p>
+              
+              <div className="flex items-center text-sm text-gray-600 mb-2">
+                <Mail className="h-3.5 w-3.5 text-gray-400 mr-1.5 flex-shrink-0" />
+                <span className="truncate">{contact.email}</span>
               </div>
-              {/* Show additional context when displaying company name as main title */}
-              {!contact.first_name && !contact.last_name && contact.company && (
-                <p className="text-xs text-gray-500 mt-1">Company</p>
-              )}
+              
+              {/* Company/Position */}
+              {(() => {
+                const isCompanyAsTitle = !contact.first_name && !contact.last_name && contact.company
+                
+                let displayText = ''
+                if (isCompanyAsTitle && contact.position) {
+                  displayText = contact.position
+                } else if (contact.position && contact.company) {
+                  displayText = `${contact.position} at ${contact.company}`
+                } else if (contact.position) {
+                  displayText = contact.position
+                } else if (contact.company && !isCompanyAsTitle) {
+                  displayText = contact.company
+                }
+
+                return displayText ? (
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Building className="h-3.5 w-3.5 text-gray-400 mr-1.5 flex-shrink-0" />
+                    <span className="truncate">{displayText}</span>
+                  </div>
+                ) : null
+              })()}
             </div>
           </div>
           
-          <div className="flex items-center space-x-1">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onEdit(contact)}
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 p-0 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+              title="Edit contact"
             >
-              <Edit className="h-3 w-3" />
+              <Edit className="h-3.5 w-3.5" />
             </Button>
+            
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onDelete(contact.id)}
-              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+              onClick={() => onAddTag(contact.id)}
+              className="h-7 w-7 p-0 hover:bg-green-100 hover:text-green-700 transition-colors"
+              title="Add tag"
             >
-              <Trash2 className="h-3 w-3" />
+              <Tag className="h-3.5 w-3.5" />
             </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 hover:bg-gray-100 transition-colors"
+                  title="More actions"
+                >
+                  <MoreVertical className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem onClick={() => onEdit(contact)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onAddTag(contact.id)}>
+                  <Tag className="h-4 w-4 mr-2" />
+                  Add Tag
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => onDelete(contact.id)}
+                  className="text-red-600 focus:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-      </CardHeader>
-      
-      <CardContent className="pt-0">
-        <div className="space-y-2">
-          {/* Company and Position */}
-          {(() => {
-            // If we're displaying company name as the main title, only show position
-            const isCompanyAsTitle = !contact.first_name && !contact.last_name && contact.company
-            
-            let displayText = ''
-            if (isCompanyAsTitle && contact.position) {
-              displayText = contact.position
-            } else if (contact.position && contact.company) {
-              displayText = `${contact.position} at ${contact.company}`
-            } else if (contact.position) {
-              displayText = contact.position
-            } else if (contact.company && !isCompanyAsTitle) {
-              displayText = contact.company
-            }
 
-            return displayText ? (
-              <div className="flex items-center text-xs text-gray-600">
-                <Building className="h-3 w-3 mr-1" />
-                <span className="truncate">{displayText}</span>
-              </div>
-            ) : null
-          })()}
-
-          {/* Status Badge */}
-          <div className="flex items-center justify-between">
+        {/* Meta Information Row */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            {/* Status */}
             <Badge 
               variant="secondary" 
-              className={`text-xs ${getStatusColor(contact.status)}`}
+              className={`text-xs font-medium px-2 py-1 ${getStatusColor(contact.status)}`}
             >
               {contact.status}
             </Badge>
             
+            {/* AI Enriched */}
+            {('enrichment_status' in contact) && contact.enrichment_status === 'completed' && (
+              <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 border-blue-200">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Enriched
+              </Badge>
+            )}
+          </div>
+          
+          {/* Counts */}
+          <div className="flex items-center gap-3 text-xs text-gray-500">
             {contact.tags && contact.tags.length > 0 && (
-              <div className="flex items-center space-x-1">
-                <Tag className="h-3 w-3 text-gray-400" />
-                <span className="text-xs text-gray-500">
-                  {contact.tags.length} tag{contact.tags.length !== 1 ? 's' : ''}
-                </span>
+              <div className="flex items-center gap-1">
+                <Tag className="h-3 w-3" />
+                <span>{contact.tags.length}</span>
+              </div>
+            )}
+            {listsCount > 0 && (
+              <div className="flex items-center gap-1">
+                <List className="h-3 w-3" />
+                <span>{listsCount}</span>
               </div>
             )}
           </div>
-
-          {/* Tags */}
-          {contact.tags && contact.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {contact.tags.slice(0, 3).map((tag, index) => (
-                <Badge key={index} variant="outline" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-              {contact.tags.length > 3 && (
-                <Badge variant="outline" className="text-xs">
-                  +{contact.tags.length - 3} more
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Add Tag Button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onAddTag(contact.id)}
-            className="w-full h-8 text-xs text-gray-600 hover:text-gray-900"
-          >
-            <Tag className="h-3 w-3 mr-1" />
-            Add Tag
-          </Button>
         </div>
+
+        {/* Tags */}
+        {contact.tags && contact.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {contact.tags.slice(0, 4).map((tag, index) => (
+              <Badge 
+                key={index} 
+                variant="outline" 
+                className="text-xs px-2 py-0.5 bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors"
+              >
+                {tag}
+              </Badge>
+            ))}
+            {contact.tags.length > 4 && (
+              <Badge 
+                variant="outline" 
+                className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 border-gray-300"
+              >
+                +{contact.tags.length - 4}
+              </Badge>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
