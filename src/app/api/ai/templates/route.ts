@@ -1,74 +1,126 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { AITemplateService } from '@/lib/ai-templates'
-import { handleApiError, AuthenticationError, ValidationError } from '@/lib/errors'
-import { z } from 'zod'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-const createTemplateSchema = z.object({
-  name: z.string().min(1, 'Template name is required'),
-  description: z.string().optional(),
-  category: z.enum(['cold_outreach', 'follow_up', 'introduction', 'meeting_request', 'custom']),
-  content: z.string().min(1, 'Template content is required'),
-  custom_prompt: z.string().optional(),
-})
-
-// GET /api/ai/templates - Get user's AI templates
-export async function GET(request: NextRequest) {
+// GET /api/ai/templates -> list user's templates (plus public)
+export const GET = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      throw new AuthenticationError()
-    }
-
+    const supabase = await createServerSupabaseClient()
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category') || undefined
 
-    const templateService = new AITemplateService()
-    const templates = await templateService.getUserTemplates(user.id, category)
+    // Fetch own + public templates
+    let query = supabase
+      .from('ai_templates')
+      .select('*')
+      .or(`user_id.eq.${user.id},is_public.eq.true`)
+      .order('usage_count', { ascending: false })
+      .order('created_at', { ascending: false })
 
-    return NextResponse.json({
-      success: true,
-      data: templates,
-    })
+    if (category) {
+      query = query.eq('category', category)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    // Normalize potential schema differences
+    const normalized = (data || []).map((t: any) => ({
+      id: t.id,
+      user_id: t.user_id,
+      name: t.name,
+      description: t.description || '',
+      category: t.category || 'custom',
+      content: t.content ?? t.body_template ?? '',
+      subject: t.subject ?? t.subject_template ?? '',
+      variables: Array.isArray(t.variables) ? t.variables : [],
+      custom_prompt: t.custom_prompt || '',
+      is_default: !!t.is_default,
+      usage_count: t.usage_count || 0,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+      is_public: !!t.is_public,
+    }))
+
+    return createSuccessResponse(normalized)
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    return handleApiError(error)
   }
-}
+})
 
-// POST /api/ai/templates - Create new AI template
-export async function POST(request: NextRequest) {
+// POST /api/ai/templates -> create template
+export const POST = withAuth(async (request: NextRequest, user) => {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      throw new AuthenticationError()
-    }
-
+    const supabase = await createServerSupabaseClient()
     const body = await request.json()
-    const validatedData = createTemplateSchema.parse(body)
 
-    const templateService = new AITemplateService()
-    
-    // Validate template content
-    const validation = templateService.validateTemplate(validatedData.content)
-    if (!validation.isValid) {
-      throw new ValidationError(`Template validation failed: ${validation.errors.join(', ')}`)
+    const name = (body.name || '').trim()
+    const description = (body.description || '').trim()
+    const category = body.category || 'custom'
+    const content = (body.content || body.body_template || '').toString()
+    const subject = (body.subject || body.subject_template || '').toString()
+    const custom_prompt = body.custom_prompt || ''
+
+    if (!name || !content) {
+      throw new Error('Template name and content are required')
     }
 
-    const template = await templateService.createTemplate(user.id, validatedData)
+    // Extract variables from content
+    const variableRegex = /\{\{([^}]+)\}\}/g
+    const variables: string[] = []
+    let match
+    while ((match = variableRegex.exec(content)) !== null) {
+      const v = match[1].trim()
+      if (v && !variables.includes(v)) variables.push(v)
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: template,
-      message: 'Template created successfully',
-    })
+    // Try insert using `content` column, fallback to subject/body columns
+    let inserted: any = null
+    let error1
+    {
+      const { data, error } = await supabase
+        .from('ai_templates')
+        .insert({
+          user_id: user.id,
+          name,
+          description,
+          category,
+          content,
+          subject,
+          variables,
+          custom_prompt,
+          usage_count: 0,
+          is_default: false,
+        } as any)
+        .select('*')
+        .single()
+      inserted = data
+      error1 = error
+    }
+
+    if (error1) {
+      // Fallback to subject/body column names
+      const { data, error } = await supabase
+        .from('ai_templates')
+        .insert({
+          user_id: user.id,
+          name,
+          description,
+          category,
+          body_template: content,
+          subject_template: subject || name,
+          variables,
+          usage_count: 0,
+          is_default: false,
+        } as any)
+        .select('*')
+        .single()
+      if (error) throw error
+      inserted = data
+    }
+
+    return createSuccessResponse({ id: inserted.id })
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    return handleApiError(error)
   }
-}
+})

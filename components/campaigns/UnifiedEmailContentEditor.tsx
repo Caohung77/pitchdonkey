@@ -25,6 +25,9 @@ import {
   ChevronRight,
   Search
 } from 'lucide-react'
+import { Save } from 'lucide-react'
+import { SaveTemplateDialog } from './SaveTemplateDialog'
+import type { AITemplate } from '@/lib/ai-templates'
 
 interface Contact {
   id: string
@@ -72,6 +75,8 @@ export function UnifiedEmailContentEditor({
   const [language, setLanguage] = useState<'English' | 'German'>('English')
   const [searchTerm, setSearchTerm] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [templates, setTemplates] = useState<AITemplate[]>([])
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   // Notify parent component when generated emails change
   useEffect(() => {
@@ -187,6 +192,20 @@ export function UnifiedEmailContentEditor({
       return () => document.removeEventListener('click', handleClickOutside)
     }
   }, [showDropdown])
+
+  // Load saved templates
+  const loadTemplates = async () => {
+    try {
+      const res = await fetch('/api/ai/templates')
+      if (res.ok) {
+        const json = await res.json()
+        setTemplates(json.data || [])
+      }
+    } catch (e) {
+      console.warn('Failed to load templates', e)
+    }
+  }
+  useEffect(() => { loadTemplates() }, [])
 
   const handleGenerateAI = async () => {
     if (!selectedContact) return
@@ -795,7 +814,12 @@ Write a personalized outreach email TO this person (they are the recipient). Use
 
               {/* Quick Templates */}
               <div className="border-b pb-4">
-                <h4 className="font-medium mb-3">Quick Templates</h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium">Quick Templates</h4>
+                  <Button variant="outline" size="sm" onClick={() => setSaveDialogOpen(true)} className="flex items-center">
+                    <Save className="h-4 w-4 mr-1" /> Save as Template
+                  </Button>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => insertTemplate('basic')}>
                     Basic Template
@@ -803,6 +827,14 @@ Write a personalized outreach email TO this person (they are the recipient). Use
                   <Button variant="outline" size="sm" onClick={() => insertTemplate('professional')}>
                     Professional
                   </Button>
+                  {templates.map((tpl) => (
+                    <Button key={tpl.id} variant="outline" size="sm" onClick={() => {
+                      if ((tpl as any).subject) onSubjectChange((tpl as any).subject)
+                      onContentChange(tpl.content)
+                    }}>
+                      {tpl.name}
+                    </Button>
+                  ))}
                 </div>
               </div>
 
@@ -925,6 +957,13 @@ Write a personalized outreach email TO this person (they are the recipient). Use
             </CardContent>
           </Card>
       </div>
+      <SaveTemplateDialog
+        open={saveDialogOpen}
+        onOpenChange={(o) => setSaveDialogOpen(o)}
+        subject={subject}
+        content={htmlContent}
+        onSaved={() => loadTemplates()}
+      />
     </div>
   )
 }

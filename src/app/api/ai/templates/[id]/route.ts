@@ -1,109 +1,89 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { AITemplateService } from '@/lib/ai-templates'
-import { handleApiError, AuthenticationError, NotFoundError, ValidationError } from '@/lib/errors'
-import { z } from 'zod'
+import { NextRequest } from 'next/server'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-const updateTemplateSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().optional(),
-  category: z.enum(['cold_outreach', 'follow_up', 'introduction', 'meeting_request', 'custom']).optional(),
-  content: z.string().min(1).optional(),
-  custom_prompt: z.string().optional(),
+export const DELETE = withAuth(async (_request: NextRequest, user, context) => {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const id = context?.params?.id
+    if (!id) throw new Error('Template id is required')
+
+    const { error } = await supabase
+      .from('ai_templates')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .eq('is_default', false)
+
+    if (error) throw error
+    return createSuccessResponse({ id })
+  } catch (error) {
+    return handleApiError(error)
+  }
 })
 
-// GET /api/ai/templates/[id] - Get specific template
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PUT = withAuth(async (request: NextRequest, user, context) => {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      throw new AuthenticationError()
-    }
+    const supabase = await createServerSupabaseClient()
+    const id = context?.params?.id
+    const updates = await request.json()
+    if (!id) throw new Error('Template id is required')
 
-    const templateService = new AITemplateService()
-    const template = await templateService.getTemplate(params.id, user.id)
+    // Support both `content` and `body_template`/`subject_template`
+    const content = updates.content ?? updates.body_template
+    const subject = updates.subject ?? updates.subject_template
 
-    if (!template) {
-      throw new NotFoundError('Template not found')
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: template,
-    })
-  } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
-  }
-}
-
-// PUT /api/ai/templates/[id] - Update template
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      throw new AuthenticationError()
-    }
-
-    const body = await request.json()
-    const validatedData = updateTemplateSchema.parse(body)
-
-    const templateService = new AITemplateService()
-    
-    // Validate template content if provided
-    if (validatedData.content) {
-      const validation = templateService.validateTemplate(validatedData.content)
-      if (!validation.isValid) {
-        throw new ValidationError(`Template validation failed: ${validation.errors.join(', ')}`)
+    // Extract variables when content provided
+    if (typeof content === 'string') {
+      const variableRegex = /\{\{([^}]+)\}\}/g
+      const variables: string[] = []
+      let match
+      while ((match = variableRegex.exec(content)) !== null) {
+        const v = match[1].trim()
+        if (v && !variables.includes(v)) variables.push(v)
       }
+      updates.variables = variables
     }
 
-    const template = await templateService.updateTemplate(params.id, user.id, validatedData)
+    let updated
+    let { data, error } = await supabase
+      .from('ai_templates')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('*')
+      .single()
 
-    return NextResponse.json({
-      success: true,
-      data: template,
-      message: 'Template updated successfully',
-    })
-  } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
-  }
-}
-
-// DELETE /api/ai/templates/[id] - Delete template
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      throw new AuthenticationError()
+    if (error) {
+      // Fallback key names
+      const fallback = {
+        name: updates.name,
+        description: updates.description,
+        category: updates.category,
+        body_template: content,
+        subject_template: subject,
+        variables: updates.variables,
+        updated_at: new Date().toISOString(),
+      }
+      const res2 = await supabase
+        .from('ai_templates')
+        .update(fallback as any)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select('*')
+        .single()
+      if (res2.error) throw res2.error
+      updated = res2.data
+    } else {
+      updated = data
     }
 
-    const templateService = new AITemplateService()
-    await templateService.deleteTemplate(params.id, user.id)
-
-    return NextResponse.json({
-      success: true,
-      message: 'Template deleted successfully',
-    })
+    return createSuccessResponse(updated)
   } catch (error) {
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: errorResponse.statusCode })
+    return handleApiError(error)
   }
-}
+})
+

@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth-middleware'
 
 // GET /api/contacts/lists/[id] - Get a specific contact list
-export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: any }) => {
   try {
-
-    const { id } = await params
+    const p = params && typeof params.then === 'function' ? await params : params
+    const { id } = p || {}
+    if (!id) {
+      return NextResponse.json({ error: 'Missing list id' }, { status: 400 })
+    }
 
     // Get list from database
     const { data: list, error: listError } = await supabase
@@ -34,8 +37,11 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }, { p
       }
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get contact list error:', error)
+    if (error?.code === '42P01') {
+      return NextResponse.json({ error: 'contact_lists table missing' }, { status: 500 })
+    }
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
