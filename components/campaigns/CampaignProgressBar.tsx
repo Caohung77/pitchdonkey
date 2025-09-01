@@ -210,9 +210,10 @@ export function CampaignProgressBar({
                 .from('campaigns')
                 .select('status, completed_at')
                 .eq('id', campaign.id)
-                .single()
-              
-              if (queryError) {
+                .maybeSingle()
+
+              // Log non-null errors only; avoid throwing empty/undefined error objects
+              if (queryError && (queryError as any)?.code) {
                 console.error(`❌ Query error for campaign ${campaign.id}:`, queryError)
                 throw queryError
               }

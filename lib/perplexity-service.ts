@@ -69,9 +69,10 @@ export class PerplexityService {
               content: prompt
             }
           ],
-          search_domain_filter: [websiteUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')],
-          temperature: 0.2,
-          max_tokens: 1000
+          search_domain_filter: [websiteUrl.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '')],
+          temperature: 0.1,
+          max_tokens: 1500,
+          search_recency_filter: "month"
         })
       })
 
@@ -109,48 +110,39 @@ export class PerplexityService {
    * Build the enrichment prompt with website URL
    */
   private buildEnrichmentPrompt(websiteUrl: string): string {
-    return `Search the web and analyze the company website: ${websiteUrl}
+    return `IMPORTANT: Please search the web and access the company website at ${websiteUrl} to extract detailed business information.
 
-TASK: Visit and analyze the company website at ${websiteUrl} to extract business information for email personalization.
+REQUIRED TASKS:
+1. Access and read the content from ${websiteUrl}
+2. Extract company information from the actual website content
+3. Look for: company name, services, contact information, about section, products offered
+4. Use web search if direct access fails
 
-REQUIRED: Search and read the actual website content, including:
-- Homepage content and company description
-- About page and company background  
-- Products/services offered
-- Target market and customers
-- Company values and unique selling points
+CRITICAL: You must actually search for and access the website content. Do not make assumptions based on the domain name alone.
 
-IMPORTANT: You must actually search and access the website content at ${websiteUrl} to provide accurate information. Do not make assumptions.
-
-Output the findings in the exact JSON format specified in your system instructions.`
+Provide the extracted information in the exact JSON format specified in your system instructions.`
   }
 
   /**
    * Get the system prompt for enrichment analysis
    */
   private getSystemPrompt(): string {
-    return `YOU ARE AN OUTREACH ENRICHMENT EXPERT. YOUR TASK IS TO ANALYZE RAW COMPANY WEBSITE CONTENT AND EXTRACT ONLY THE MOST RELEVANT INFORMATION NEEDED TO PERSONALIZE A PROFESSIONAL OUTREACH EMAIL. YOU MUST PROVIDE CLEAR, FACTUAL, AND ACTIONABLE INSIGHTS THAT DIRECTLY SUPPORT EMAIL PERSONALIZATION.  
+    return `YOU ARE AN EXPERT WEB RESEARCHER AND BUSINESS INTELLIGENCE ANALYST. Your task is to extract factual business information from company websites for email personalization purposes.
 
-###INSTRUCTIONS###
+CRITICAL INSTRUCTIONS:
+1. You MUST search the web and access the actual website content
+2. Extract ONLY factual information that appears on the website
+3. Do NOT invent or assume information that isn't explicitly stated
+4. If the website is not accessible, clearly state this in your response
+5. Return findings in the exact JSON schema below
 
-1. READ and UNDERSTAND the company's website text.  
-2. IDENTIFY and SUMMARIZE only the information that would help someone write a personalized outreach email.  
-3. RETURN findings in the STRICT JSON schema below.  
-4. USE CONCISE language — NO marketing fluff, filler, or generic statements.  
-5. IF information is missing, leave the field as an empty string "" or empty array [] — NEVER invent details.  
+SEARCH STRATEGY:
+- Try direct website access first
+- Use web search if direct access fails
+- Look for: homepage, about page, services page, contact information
+- Focus on business-relevant information for outreach
 
-###CHAIN OF THOUGHTS (MANDATORY REASONING PROCESS)###
-
-1. **UNDERSTAND**: Grasp the website's main focus.  
-2. **BASICS**: Extract the company's core business model (what they do, who they serve).  
-3. **BREAK DOWN**: Identify products/services, target audience, unique points, and tone separately.  
-4. **ANALYZE**: Detect key differentiators, achievements, or positioning language.  
-5. **BUILD**: Convert findings into short, factual bullet points.  
-6. **EDGE CASES**: Handle vague or missing data by leaving fields empty — NEVER hallucinate.  
-7. **FINAL ANSWER**: Return results in structured JSON only.  
-
-###OUTPUT FORMAT (STRICT JSON)###
-
+OUTPUT FORMAT (MANDATORY JSON SCHEMA):
 {
   "company_name": "",
   "industry": "",
@@ -160,28 +152,15 @@ Output the findings in the exact JSON format specified in your system instructio
   "tone_style": ""
 }
 
-###WHAT NOT TO DO###
+QUALITY REQUIREMENTS:
+- company_name: Exact name as it appears on website
+- industry: Specific industry/sector (not generic terms)
+- products_services: Specific offerings (max 5 items)
+- target_audience: Specific customer types mentioned
+- unique_points: Actual differentiators mentioned on site
+- tone_style: Professional communication style observed
 
-- DO NOT invent or guess missing information  
-- DO NOT include generic marketing phrases like "leading company" or "best-in-class" unless explicitly in text  
-- DO NOT copy large paragraphs — always condense into short bullet points  
-- DO NOT include irrelevant info (like press releases, unrelated blog posts, or unrelated job listings)  
-- DO NOT change the output format or schema  
-
-###EXAMPLE###
-
-**Input (excerpt from Shopify's website):**  
-"Shopify is a commerce platform that allows anyone to set up an online store and sell their products. Whether you sell online, on social media, in-store, or out of the trunk of your car, Shopify has you covered. Millions of businesses in 175 countries use Shopify. We believe the future of commerce has more voices, not fewer, so we're reducing barriers to entrepreneurship."  
-
-**Output JSON:**  
-{
-  "company_name": "Shopify",
-  "industry": "E-commerce SaaS",
-  "products_services": ["Online store builder", "Payment processing", "POS system"],
-  "target_audience": ["Small businesses", "Entrepreneurs", "Retailers"],
-  "unique_points": ["Large app ecosystem", "Global reach", "Easy-to-use platform"],
-  "tone_style": "Innovative, supportive, growth-focused"
-}`
+If website is not accessible or contains insufficient information, return empty fields rather than guessing.`
   }
 
   /**
