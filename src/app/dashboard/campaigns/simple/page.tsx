@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ApiClient } from '@/lib/api-client'
 import { UnifiedEmailContentEditor } from '@/components/campaigns/UnifiedEmailContentEditor'
+import { ViewContactListModal } from '@/components/contacts/ViewContactListModal'
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -67,6 +68,10 @@ export default function SimpleCampaignPage() {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [personalizedEmails, setPersonalizedEmails] = useState<Map<string, { subject: string; content: string }>>(new Map())
+  const [viewContactsModal, setViewContactsModal] = useState<{ isOpen: boolean; selectedList: ContactList | null }>({
+    isOpen: false,
+    selectedList: null
+  })
 
   useEffect(() => {
     fetchContactLists()
@@ -350,22 +355,24 @@ export default function SimpleCampaignPage() {
                 {contactLists.map((list) => (
                   <div
                     key={list.id}
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                    className={`border rounded-lg p-4 transition-colors ${
                       campaignData.contact_list_ids.includes(list.id)
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
-                    onClick={() => {
-                      setCampaignData(prev => ({
-                        ...prev,
-                        contact_list_ids: prev.contact_list_ids.includes(list.id)
-                          ? prev.contact_list_ids.filter(id => id !== list.id)
-                          : [...prev.contact_list_ids, list.id]
-                      }))
-                    }}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
+                      <div 
+                        className="flex items-center space-x-3 flex-1 cursor-pointer"
+                        onClick={() => {
+                          setCampaignData(prev => ({
+                            ...prev,
+                            contact_list_ids: prev.contact_list_ids.includes(list.id)
+                              ? prev.contact_list_ids.filter(id => id !== list.id)
+                              : [...prev.contact_list_ids, list.id]
+                          }))
+                        }}
+                      >
                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
                           campaignData.contact_list_ids.includes(list.id)
                             ? 'border-blue-500 bg-blue-500'
@@ -380,9 +387,26 @@ export default function SimpleCampaignPage() {
                           <p className="text-sm text-gray-600">{list.description}</p>
                         </div>
                       </div>
-                      <Badge variant="secondary">
-                        {list.contactCount} contacts
-                      </Badge>
+                      <div className="flex items-center space-x-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setViewContactsModal({
+                              isOpen: true,
+                              selectedList: list
+                            })
+                          }}
+                          className="text-xs"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View
+                        </Button>
+                        <Badge variant="secondary">
+                          {list.contactCount} contacts
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -701,6 +725,12 @@ export default function SimpleCampaignPage() {
         </div>
       </div>
 
+      {/* Contact List View Modal */}
+      <ViewContactListModal
+        list={viewContactsModal.selectedList}
+        isOpen={viewContactsModal.isOpen}
+        onClose={() => setViewContactsModal({ isOpen: false, selectedList: null })}
+      />
     </div>
   )
 }
