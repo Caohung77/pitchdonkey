@@ -73,7 +73,7 @@ export function EmailPreviewModal({
       previewContent = previewContent.replace(pattern, value)
     })
     
-    return previewContent
+    return sanitizeEmailHtml(previewContent)
   }
 
   return (
@@ -123,17 +123,17 @@ export function EmailPreviewModal({
               <div className="flex items-center text-sm text-gray-600 mb-1">
                 <span className="font-medium">Subject:</span>
               </div>
-              <div className="font-medium text-gray-900">{subject}</div>
+              <div className="font-medium text-gray-900 break-words">{subject}</div>
             </div>
           )}
         </CardHeader>
         
         <CardContent className="flex-1 overflow-y-auto p-6">
-          <div className={`mx-auto ${viewMode === 'mobile' ? 'max-w-sm' : 'max-w-2xl'}`}>
-            <div className="border border-gray-200 rounded-md min-h-[400px] bg-white">
+          <div className={`mx-auto ${viewMode === 'mobile' ? 'max-w-sm' : 'max-w-2xl'} w-full`}>
+            <div className="border border-gray-200 rounded-md min-h-[400px] bg-white overflow-x-auto">
               {getPreviewContent() ? (
                 <div 
-                  className="p-4"
+                  className="p-4 email-content"
                   dangerouslySetInnerHTML={{ 
                     __html: getPreviewContent()
                   }} 
@@ -164,3 +164,4 @@ export function EmailPreviewModal({
     </div>
   )
 }
+import { sanitizeEmailHtml } from '@/lib/email-sanitize'

@@ -166,11 +166,11 @@ The email should be FROM the campaign sender TO this recipient.`,
       console.log('🤖 AI Response:', response)
       
       if (response.success || response.subject) {
-        const preview: EmailPreview = {
-          subject: response.subject || 'Personalized Outreach',
-          htmlContent: response.htmlContent || response.html_content || '',
-          personalization: response.personalization
-        }
+            const preview: EmailPreview = {
+              subject: response.subject || 'Personalized Outreach',
+              htmlContent: sanitizeEmailHtml(response.htmlContent || response.html_content || ''),
+              personalization: response.personalization
+            }
         
         setEmailPreview(preview)
         
@@ -204,7 +204,7 @@ The email should be FROM the campaign sender TO this recipient.`
           if (fallbackResponse.success || fallbackResponse.subject) {
             const preview: EmailPreview = {
               subject: fallbackResponse.subject || 'Professional Outreach',
-              htmlContent: fallbackResponse.htmlContent || fallbackResponse.html_content || '',
+              htmlContent: sanitizeEmailHtml(fallbackResponse.htmlContent || fallbackResponse.html_content || ''),
               personalization: {
                 level: 'basic',
                 score: 30,
@@ -517,7 +517,7 @@ The email should be FROM the campaign sender TO this recipient.`
                     <CardTitle className="text-sm">Subject Line</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="font-medium">{emailPreview.subject}</p>
+                    <p className="font-medium break-words">{emailPreview.subject}</p>
                   </CardContent>
                 </Card>
 
@@ -528,7 +528,7 @@ The email should be FROM the campaign sender TO this recipient.`
                   </CardHeader>
                   <CardContent>
                     <div 
-                      className="prose prose-sm max-w-none"
+                      className="prose prose-sm max-w-none email-content overflow-x-auto"
                       dangerouslySetInnerHTML={{ __html: emailPreview.htmlContent }}
                     />
                   </CardContent>
@@ -558,3 +558,4 @@ The email should be FROM the campaign sender TO this recipient.`
     </Dialog>
   )
 }
+import { sanitizeEmailHtml } from '@/lib/email-sanitize'

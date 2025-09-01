@@ -479,7 +479,8 @@ Write a personalized outreach email TO this person (they are the recipient). Use
     previewContent = previewContent.replace(/\{\{email\}\}/g, selectedContact.email)
     previewContent = previewContent.replace(/\{\{sender_name\}\}/g, 'Your Team')
 
-    return previewContent
+    // Sanitize to prevent global styles from leaking and breaking layout
+    return sanitizeEmailHtml(previewContent)
   }
 
   const renderPreviewSubject = () => {
@@ -911,15 +912,15 @@ Write a personalized outreach email TO this person (they are the recipient). Use
               <div className={`border rounded-md p-4 bg-white max-w-full overflow-hidden ${viewMode === 'mobile' ? 'max-w-sm mx-auto' : 'w-full'}`}>
                 {/* Subject Preview */}
                 <div className="border-b pb-2 mb-4">
-                  <p className="font-medium text-sm">Subject: {renderPreviewSubject()}</p>
+                  <p className="font-medium text-sm break-words">Subject: {renderPreviewSubject()}</p>
                 </div>
 
                 {/* Content Preview */}
-                <div 
-                  className="prose prose-sm max-w-full overflow-auto break-words"
-                  style={{ maxHeight: '500px', wordBreak: 'break-word', overflowWrap: 'break-word' }}
-                  dangerouslySetInnerHTML={{ __html: renderPreviewContent() }}
-                />
+              <div 
+                className="prose prose-sm max-w-full overflow-auto break-words email-content"
+                style={{ maxHeight: '500px', wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                dangerouslySetInnerHTML={{ __html: renderPreviewContent() }}
+              />
               </div>
             </CardContent>
           </Card>
@@ -927,3 +928,4 @@ Write a personalized outreach email TO this person (they are the recipient). Use
     </div>
   )
 }
+  import { sanitizeEmailHtml } from '@/lib/email-sanitize'

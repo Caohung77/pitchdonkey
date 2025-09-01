@@ -57,3 +57,33 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Constrain rendered HTML email so it never breaks layout */
+@layer components {
+  .email-content {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .email-content img,
+  .email-content video,
+  .email-content canvas,
+  .email-content svg {
+    max-width: 100%;
+    height: auto;
+  }
+  .email-content table {
+    width: 100% !important;
+    max-width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+  .email-content pre,
+  .email-content code {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .email-content a {
+    word-break: break-all;
+  }
+}
