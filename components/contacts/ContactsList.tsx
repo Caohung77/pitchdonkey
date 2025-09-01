@@ -19,6 +19,8 @@ import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 import { BulkTagManagementModal } from './BulkTagManagementModal'
 import { BulkListManagementModal } from './BulkListManagementModal'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { useToast } from '@/components/ui/toast'
 import { Contact } from '@/lib/contacts'
 
 interface ContactsListProps {
@@ -67,6 +69,14 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
 
   // Selection states
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
+  
+  // Confirmation dialog states
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false)
+  const [contactToDelete, setContactToDelete] = useState<string | null>(null)
+  
+  // Toast hook
+  const { addToast } = useToast()
 
   // Contact action handlers
   const handleView = (contact: Contact) => {
@@ -79,14 +89,17 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
     setIsEditModalOpen(true)
   }
 
-  const handleDelete = async (contactId: string) => {
-    if (!confirm('Are you sure you want to delete this contact?')) {
-      return
-    }
+  const handleDelete = (contactId: string) => {
+    setContactToDelete(contactId)
+    setIsDeleteConfirmOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!contactToDelete) return
 
     try {
-      console.log('ContactsList: Deleting contact:', contactId)
-      const response = await fetch(`/api/contacts/${contactId}`, {
+      console.log('ContactsList: Deleting contact:', contactToDelete)
+      const response = await fetch(`/api/contacts/${contactToDelete}`, {
         method: 'DELETE',
       })
 
@@ -99,12 +112,22 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       // Remove contact from local state
       setState(prev => ({
         ...prev,
-        contacts: prev.contacts.filter(c => c.id !== contactId)
+        contacts: prev.contacts.filter(c => c.id !== contactToDelete)
       }))
+
+      addToast({
+        type: 'success',
+        message: 'Contact deleted successfully'
+      })
 
     } catch (error) {
       console.error('ContactsList: Error deleting contact:', error)
-      alert('Failed to delete contact. Please try again.')
+      addToast({
+        type: 'error',
+        message: 'Failed to delete contact. Please try again.'
+      })
+    } finally {
+      setContactToDelete(null)
     }
   }
 
@@ -199,12 +222,13 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   }
 
   // Bulk action handlers
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedContacts.length === 0) return
+    setIsBulkDeleteConfirmOpen(true)
+  }
 
-    if (!confirm(`Are you sure you want to delete ${selectedContacts.length} contacts?`)) {
-      return
-    }
+  const confirmBulkDelete = async () => {
+    if (selectedContacts.length === 0) return
 
     try {
       console.log('ContactsList: Bulk deleting contacts:', selectedContacts)
@@ -222,7 +246,9 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       })
 
       if (!response.ok) {
-        throw new Error('Failed to delete contacts')
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || `Failed to delete contacts (${response.status})`
+        throw new Error(errorMessage)
       }
 
       console.log('ContactsList: Contacts deleted successfully')
@@ -233,11 +259,19 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         contacts: prev.contacts.filter(c => !selectedContacts.includes(c.id))
       }))
       
+      addToast({
+        type: 'success',
+        message: `Successfully deleted ${selectedContacts.length} contact${selectedContacts.length === 1 ? '' : 's'}`
+      })
+      
       setSelectedContacts([])
 
     } catch (error) {
       console.error('ContactsList: Error bulk deleting contacts:', error)
-      alert('Failed to delete contacts. Please try again.')
+      addToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to delete contacts. Please try again.'
+      })
     }
   }
 
@@ -766,6 +800,30 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         selectedContactIds={selectedContacts}
         selectedContactCount={selectedContacts.length}
         onListsUpdated={handleListsUpdated}
+      />
+
+      {/* Single Contact Delete Confirmation */}
+      <ConfirmationDialog
+        open={isDeleteConfirmOpen}
+        onOpenChange={setIsDeleteConfirmOpen}
+        title="Delete Contact"
+        description="Are you sure you want to delete this contact? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+        onConfirm={confirmDelete}
+      />
+
+      {/* Bulk Delete Confirmation */}
+      <ConfirmationDialog
+        open={isBulkDeleteConfirmOpen}
+        onOpenChange={setIsBulkDeleteConfirmOpen}
+        title="Delete Contacts"
+        description={`Are you sure you want to delete ${selectedContacts.length} contact${selectedContacts.length === 1 ? '' : 's'}? This action cannot be undone.`}
+        confirmText="Delete All"
+        cancelText="Cancel"
+        variant="destructive"
+        onConfirm={confirmBulkDelete}
       />
     </div>
   )

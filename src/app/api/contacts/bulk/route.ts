@@ -91,9 +91,14 @@ export async function PUT(request: NextRequest) {
         await contactService.bulkUpdateContactStatus(contact_ids, user.id, data.status)
         break
 
+      case 'delete':
+        // Bulk delete contacts
+        await contactService.bulkDeleteContacts(contact_ids, user.id)
+        break
+
       default:
         return NextResponse.json(
-          { error: 'Invalid action. Supported actions: add_tags, remove_tags, update_status' },
+          { error: 'Invalid action. Supported actions: add_tags, remove_tags, update_status, delete' },
           { status: 400 }
         )
     }
@@ -105,8 +110,11 @@ export async function PUT(request: NextRequest) {
 
   } catch (error) {
     console.error('Bulk update contacts error:', error)
+    
+    // Provide more specific error information
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

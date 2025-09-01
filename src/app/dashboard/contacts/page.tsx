@@ -14,6 +14,7 @@ import { ImportContactsModal } from '@/components/contacts/ImportContactsModal'
 import { SegmentManager } from '@/components/contacts/SegmentManager'
 import { ContactListManager } from '@/components/contacts/ContactListManager'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ToastProvider } from '@/components/ui/toast'
 
 interface ContactsPageState {
   searchTerm: string
@@ -186,9 +187,12 @@ function ContactsPageContent() {
 }
 
 export default function ContactsPage() {
+  // Toast provider wraps the entire page to enable toast notifications
   return (
-    <ContactsErrorBoundary>
-      <ContactsPageContent />
-    </ContactsErrorBoundary>
+    <ToastProvider>
+      <ContactsErrorBoundary>
+        <ContactsPageContent />
+      </ContactsErrorBoundary>
+    </ToastProvider>
   )
 }

@@ -210,10 +210,7 @@ export class ContactService {
     const supabase = await this.getSupabase()
     const { error } = await supabase
       .from('contacts')
-      .update({
-        status: 'deleted',
-        updated_at: new Date().toISOString(),
-      })
+      .delete()
       .eq('id', contactId)
       .eq('user_id', userId)
 
@@ -845,5 +842,35 @@ export class ContactService {
     await this.deleteContact(duplicateContactId, userId)
 
     return mergedData
+  }
+
+  /**
+   * Bulk delete contacts
+   */
+  async bulkDeleteContacts(contactIds: string[], userId: string) {
+    if (!contactIds || contactIds.length === 0) {
+      throw new Error('No contact IDs provided for deletion')
+    }
+
+    const supabase = await this.getSupabase()
+    
+    // Hard delete to respect status constraint and policies
+    const { data, error } = await supabase
+      .from('contacts')
+      .delete()
+      .eq('user_id', userId)
+      .in('id', contactIds)
+      .select('id')
+
+    if (error) {
+      console.error('Bulk delete contacts error:', error)
+      throw new Error(`Failed to delete contacts: ${error.message}`)
+    }
+
+    return {
+      success: true,
+      deleted_count: data?.length || 0,
+      deleted_ids: data?.map(contact => contact.id) || []
+    }
   }
 }
