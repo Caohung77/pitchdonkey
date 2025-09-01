@@ -5,7 +5,7 @@ import { withAuth } from '@/lib/auth-middleware'
 export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
 
-    const { id } = params
+    const { id } = await params
 
     // Get list from database
     const { data: list, error: listError } = await supabase

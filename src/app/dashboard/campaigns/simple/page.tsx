@@ -6,8 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ApiClient } from '@/lib/api-client'
-import { HTMLEmailEditor } from '@/components/campaigns/HTMLEmailEditor'
-import { AIEmailPreviewModal } from '@/components/campaigns/AIEmailPreviewModal'
+import { UnifiedEmailContentEditor } from '@/components/campaigns/UnifiedEmailContentEditor'
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -67,6 +66,7 @@ export default function SimpleCampaignPage() {
   const [contactListsWithContacts, setContactListsWithContacts] = useState<Array<ContactList & { contacts?: Array<{ id: string; first_name: string; last_name: string; company_name: string; email: string }> }>>([])
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [personalizedEmails, setPersonalizedEmails] = useState<Map<string, { subject: string; content: string }>>(new Map())
 
   useEffect(() => {
     fetchContactLists()
@@ -151,9 +151,20 @@ export default function SimpleCampaignPage() {
             const contacts = contactsResponse.success ? contactsResponse.data?.contacts || [] : []
             console.log(`✅ Found ${contacts.length} contacts in ${list.name}`)
             
+            // Log contact data to debug missing company names
+            if (contacts.length > 0) {
+              console.log(`📊 Sample contact data:`, contacts.slice(0, 3).map(c => ({
+                id: c.id,
+                name: `${c.first_name} ${c.last_name}`,
+                email: c.email,
+                company: c.company_name,
+                hasEnrichment: !!c.enrichment_data
+              })))
+            }
+            
             return {
               ...list,
-              contacts: contacts.slice(0, 20) // Increased limit for better preview
+              contacts: contacts.slice(0, 50) // Increased limit for better preview
             }
           } catch (error) {
             console.error(`❌ Error fetching contacts for list ${list.id}:`, error)
@@ -231,9 +242,17 @@ export default function SimpleCampaignPage() {
   const handleSaveDraft = async () => {
     try {
       setLoading(true)
+      
+      // Convert Map to plain object for API
+      const personalizedEmailsObj = {}
+      personalizedEmails.forEach((value, key) => {
+        personalizedEmailsObj[key] = value
+      })
+      
       const result = await ApiClient.post('/api/campaigns/simple', {
         ...campaignData,
-        status: 'draft'
+        status: 'draft',
+        personalized_emails: personalizedEmailsObj
       })
       
       if (result.success || result.id) {
@@ -255,9 +274,16 @@ export default function SimpleCampaignPage() {
     try {
       setLoading(true)
       
+      // Convert Map to plain object for API
+      const personalizedEmailsObj = {}
+      personalizedEmails.forEach((value, key) => {
+        personalizedEmailsObj[key] = value
+      })
+      
       const payload = {
         ...campaignData,
-        status: campaignData.send_immediately ? 'sending' : 'scheduled'
+        status: campaignData.send_immediately ? 'sending' : 'scheduled',
+        personalized_emails: personalizedEmailsObj
       }
       
       console.log('Launching campaign with payload:', payload)
@@ -421,12 +447,13 @@ export default function SimpleCampaignPage() {
               {errors.sender_name && <p className="text-red-500 text-sm mt-1">{errors.sender_name}</p>}
             </div>
 
-            <HTMLEmailEditor
+            <UnifiedEmailContentEditor
               subject={campaignData.email_subject}
               htmlContent={campaignData.html_content}
               onSubjectChange={(subject) => setCampaignData(prev => ({ ...prev, email_subject: subject }))}
               onContentChange={(content) => setCampaignData(prev => ({ ...prev, html_content: content }))}
               contactLists={contactListsWithContacts}
+              onPersonalizedEmailsChange={setPersonalizedEmails}
             />
             
             {errors.email_subject && <p className="text-red-500 text-sm">{errors.email_subject}</p>}
@@ -582,7 +609,7 @@ export default function SimpleCampaignPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
+    <div className="w-full max-w-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-4">

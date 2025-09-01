@@ -14,7 +14,8 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       send_immediately,
       scheduled_date,
       timezone,
-      status = 'draft'
+      status = 'draft',
+      personalized_emails = {} // Map of contact_id -> { subject, content }
     } = body
 
     console.log('Creating simple campaign with data:', { 
@@ -102,6 +103,58 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
     }
 
     console.log('Simple campaign created successfully:', campaign.id)
+
+    // Get all contact IDs from the selected lists
+    const { data: contactLists, error: listsError } = await supabase
+      .from('contact_lists')
+      .select('contact_ids')
+      .in('id', contact_list_ids)
+      .eq('user_id', user.id)
+
+    if (listsError) {
+      console.error('Error fetching contact lists:', listsError)
+      return NextResponse.json({ error: 'Failed to fetch contact lists' }, { status: 500 })
+    }
+
+    // Flatten all contact IDs
+    const allContactIds = contactLists
+      .flatMap(list => list.contact_ids || [])
+      .filter((id, index, arr) => arr.indexOf(id) === index) // Remove duplicates
+
+    console.log(`📋 Campaign ${campaign.id} will target ${allContactIds.length} contacts`)
+
+    // Create campaign_contacts entries with personalized content
+    if (allContactIds.length > 0) {
+      const campaignContacts = allContactIds.map(contactId => ({
+        campaign_id: campaign.id,
+        contact_id: contactId,
+        status: 'pending',
+        current_sequence: 1,
+        personalized_subject: personalized_emails[contactId]?.subject || email_subject,
+        personalized_body: personalized_emails[contactId]?.content || html_content,
+        ai_personalization_used: !!personalized_emails[contactId],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }))
+
+      const { error: contactsError } = await supabase
+        .from('campaign_contacts')
+        .insert(campaignContacts)
+
+      if (contactsError) {
+        console.error('Error creating campaign contacts:', contactsError)
+        // Don't fail the entire campaign creation for this
+      } else {
+        console.log(`✅ Created ${campaignContacts.length} campaign contact entries`)
+        console.log(`🤖 ${Object.keys(personalized_emails).length} contacts have AI-generated content`)
+      }
+
+      // Update campaign with total contacts count
+      await supabase
+        .from('campaigns')
+        .update({ total_contacts: allContactIds.length })
+        .eq('id', campaign.id)
+    }
 
     // If the campaign is set to send immediately, trigger processing
     if (status === 'sending') {

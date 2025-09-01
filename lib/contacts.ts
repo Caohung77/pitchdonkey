@@ -276,8 +276,22 @@ export class ContactService {
 
     if (error) throw error
 
+    // Map database fields to frontend expected fields
+    const mappedContacts = (data || []).map(contact => ({
+      ...contact,
+      // Map company field to company_name for frontend compatibility
+      company_name: contact.company,
+      // Ensure names are not null for display
+      first_name: contact.first_name || '',
+      last_name: contact.last_name || '',
+      // Extract company name from enrichment data if available and main field is empty
+      ...(contact.enrichment_data?.company_name && !contact.company ? {
+        company_name: contact.enrichment_data.company_name
+      } : {}),
+    }))
+
     return {
-      contacts: data || [],
+      contacts: mappedContacts,
       pagination: {
         page,
         limit,
@@ -302,7 +316,30 @@ export class ContactService {
       throw new Error('Failed to fetch contacts')
     }
 
-    return data || []
+    // Map database fields to frontend expected fields
+    const mappedData = (data || []).map(contact => ({
+      ...contact,
+      // Map company field to company_name for frontend compatibility
+      company_name: contact.company,
+      // Ensure names are not null for display
+      first_name: contact.first_name || '',
+      last_name: contact.last_name || '',
+      // Extract company name from enrichment data if available and main field is empty
+      ...(contact.enrichment_data?.company_name && !contact.company ? {
+        company_name: contact.enrichment_data.company_name
+      } : {}),
+    }))
+
+    console.log('🔍 Mapped contact data:', mappedData.slice(0, 3).map(c => ({
+      id: c.id,
+      first_name: c.first_name,
+      last_name: c.last_name,
+      company: c.company,
+      company_name: c.company_name,
+      email: c.email
+    })))
+
+    return mappedData
   }
 
   async getContactStats(userId: string) {
