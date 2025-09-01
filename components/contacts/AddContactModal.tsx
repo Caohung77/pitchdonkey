@@ -101,9 +101,11 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddCon
       if (!response.ok) {
         // Handle different error types
         if (response.status === 409 && data.code === 'DUPLICATE_CONTACT') {
-          throw new Error(`A contact with email "${formData.email}" already exists. Please use a different email address.`)
+          setError(`A contact with email "${formData.email}" already exists. Please use a different email address.`)
+          return
         }
-        throw new Error(data.error || 'Failed to create contact')
+        setError(data.error || 'Failed to create contact')
+        return
       }
 
       console.log('AddContactModal: Contact created successfully:', data)
@@ -119,7 +121,7 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddCon
       onContactAdded()
 
     } catch (error) {
-      console.error('AddContactModal: Error creating contact:', error)
+      console.error('AddContactModal: Unexpected error creating contact:', error)
       setError(error instanceof Error ? error.message : 'Failed to create contact')
     } finally {
       setLoading(false)

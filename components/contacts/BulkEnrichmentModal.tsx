@@ -81,7 +81,7 @@ export function BulkEnrichmentModal({
   }
 
   const handleStartEnrichment = async () => {
-    if (!eligibility || eligibility.eligible.length === 0) return
+    if (!eligibility || (eligibility.eligible.length === 0 && (!forceRefresh || eligibility.already_enriched.length === 0))) return
 
     setIsStarting(true)
     
@@ -376,7 +376,10 @@ export function BulkEnrichmentModal({
           </Button>
           <Button 
             onClick={handleStartEnrichment}
-            disabled={eligibility.eligible.length === 0 || isStarting}
+            disabled={
+              (eligibility.eligible.length === 0 && (!forceRefresh || eligibility.already_enriched.length === 0)) || 
+              isStarting
+            }
             className="bg-blue-600 hover:bg-blue-700"
           >
             {isStarting ? (

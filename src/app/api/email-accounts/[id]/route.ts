@@ -28,10 +28,12 @@ export const GET = withAuth(async (
   try {
     await withRateLimit(user, 100, 60000) // 100 requests per minute
     
+    const { id } = await params
+    
     const { data: account, error } = await supabase
       .from('email_accounts')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
@@ -88,11 +90,13 @@ export const PUT = withAuth(async (
 
     const updateData = validationResult.data
 
+    const { id } = await params
+    
     // First, verify the account exists and belongs to the user
     const { data: existingAccount, error: fetchError } = await supabase
       .from('email_accounts')
       .select('id, user_id')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
@@ -141,7 +145,7 @@ export const PUT = withAuth(async (
     const { data: updatedAccount, error: updateError } = await supabase
       .from('email_accounts')
       .update(updateObject)
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .select()
       .single()
@@ -179,11 +183,13 @@ export const DELETE = withAuth(async (
   try {
     await withRateLimit(user, 10, 60000) // 10 deletes per minute
     
+    const { id } = await params
+    
     // First, verify the account exists and belongs to the user
     const { data: existingAccount, error: fetchError } = await supabase
       .from('email_accounts')
-      .select('id, user_id, email')
-      .eq('id', params.id)
+      .select('id, user_id, email, status')
+      .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
@@ -194,6 +200,29 @@ export const DELETE = withAuth(async (
       }, { status: 404 })
     }
 
+    // Check for active campaigns using this email account
+    const { data: activeCampaigns, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('id, name')
+      .eq('sender_email_account_id', id)
+      .in('status', ['active', 'sending', 'scheduled'])
+      .limit(5)
+
+    if (campaignError) {
+      console.warn('Could not check for active campaigns:', campaignError)
+      // Continue with deletion but log the warning
+    }
+
+    if (activeCampaigns && activeCampaigns.length > 0) {
+      return NextResponse.json({
+        error: `Cannot delete email account. ${activeCampaigns.length} active campaign(s) are using this account. Please pause or stop these campaigns first.`,
+        code: 'CAMPAIGNS_ACTIVE',
+        details: {
+          activeCampaigns: activeCampaigns.map(c => ({ id: c.id, name: c.name }))
+        }
+      }, { status: 400 })
+    }
+
     // Soft delete by setting deleted_at
     const { error: deleteError } = await supabase
       .from('email_accounts')
@@ -201,7 +230,7 @@ export const DELETE = withAuth(async (
         deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
 
     if (deleteError) {

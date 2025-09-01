@@ -9,6 +9,7 @@ import { ApiClient } from '@/lib/api-client'
 import AddEmailAccountDialog from '@/components/email-accounts/AddEmailAccountDialog'
 import EditEmailAccountDialog from '@/components/email-accounts/EditEmailAccountDialog'
 import DomainAuthDialog from '@/components/email-accounts/DomainAuthDialog'
+import DeleteEmailAccountDialog from '@/components/email-accounts/DeleteEmailAccountDialog'
 
 interface EmailAccount {
   id: string
@@ -99,18 +100,11 @@ export default function EmailAccountsPage() {
     fetchAccounts()
   }
 
-  const handleDelete = async (accountId: string) => {
-    if (!confirm('Are you sure you want to delete this email account?')) {
-      return
-    }
-
-    try {
-      await ApiClient.delete(`/api/email-accounts/${accountId}`)
-      setAccounts(accounts.filter(account => account.id !== accountId))
-    } catch (error) {
-      console.error('Error deleting account:', error)
-      setError('Failed to delete email account')
-    }
+  const handleAccountDeleted = () => {
+    fetchAccounts()
+    setSuccessMessage('Email account deleted successfully!')
+    // Clear success message after 5 seconds
+    setTimeout(() => setSuccessMessage(''), 5000)
   }
 
   const handleTest = async (accountId: string) => {
@@ -330,9 +324,15 @@ export default function EmailAccountsPage() {
                     onAccountUpdated={fetchAccounts}
                   />
                   <DomainAuthDialog domain={account.domain} />
-                  <Button size="sm" variant="outline" onClick={() => handleDelete(account.id)}>
-                    Delete
-                  </Button>
+                  <DeleteEmailAccountDialog
+                    account={{
+                      id: account.id,
+                      email: account.email,
+                      provider: account.provider,
+                      status: account.status
+                    }}
+                    onAccountDeleted={handleAccountDeleted}
+                  />
                 </div>
               </CardContent>
             </Card>

@@ -253,7 +253,56 @@ export class ContactService {
 
     // Apply filters
     if (search) {
-      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,company.ilike.%${search}%`)
+      // Enhanced search across contacts + contact list names/tags
+      // Sanitize characters that would break PostgREST or-filter syntax
+      const searchTerm = search
+        .replace(/'/g, "''")     // escape single quotes
+        .replace(/[(),]/g, ' ')    // remove list/tuple separators that break the OR clause
+        .trim()
+
+      let listContactIds: string[] = []
+      try {
+        // Find lists by name or tag that match the term
+        const { data: lists } = await supabase
+          .from('contact_lists')
+          .select('contact_ids')
+          .eq('user_id', userId)
+          .or(`name.ilike.%${searchTerm}%,tags.cs.{"${searchTerm}"}`)
+
+        if (lists && lists.length > 0) {
+          const ids = lists.flatMap((l: any) => Array.isArray(l.contact_ids) ? l.contact_ids : [])
+          listContactIds = Array.from(new Set(ids))
+        }
+      } catch (e) {
+        console.warn('List search failed; continuing with contact-only search:', e)
+      }
+
+      const orParts: string[] = [
+        `first_name.ilike.%${searchTerm}%`,
+        `last_name.ilike.%${searchTerm}%`,
+        `email.ilike.%${searchTerm}%`,
+        `company.ilike.%${searchTerm}%`,
+        `position.ilike.%${searchTerm}%`,
+        `website.ilike.%${searchTerm}%`,
+        `phone.ilike.%${searchTerm}%`,
+        `country.ilike.%${searchTerm}%`,
+        `city.ilike.%${searchTerm}%`,
+        `linkedin_url.ilike.%${searchTerm}%`,
+        `twitter_url.ilike.%${searchTerm}%`,
+        `tags.cs.{"${searchTerm}"}`,
+        `enrichment_data->>company_name.ilike.%${searchTerm}%`,
+        `enrichment_data->>industry.ilike.%${searchTerm}%`,
+        `enrichment_data->>tone_style.ilike.%${searchTerm}%`,
+      ]
+
+      if (listContactIds.length > 0) {
+        // Limit to avoid overly long URLs; still covers typical list sizes
+        const limited = listContactIds.slice(0, 1000)
+        const quoted = limited.map((id) => `"${id}"`).join(',')
+        orParts.push(`id.in.(${quoted})`)
+      }
+
+      query = query.or(orParts.join(','))
     }
 
     if (status && status !== 'all') {

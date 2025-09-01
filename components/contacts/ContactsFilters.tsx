@@ -54,7 +54,7 @@ export function ContactsFilters({
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search contacts by name, email, or company..."
+                placeholder="Search contacts by name, email, company, tags, phone, website..."
                 value={localSearch}
                 onChange={handleSearchChange}
                 className="pl-10"
