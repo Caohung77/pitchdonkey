@@ -3,12 +3,16 @@ import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { ValidationError } from '@/lib/errors'
 import { ContactEnrichmentService } from '@/lib/contact-enrichment'
+import { PersonalizationEngine } from '@/lib/personalization-engine'
 
 interface OutreachGenerationRequest {
   purpose: string
   language: 'English' | 'German'
   signature: string
   contact_id?: string
+  tone?: 'professional' | 'casual' | 'warm' | 'direct'
+  length?: 'short' | 'medium' | 'long'
+  use_enrichment?: boolean
 }
 
 // Expert outreach email agent prompt
@@ -56,59 +60,55 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       throw new ValidationError('Language must be English or German')
     }
 
-    console.log('🤖 Generating outreach email:', { 
+    console.log('🤖 Generating enhanced outreach email:', { 
       purpose: body.purpose.substring(0, 100) + '...',
       language: body.language,
-      signatureLength: body.signature.length,
-      contactId: body.contact_id || 'none'
+      tone: body.tone || 'professional',
+      length: body.length || 'medium',
+      contactId: body.contact_id || 'none',
+      useEnrichment: body.use_enrichment !== false
     })
 
-    // Get enrichment data if contact ID is provided
-    let enrichmentContext = ''
-    if (body.contact_id) {
-      try {
-        console.log('📊 Fetching enrichment data for contact:', body.contact_id)
-        const enrichmentService = new ContactEnrichmentService()
-        const enrichmentData = await enrichmentService.getEnrichmentData(body.contact_id, user.id)
-        
-        if (enrichmentData.enrichment_data && enrichmentData.enrichment_status === 'completed') {
-          console.log('✅ Using enrichment data for email generation')
-          enrichmentContext = `\n\nCOMPANY INSIGHTS (use this information to personalize the email):\n${JSON.stringify(enrichmentData.enrichment_data, null, 2)}`
-        } else {
-          console.log('ℹ️ No enrichment data available for this contact')
-        }
-      } catch (error) {
-        console.warn('⚠️ Failed to fetch enrichment data, continuing without it:', error)
-      }
-    }
+    // Initialize PersonalizationEngine
+    const personalizationEngine = new PersonalizationEngine()
+
+    // Build enhanced prompt with intelligent personalization
+    const enhancedPromptResult = await personalizationEngine.generateEnhancedPrompt(
+      {
+        purpose: body.purpose,
+        language: body.language,
+        signature: body.signature,
+        tone: body.tone,
+        length: body.length
+      },
+      body.contact_id && body.use_enrichment !== false ? body.contact_id : undefined,
+      body.contact_id && body.use_enrichment !== false ? user.id : undefined
+    )
+
+    console.log('📊 Personalization Context:', {
+      level: enhancedPromptResult.personalizationLevel,
+      score: enhancedPromptResult.personalizationScore,
+      insights: enhancedPromptResult.usedInsights.join(', ') || 'none'
+    })
 
     // Initialize Google Gemini AI
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
       throw new ValidationError('Google Gemini API key not configured')
     }
-
-    console.log('🔑 Using Gemini API key:', process.env.GOOGLE_GEMINI_API_KEY?.substring(0, 10) + '...')
     
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY)
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
-    // Prepare the prompt with user inputs and enrichment context
-    const prompt = OUTREACH_AGENT_PROMPT
-      .replace('{{purpose}}', body.purpose)
-      .replace('{{language}}', body.language)
-      .replace('{{signature}}', body.signature) + enrichmentContext
+    console.log('📝 Enhanced prompt length:', enhancedPromptResult.enhancedPrompt.length)
 
-    console.log('📝 Generated prompt length:', prompt.length)
-
-    // Generate content using Gemini
+    // Generate content using Gemini with enhanced prompt
     let generatedContent: string
     try {
-      const result = await model.generateContent(prompt)
+      const result = await model.generateContent(enhancedPromptResult.enhancedPrompt)
       const response = await result.response
       generatedContent = response.text()
 
       console.log('✅ Gemini API response received, length:', generatedContent?.length || 0)
-      console.log('📄 Generated content preview:', generatedContent?.substring(0, 200) + '...')
 
       if (!generatedContent) {
         throw new ValidationError('Failed to generate email content - empty response')
@@ -119,67 +119,78 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         code: geminiError.code,
         status: geminiError.status
       })
-      throw new ValidationError(`Gemini API error: ${geminiError.message || 'Unknown error'}`)
+      
+      // Fallback to base prompt if enhanced prompt fails
+      console.log('🔄 Retrying with fallback prompt...')
+      try {
+        const fallbackResult = await model.generateContent(enhancedPromptResult.fallbackPrompt)
+        const fallbackResponse = await fallbackResult.response
+        generatedContent = fallbackResponse.text()
+      } catch (fallbackError) {
+        throw new ValidationError(`AI generation failed: ${geminiError.message || 'Unknown error'}`)
+      }
     }
 
-    // Try to parse as JSON first (if the AI returned JSON format)
+    // Parse the generated content
     let parsedResponse
     try {
-      // Look for JSON in the response
       const jsonMatch = generatedContent.match(/\{[\s\S]*"subject"[\s\S]*"htmlContent"[\s\S]*\}/);
       if (jsonMatch) {
         parsedResponse = JSON.parse(jsonMatch[0])
       }
     } catch (e) {
-      // If JSON parsing fails, we'll handle it manually below
+      console.warn('⚠️ Failed to parse JSON response, using fallback parsing')
     }
 
-    if (parsedResponse && parsedResponse.subject && parsedResponse.htmlContent) {
-      // AI returned proper JSON format
-      return createSuccessResponse({
-        subject: parsedResponse.subject,
-        htmlContent: parsedResponse.htmlContent
-      })
-    }
-
-    // Fallback: Extract subject and content manually
-    // Look for subject line patterns
     let subject = 'Regarding our conversation'
     let htmlContent = generatedContent
 
-    // Try to extract subject from common patterns
-    const subjectPatterns = [
-      /Subject:\s*(.+)/i,
-      /Subject Line:\s*(.+)/i,
-      /"subject":\s*"([^"]+)"/i
-    ]
+    if (parsedResponse && parsedResponse.subject && parsedResponse.htmlContent) {
+      // AI returned proper JSON format
+      subject = parsedResponse.subject
+      htmlContent = parsedResponse.htmlContent
+    } else {
+      // Fallback parsing
+      const subjectPatterns = [
+        /Subject:\s*(.+)/i,
+        /Subject Line:\s*(.+)/i,
+        /"subject":\s*"([^"]+)"/i
+      ]
 
-    for (const pattern of subjectPatterns) {
-      const match = generatedContent.match(pattern)
-      if (match && match[1]) {
-        subject = match[1].trim()
-        break
+      for (const pattern of subjectPatterns) {
+        const match = generatedContent.match(pattern)
+        if (match && match[1]) {
+          subject = match[1].trim()
+          break
+        }
       }
-    }
 
-    // If content doesn't have HTML structure, wrap it
-    if (!htmlContent.includes('<div') && !htmlContent.includes('<p')) {
-      const lines = htmlContent.split('\n').filter(line => line.trim() && !line.toLowerCase().includes('subject'))
-      const formattedContent = lines.map(line => `<p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 15px;">${line.trim()}</p>`).join('\n  ')
-      
-      htmlContent = `
+      // Format content if not properly structured
+      if (!htmlContent.includes('<div') && !htmlContent.includes('<p')) {
+        const lines = htmlContent.split('\n').filter(line => line.trim() && !line.toLowerCase().includes('subject'))
+        const formattedContent = lines.map(line => `<p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 15px;">${line.trim()}</p>`).join('\n  ')
+        
+        htmlContent = `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   ${formattedContent}
 </div>`.trim()
+      }
     }
 
+    // Return enhanced response with personalization metadata
     return createSuccessResponse({
       subject: subject,
-      htmlContent: htmlContent
+      htmlContent: htmlContent,
+      personalization: {
+        level: enhancedPromptResult.personalizationLevel,
+        score: enhancedPromptResult.personalizationScore,
+        insights_used: enhancedPromptResult.usedInsights,
+        enrichment_available: enhancedPromptResult.personalizationLevel !== 'none'
+      }
     })
 
   } catch (error) {
-    console.error('Outreach generation error:', error)
+    console.error('Enhanced outreach generation error:', error)
     return handleApiError(error)
   }
 })

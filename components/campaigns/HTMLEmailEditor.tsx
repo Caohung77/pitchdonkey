@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { AIGeneratorModal } from './AIGeneratorModal'
 import { EmailPreviewModal } from './EmailPreviewModal'
+import { AIEmailPreviewModal } from './AIEmailPreviewModal'
 
 interface HTMLEmailEditorProps {
   subject: string
@@ -51,9 +52,14 @@ export function HTMLEmailEditor({
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [editorContent, setEditorContent] = useState(htmlContent)
   
+  // Debug: Log contact lists to console
+  console.log('HTMLEmailEditor contactLists:', contactLists)
+  
   // Modal states
   const [showAIGenerator, setShowAIGenerator] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [showAIPreview, setShowAIPreview] = useState(false)
+  const [hasGeneratedAIContent, setHasGeneratedAIContent] = useState(false)
 
   useEffect(() => {
     setEditorContent(htmlContent)
@@ -68,6 +74,8 @@ export function HTMLEmailEditor({
   const handleAIGenerated = (subject: string, htmlContent: string) => {
     onSubjectChange(subject)
     handleContentChange(htmlContent)
+    setHasGeneratedAIContent(true) // Enable AI Preview button
+    console.log('✨ AI content generated, AI Preview now available')
   }
 
   const insertTemplate = (template: string) => {
@@ -235,6 +243,19 @@ export function HTMLEmailEditor({
                 <Eye className="h-4 w-4 mr-2" />
                 Preview
               </Button>
+
+              {/* AI Preview Button - Only show after AI generation and when contacts available */}
+              {hasGeneratedAIContent && contactLists && contactLists.length > 0 && contactLists.some(list => list.contacts && list.contacts.length > 0) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAIPreview(true)}
+                  className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200 hover:from-blue-100 hover:to-purple-100"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  AI Preview ({contactLists.reduce((total, list) => total + (list.contacts?.length || 0), 0)} contacts)
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -342,6 +363,16 @@ export function HTMLEmailEditor({
         htmlContent={editorContent}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
+      />
+
+      {/* AI Email Preview Modal */}
+      <AIEmailPreviewModal
+        isOpen={showAIPreview}
+        onClose={() => setShowAIPreview(false)}
+        contactLists={contactLists || []}
+        campaignPurpose={subject || 'Professional outreach email'}
+        senderName=""
+        signature=""
       />
     </div>
   )

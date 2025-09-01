@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ApiClient } from '@/lib/api-client'
 import { HTMLEmailEditor } from '@/components/campaigns/HTMLEmailEditor'
+import { AIEmailPreviewModal } from '@/components/campaigns/AIEmailPreviewModal'
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -19,7 +20,8 @@ import {
   Info,
   AlertCircle,
   Play,
-  Save
+  Save,
+  Eye
 } from 'lucide-react'
 
 interface SimpleCampaignData {
@@ -106,6 +108,7 @@ export default function SimpleCampaignPage() {
   // Fetch contacts for selected lists
   const fetchSelectedContactLists = async () => {
     if (campaignData.contact_list_ids.length === 0) {
+      console.log('🔍 No contact lists selected, clearing contacts')
       setContactListsWithContacts([])
       return
     }
@@ -114,27 +117,55 @@ export default function SimpleCampaignPage() {
       const selectedLists = contactLists.filter(list => 
         campaignData.contact_list_ids.includes(list.id)
       )
+      
+      console.log('🔍 Fetching contacts for selected lists:', selectedLists.map(l => l.name))
 
       // Fetch contacts for each selected list
       const listsWithContacts = await Promise.all(
         selectedLists.map(async (list) => {
           try {
-            const response = await ApiClient.get(`/api/contacts/lists/${list.id}`)
-            const contacts = response.success ? response.data?.contacts || [] : []
+            console.log(`📞 Fetching list details: ${list.name} (${list.id})`)
+            
+            // First get list details with contact IDs
+            const listResponse = await ApiClient.get(`/api/contacts/lists/${list.id}`)
+            console.log(`📞 List response for ${list.name}:`, listResponse)
+            
+            if (!listResponse.success || !listResponse.data) {
+              console.warn(`⚠️ No list data for ${list.name}`)
+              return { ...list, contacts: [] }
+            }
+            
+            const contactIds = listResponse.data.contact_ids || []
+            console.log(`📋 Contact IDs in ${list.name}:`, contactIds)
+            
+            if (contactIds.length === 0) {
+              console.log(`📭 No contact IDs in ${list.name}`)
+              return { ...list, contacts: [] }
+            }
+            
+            // Then fetch actual contacts by IDs
+            console.log(`👥 Fetching ${contactIds.length} contacts for ${list.name}`)
+            const contactsResponse = await ApiClient.get(`/api/contacts?ids=${contactIds.join(',')}`)
+            console.log(`👥 Contacts response for ${list.name}:`, contactsResponse)
+            
+            const contacts = contactsResponse.success ? contactsResponse.data?.contacts || [] : []
+            console.log(`✅ Found ${contacts.length} contacts in ${list.name}`)
+            
             return {
               ...list,
-              contacts: contacts.slice(0, 10) // Limit to first 10 contacts for preview
+              contacts: contacts.slice(0, 20) // Increased limit for better preview
             }
           } catch (error) {
-            console.error(`Error fetching contacts for list ${list.id}:`, error)
+            console.error(`❌ Error fetching contacts for list ${list.id}:`, error)
             return { ...list, contacts: [] }
           }
         })
       )
 
+      console.log('📊 Final contactListsWithContacts:', listsWithContacts)
       setContactListsWithContacts(listsWithContacts)
     } catch (error) {
-      console.error('Error fetching selected contact lists:', error)
+      console.error('❌ Error fetching selected contact lists:', error)
       setContactListsWithContacts([])
     }
   }
@@ -642,6 +673,7 @@ export default function SimpleCampaignPage() {
           )}
         </div>
       </div>
+
     </div>
   )
 }
