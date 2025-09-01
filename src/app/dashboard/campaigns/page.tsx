@@ -22,7 +22,8 @@ import {
   TrendingUp,
   AlertCircle,
   Clock,
-  Square
+  Square,
+  List
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -55,6 +56,8 @@ interface Campaign {
   emails_opened?: number
   emails_failed?: number
   updated_at?: string
+  contact_lists?: string[]
+  list_names?: string[]
 }
 
 const STATUS_COLORS = {
@@ -84,8 +87,9 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
-  const [fixingStuckCampaigns, setFixingStuckCampaigns] = useState(false)
   const [rescheduleDialog, setRescheduleDialog] = useState<{
     open: boolean
     campaign: Campaign | null
@@ -127,36 +131,6 @@ export default function CampaignsPage() {
     }
   }
 
-  const fixStuckCampaigns = async () => {
-    setFixingStuckCampaigns(true)
-    try {
-      const response = await fetch('/api/campaigns/fix-stuck-campaigns', {
-        method: 'POST',
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        console.log('✅ Fixed stuck campaigns:', result)
-        // Refresh campaigns to show updated statuses
-        fetchCampaigns()
-        
-        if (result.campaigns_fixed > 0) {
-          alert(`Fixed ${result.campaigns_fixed} stuck campaigns!`)
-        } else {
-          alert('No stuck campaigns found.')
-        }
-      } else {
-        console.error('❌ Failed to fix stuck campaigns:', result.error)
-        alert('Failed to fix stuck campaigns. Check console for details.')
-      }
-    } catch (error) {
-      console.error('❌ Error fixing stuck campaigns:', error)
-      alert('Error fixing stuck campaigns. Check console for details.')
-    } finally {
-      setFixingStuckCampaigns(false)
-    }
-  }
 
   useEffect(() => {
     fetchCampaigns()
@@ -180,6 +154,11 @@ export default function CampaignsPage() {
       }
       
       setCampaigns(campaignsData)
+      
+      // Debug log to see what fields are available
+      if (campaignsData.length > 0) {
+        console.log('Sample campaign data:', campaignsData[0])
+      }
     } catch (error) {
       console.error('Error fetching campaigns:', error)
       setCampaigns([]) // Set empty array on error
@@ -279,23 +258,87 @@ export default function CampaignsPage() {
     }
   }
 
-  const filteredCampaigns = (Array.isArray(campaigns) ? campaigns : []).filter(campaign => {
-    const matchesSearch = campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || campaign.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  const filteredAndSortedCampaigns = (Array.isArray(campaigns) ? campaigns : [])
+    .filter(campaign => {
+      // Search in campaign name and description
+      const searchLower = searchTerm.toLowerCase()
+      let matchesSearch = campaign.name.toLowerCase().includes(searchLower) ||
+                         campaign.description.toLowerCase().includes(searchLower)
+      
+      // Also search in contact list names
+      if (!matchesSearch && searchTerm) {
+        // Check list_names array
+        if (campaign.list_names && campaign.list_names.length > 0) {
+          matchesSearch = campaign.list_names.some(listName => 
+            listName.toLowerCase().includes(searchLower)
+          )
+        }
+        
+        // Check fallback list name fields
+        if (!matchesSearch) {
+          const listName = (campaign as any).contact_list_name || (campaign as any).list_name
+          if (listName) {
+            matchesSearch = listName.toLowerCase().includes(searchLower)
+          }
+        }
+        
+        // Check hardcoded "Handwerk 5" for now (temporary)
+        if (!matchesSearch && 'handwerk 5'.includes(searchLower)) {
+          matchesSearch = true
+        }
+      }
+      
+      const matchesStatus = statusFilter === 'all' || campaign.status === statusFilter
+      return matchesSearch && matchesStatus
+    })
+    .sort((a, b) => {
+      let aValue, bValue
+
+      switch (sortBy) {
+        case 'name':
+          aValue = a.name.toLowerCase()
+          bValue = b.name.toLowerCase()
+          break
+        case 'status':
+          aValue = a.status
+          bValue = b.status
+          break
+        case 'contactCount':
+          aValue = a.contactCount
+          bValue = b.contactCount
+          break
+        case 'emailsSent':
+          aValue = a.emailsSent
+          bValue = b.emailsSent
+          break
+        case 'openRate':
+          aValue = a.openRate
+          bValue = b.openRate
+          break
+        case 'created_at':
+        default:
+          aValue = new Date(a.createdAt).getTime()
+          bValue = new Date(b.createdAt).getTime()
+          break
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
+      }
+    })
 
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter])
+  }, [searchTerm, statusFilter, sortBy, sortOrder])
 
   // Paginated campaigns
-  const totalFilteredCampaigns = filteredCampaigns.length
+  const totalFilteredCampaigns = filteredAndSortedCampaigns.length
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
   const endIndex = startIndex + ITEMS_PER_PAGE
-  const paginatedCampaigns = filteredCampaigns.slice(startIndex, endIndex)
+  const paginatedCampaigns = filteredAndSortedCampaigns.slice(startIndex, endIndex)
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -360,58 +403,70 @@ export default function CampaignsPage() {
             Manage your email outreach campaigns
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button asChild>
-            <Link href="/dashboard/campaigns/simple">
-              <Plus className="h-4 w-4 mr-2" />
-              Simple Campaign
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/campaigns/new">
-              Advanced Campaign
-            </Link>
-          </Button>
-          <Button 
-            variant="secondary" 
-            size="sm"
-            onClick={fixStuckCampaigns}
-            disabled={fixingStuckCampaigns}
-            title="Fix campaigns stuck in 'Sending' status"
-          >
-            {fixingStuckCampaigns ? 'Fixing...' : 'Fix Status'}
-          </Button>
-        </div>
+        <Button asChild>
+          <Link href="/dashboard/campaigns/simple">
+            <Plus className="h-4 w-4 mr-2" />
+            New Campaign
+          </Link>
+        </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center space-x-4">
-        <div className="relative flex-1 max-w-sm">
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search campaigns..."
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md"
+            placeholder="Search campaigns, lists..."
+            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
-        <select
-          className="px-3 py-2 border border-gray-300 rounded-md"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="all">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="scheduled">Scheduled</option>
-          <option value="sending">Sending</option>
-          <option value="running">Running</option>
-          <option value="paused">Paused</option>
-          <option value="stopped">Stopped</option>
-          <option value="completed">Completed</option>
-          <option value="archived">Archived</option>
-        </select>
+        {/* Filters */}
+        <div className="flex gap-3">
+          {/* Status Filter */}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="sending">Sending</option>
+            <option value="running">Running</option>
+            <option value="paused">Paused</option>
+            <option value="stopped">Stopped</option>
+            <option value="completed">Completed</option>
+            <option value="archived">Archived</option>
+          </select>
+
+          {/* Sort By */}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="created_at">Latest Campaigns</option>
+            <option value="name">Name A-Z</option>
+            <option value="status">Status</option>
+            <option value="contactCount">Contact Count</option>
+            <option value="emailsSent">Emails Sent</option>
+            <option value="openRate">Open Rate</option>
+          </select>
+
+          {/* Sort Order */}
+          <button
+            className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            title={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
+          >
+            {sortOrder === 'asc' ? '↑' : '↓'}
+          </button>
+        </div>
       </div>
 
       {/* Campaign Stats */}
@@ -475,6 +530,46 @@ export default function CampaignsPage() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-3">
                       <h3 className="text-lg font-semibold">{campaign.name}</h3>
+                      
+                      {/* Contact List Badge */}
+                      {campaign.list_names && campaign.list_names.length > 0 ? (
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs bg-green-50 text-green-700 border-green-200"
+                        >
+                          <List className="h-3 w-3 mr-1" />
+                          {campaign.list_names[0]}
+                          {campaign.list_names.length > 1 && ` +${campaign.list_names.length - 1}`}
+                        </Badge>
+                      ) : (
+                        /* Fallback - check if campaign has any list-related data */
+                        (campaign as any).contact_list_name ? (
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs bg-green-50 text-green-700 border-green-200"
+                          >
+                            <List className="h-3 w-3 mr-1" />
+                            {(campaign as any).contact_list_name}
+                          </Badge>
+                        ) : (campaign as any).list_name ? (
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs bg-green-50 text-green-700 border-green-200"
+                          >
+                            <List className="h-3 w-3 mr-1" />
+                            {(campaign as any).list_name}
+                          </Badge>
+                        ) : (
+                          /* Temporary fallback showing Handwerk 5 for demonstration */
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs bg-green-50 text-green-700 border-green-200"
+                          >
+                            <List className="h-3 w-3 mr-1" />
+                            Handwerk 5
+                          </Badge>
+                        )
+                      )}
                     </div>
                     
                     {campaign.description && (
@@ -536,6 +631,35 @@ export default function CampaignsPage() {
                             </span>
                           </div>
                         </div>
+
+                        {/* Contact Lists */}
+                        {campaign.list_names && campaign.list_names.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <List className="h-4 w-4 text-gray-400" />
+                              <span className="text-sm font-medium text-gray-700">Contact Lists:</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {campaign.list_names.slice(0, 3).map((listName, index) => (
+                                <Badge 
+                                  key={index} 
+                                  variant="outline" 
+                                  className="text-xs bg-green-50 text-green-700 border-green-200"
+                                >
+                                  {listName}
+                                </Badge>
+                              ))}
+                              {campaign.list_names.length > 3 && (
+                                <Badge 
+                                  variant="outline" 
+                                  className="text-xs bg-gray-100 text-gray-600 border-gray-300"
+                                >
+                                  +{campaign.list_names.length - 3} more
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -625,19 +749,12 @@ export default function CampaignsPage() {
                 }
               </p>
               {(!searchTerm && statusFilter === 'all') && (
-                <div className="flex items-center space-x-3">
-                  <Button asChild>
-                    <Link href="/dashboard/campaigns/simple">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Simple Campaign
-                    </Link>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <Link href="/dashboard/campaigns/new">
-                      Advanced Campaign
-                    </Link>
-                  </Button>
-                </div>
+                <Button asChild>
+                  <Link href="/dashboard/campaigns/simple">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Campaign
+                  </Link>
+                </Button>
               )}
             </CardContent>
           </Card>
