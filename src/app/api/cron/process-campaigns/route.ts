@@ -4,8 +4,11 @@ import { createClient } from '@supabase/supabase-js'
 /**
  * Vercel Cron Job Endpoint for Processing Scheduled Campaigns
  * 
- * This endpoint is triggered by Vercel's cron job system every 5 minutes
+ * This endpoint is triggered by Vercel's cron job system daily at 9:00 AM UTC
  * to check for scheduled campaigns that are ready to be sent.
+ * 
+ * For Hobby plans: Runs once daily and processes all campaigns scheduled within the past 24 hours
+ * For Pro plans: Can be configured to run more frequently (every 5 minutes)
  * 
  * Security: Uses CRON_SECRET environment variable to verify legitimate requests
  * Authentication: Uses Supabase service role key (no user authentication needed)
@@ -50,6 +53,11 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     console.log(`🕐 Current time (UTC): ${now.toISOString()}`)
 
+    // For Hobby plan: Process campaigns scheduled in the past 24 hours
+    // This ensures we don't miss campaigns that were scheduled between daily runs
+    const past24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000))
+    console.log(`📅 Looking for campaigns scheduled between ${past24Hours.toISOString()} and ${now.toISOString()}`)
+
     // Find scheduled campaigns that are ready to send
     console.log('🔍 Searching for scheduled campaigns ready to send...')
     const { data: scheduledCampaigns, error: fetchError } = await supabase
@@ -66,6 +74,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq('status', 'scheduled')
       .lte('scheduled_date', now.toISOString())
+      .gte('scheduled_date', past24Hours.toISOString())
       .order('scheduled_date', { ascending: true })
 
     if (fetchError) {

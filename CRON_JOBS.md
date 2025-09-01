@@ -4,11 +4,30 @@ This document explains the Vercel Cron Jobs implementation for automated campaig
 
 ## Overview
 
-The application uses Vercel Cron Jobs to automatically process scheduled campaigns every 5 minutes. This ensures that campaigns scheduled for future delivery are sent at the correct time, even when users are not logged in.
+The application uses Vercel Cron Jobs to automatically process scheduled campaigns. The frequency depends on your Vercel plan:
+
+- **Hobby Plan**: Runs once daily at 9:00 AM UTC, processing all campaigns scheduled in the past 24 hours
+- **Pro Plan**: Can run every 5 minutes for real-time processing (modify `vercel.json` schedule)
+
+This ensures that campaigns scheduled for future delivery are sent automatically, even when users are not logged in.
 
 ## Architecture
 
 ### 1. Configuration (`vercel.json`)
+
+**For Hobby Plan (Daily):**
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-campaigns",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}
+```
+
+**For Pro Plan (Every 5 minutes):**
 ```json
 {
   "crons": [
@@ -21,8 +40,9 @@ The application uses Vercel Cron Jobs to automatically process scheduled campaig
 ```
 
 ### 2. Cron Endpoint (`/api/cron/process-campaigns`)
-- **Frequency**: Every 5 minutes
+- **Frequency**: Daily at 9:00 AM UTC (Hobby) or Every 5 minutes (Pro)
 - **Purpose**: Find and trigger scheduled campaigns that are ready to send
+- **Processing Window**: Past 24 hours (Hobby) or Real-time (Pro)
 - **Authentication**: Uses service role key (bypasses user authentication)
 - **Security**: Verifies requests using `CRON_SECRET` environment variable
 
@@ -31,7 +51,7 @@ The application uses Vercel Cron Jobs to automatically process scheduled campaig
 ### Campaign Lifecycle
 1. **User creates campaign** → Status: `draft`
 2. **User schedules campaign** → Status: `scheduled` + `scheduled_date` set
-3. **Cron job runs** (every 5 minutes)
+3. **Cron job runs** (daily at 9 AM UTC for Hobby plans)
 4. **Cron finds ready campaigns** → `scheduled_date <= now`
 5. **Cron updates status** → `scheduled` → `sending`
 6. **Cron triggers processor** → Campaign processing begins
@@ -209,8 +229,8 @@ curl -X POST "https://your-app.vercel.app/api/cron/process-campaigns" \
 
 ## FAQ
 
-**Q: Why every 5 minutes instead of exactly at scheduled time?**
-A: Vercel cron has minimum 1-minute granularity, and 5-minute intervals balance responsiveness with resource usage.
+**Q: Why daily instead of real-time scheduling?**
+A: Vercel Hobby plans are limited to daily cron jobs. The system processes all campaigns scheduled in the past 24 hours to ensure none are missed. Pro plans can use 5-minute intervals for real-time processing.
 
 **Q: What happens if a cron job fails?**
 A: Failed campaigns remain in `scheduled` status and will be retried on the next cron execution.
