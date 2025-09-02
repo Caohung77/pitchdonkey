@@ -72,6 +72,64 @@ export default function SimpleCampaignPage() {
     isOpen: false,
     selectedList: null
   })
+  // Scheduling UI state (separate from payload for better control)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('')
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
+
+  // Helpers for scheduling (function declarations to avoid TDZ issues)
+  function getNext5MinSlot() {
+    const now = new Date()
+    const ms = 5 * 60 * 1000
+    const rounded = new Date(Math.ceil(now.getTime() / ms) * ms)
+    const yyyy = rounded.getFullYear()
+    const mm = String(rounded.getMonth() + 1).padStart(2, '0')
+    const dd = String(rounded.getDate()).padStart(2, '0')
+    const hh = String(rounded.getHours()).padStart(2, '0')
+    const min = String(rounded.getMinutes()).padStart(2, '0')
+    return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` }
+  }
+
+  function parseLocalDateTime(dateStr: string, timeStr: string) {
+    let y = 0, m = 0, d = 0
+    if (dateStr?.includes('-')) {
+      const parts = dateStr.split('-')
+      y = parseInt(parts[0], 10)
+      m = parseInt(parts[1], 10)
+      d = parseInt(parts[2], 10)
+    } else if (dateStr?.includes('.')) {
+      const parts = dateStr.split('.')
+      d = parseInt(parts[0], 10)
+      m = parseInt(parts[1], 10)
+      y = parseInt(parts[2], 10)
+    }
+    const [hh, mm] = (timeStr || '00:00').split(':').map(v => parseInt(v, 10))
+    return new Date(y, m - 1, d, hh || 0, mm || 0)
+  }
+
+  function localDateString() {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  function validateSchedule() {
+    setScheduleError(null)
+    if (!campaignData.send_immediately) {
+      if (!scheduleDate || !scheduleTime) {
+        setScheduleError('Please choose both date and time.')
+        return false
+      }
+      const selected = parseLocalDateTime(scheduleDate, scheduleTime)
+      if (isNaN(selected.getTime()) || selected.getTime() <= Date.now()) {
+        setScheduleError('Scheduled time must be in the future')
+        return false
+      }
+    }
+    return true
+  }
 
   useEffect(() => {
     fetchContactLists()
@@ -91,6 +149,16 @@ export default function SimpleCampaignPage() {
       fetchSelectedContactLists()
     }
   }, [campaignData.contact_list_ids, contactLists])
+
+  // Initialize next 5-min slot when switching to scheduled
+  useEffect(() => {
+    if (!campaignData.send_immediately && (!scheduleDate || !scheduleTime)) {
+      const next = getNext5MinSlot()
+      setScheduleDate(next.date)
+      setScheduleTime(next.time)
+      setCampaignData(prev => ({ ...prev, scheduled_date: `${next.date}T${next.time}` }))
+    }
+  }, [campaignData.send_immediately])
 
   const fetchContactLists = async () => {
     try {
@@ -211,14 +279,8 @@ export default function SimpleCampaignPage() {
         break
       case 2: // Schedule
         if (!campaignData.send_immediately) {
-          if (!campaignData.scheduled_date) {
-            newErrors.scheduled_date = 'Scheduled date is required'
-          } else {
-            const scheduledDateTime = new Date(campaignData.scheduled_date)
-            const now = new Date()
-            if (scheduledDateTime <= now) {
-              newErrors.scheduled_date = 'Scheduled time must be in the future'
-            }
+          if (!validateSchedule()) {
+            newErrors.scheduled_date = scheduleError || 'Invalid schedule'
           }
         }
         break
@@ -288,7 +350,10 @@ export default function SimpleCampaignPage() {
       const payload = {
         ...campaignData,
         status: campaignData.send_immediately ? 'sending' : 'scheduled',
-        personalized_emails: personalizedEmailsObj
+        personalized_emails: personalizedEmailsObj,
+        scheduled_date: campaignData.send_immediately
+          ? undefined
+          : parseLocalDateTime(scheduleDate, scheduleTime).toISOString()
       }
       
       console.log('Launching campaign with payload:', payload)
