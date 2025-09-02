@@ -51,6 +51,7 @@ interface Campaign {
   completedAt?: string
   stoppedAt?: string
   nextSendAt?: string
+  scheduledDate?: string
   total_contacts?: number
   emails_delivered?: number
   emails_opened?: number
@@ -602,6 +603,15 @@ export default function CampaignsPage() {
                             {STATUS_ICONS[campaign.status]} {campaign.status}
                           </Badge>
                         </div>
+                        
+                        {/* Show scheduled date for scheduled campaigns */}
+                        {campaign.status === 'scheduled' && campaign.scheduledDate && (
+                          <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full inline-flex mb-2">
+                            <Calendar className="h-3 w-3" />
+                            <span>Scheduled for: {formatDate(campaign.scheduledDate)}</span>
+                          </div>
+                        )}
+                        
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div className="flex items-center space-x-2">
                             <Users className="h-4 w-4 text-gray-400" />

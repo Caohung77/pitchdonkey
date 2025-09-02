@@ -15,6 +15,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         created_at,
         start_date,
         end_date,
+        scheduled_date,
         total_contacts,
         emails_sent,
         emails_delivered,
@@ -142,6 +143,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           createdAt: campaign.created_at,
           launchedAt: campaign.start_date,
           completedAt: campaign.end_date,
+          scheduledDate: campaign.scheduled_date,
           nextSendAt,
           // Enhanced progress tracking data
           total_contacts: contactCount,
