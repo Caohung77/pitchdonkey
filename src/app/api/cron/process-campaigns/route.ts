@@ -136,26 +136,24 @@ export async function GET(request: NextRequest) {
           const { campaignProcessor } = await import('@/lib/campaign-processor')
           
           // Process this specific campaign
-          console.log(`🚀 Triggering campaign processor for ${campaign.name}`)
+          console.log(`🚀 Processing campaign ${campaign.name} immediately`)
           
-          // We'll process campaigns in background to avoid timeout
-          // The processor will handle the actual email sending
-          campaignProcessor.processReadyCampaigns().catch(processingError => {
-            console.error(`💥 Background processing error for ${campaign.name}:`, processingError)
-          })
+          // Wait for the processor to complete (instead of background processing)
+          // This ensures we catch any errors and report them properly
+          await campaignProcessor.processReadyCampaigns()
           
           successCount++
           results.push({
             campaignId: campaign.id,
             campaignName: campaign.name,
             success: true,
-            message: 'Campaign processing triggered'
+            message: 'Campaign processing completed successfully'
           })
 
-          console.log(`✅ Successfully triggered processing for ${campaign.name}`)
+          console.log(`✅ Successfully processed ${campaign.name}`)
           
         } catch (processingError) {
-          console.error(`❌ Error triggering processor for ${campaign.name}:`, processingError)
+          console.error(`❌ Error processing ${campaign.name}:`, processingError)
           
           // Revert status back to scheduled if processing failed
           await supabase
@@ -168,7 +166,7 @@ export async function GET(request: NextRequest) {
             campaignId: campaign.id,
             campaignName: campaign.name,
             success: false,
-            error: processingError instanceof Error ? processingError.message : 'Processing trigger failed'
+            error: processingError instanceof Error ? processingError.message : 'Campaign processing failed'
           })
         }
         
