@@ -556,25 +556,7 @@ Write a personalized outreach email TO this person (they are the recipient). Use
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <Button
-                onClick={handleGenerateAI}
-                disabled={isGeneratingAI || !selectedContact}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-              >
-                {isGeneratingAI ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {generateForAll ? 'Generating All...' : 'Generating...'}
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    {generateForAll ? `Generate for All (${contacts.length})` : 'Generate AI Content'}
-                  </>
-                )}
-              </Button>
-            </div>
+            {/* Removed AI button from header - moved to better location below */}
           </div>
           
           {/* Contact Navigation Controls */}
@@ -672,18 +654,31 @@ Write a personalized outreach email TO this person (they are the recipient). Use
       
       <div className="space-y-4">
 
-        {/* Email Purpose Input */}
-        <div className="p-4 bg-blue-50 rounded-lg space-y-3">
-          <label className="block text-sm font-medium text-blue-900">Email Purpose</label>
+        {/* Email Purpose Input - Enhanced */}
+        <div className="p-4 bg-blue-50 border-l-4 border-blue-500 rounded-lg space-y-3">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="h-4 w-4 text-blue-600" />
+            <label className="block text-sm font-medium text-blue-900">Email Purpose *</label>
+            {emailPurpose.trim() && (
+              <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Ready
+              </Badge>
+            )}
+          </div>
           <textarea
-            className="w-full px-3 py-2 border border-blue-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm transition-colors ${
+              emailPurpose.trim() 
+                ? 'border-green-300 focus:ring-green-500 bg-green-50' 
+                : 'border-blue-200 focus:ring-blue-500'
+            }`}
             rows={2}
             placeholder="e.g., Introduce our new product that could help streamline their business processes"
             value={emailPurpose}
             onChange={(e) => setEmailPurpose(e.target.value)}
           />
           <p className="text-xs text-blue-700">
-            Describe the purpose of your outreach. AI will use this along with contact information to create personalized emails.
+            <strong>Required:</strong> Describe the purpose of your outreach. AI will use this along with contact information to create personalized emails.
           </p>
         </div>
 
@@ -737,6 +732,38 @@ Write a personalized outreach email TO this person (they are the recipient). Use
             </div>
           )}
         </div>
+
+        {/* Personalise Email(s) Button - Improved UX placement */}
+        <div className="flex justify-center py-4 border-t border-gray-200">
+          <Button
+            onClick={handleGenerateAI}
+            disabled={isGeneratingAI || !selectedContact || !emailPurpose.trim()}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 text-base font-medium"
+            size="lg"
+          >
+            {isGeneratingAI ? (
+              <>
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                {generateForAll ? `Personalising All (${batchProgress.current}/${batchProgress.total})...` : 'Personalising...'}
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-5 w-5 mr-2" />
+                {generateForAll ? `Personalise All Emails (${contacts.length})` : 'Personalise Email(s)'}
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Email Purpose Requirement Notice */}
+        {!emailPurpose.trim() && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+            <div className="flex items-center justify-center space-x-2 text-amber-800">
+              <AlertCircle className="h-4 w-4" />
+              <p className="text-sm font-medium">Please fill out the "Email Purpose" field above to enable email personalisation</p>
+            </div>
+          </div>
+        )}
 
         {/* Batch Progress */}
         {batchProgress.isRunning && (
