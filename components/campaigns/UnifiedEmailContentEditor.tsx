@@ -682,88 +682,83 @@ Write a personalized outreach email TO this person (they are the recipient). Use
           </p>
         </div>
 
-        {/* Language Selection */}
-        <div className="p-4 bg-gray-50 rounded-lg space-y-3">
-          <label className="block text-sm font-medium text-gray-700">Language</label>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as 'English' | 'German')}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          >
-            <option value="English">English</option>
-            <option value="German">German</option>
-          </select>
-        </div>
+        {/* Streamlined AI Options & Personalise Button */}
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between gap-6">
+            {/* Left side: Grouped options */}
+            <div className="flex items-center gap-6">
+              {/* Language Selection - Compact */}
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Language:</label>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as 'English' | 'German')}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[90px]"
+                >
+                  <option value="English">English</option>
+                  <option value="German">German</option>
+                </select>
+              </div>
 
-        {/* AI Generation Options */}
-        <div className="flex items-center space-x-6 p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="generateForAll"
-              checked={generateForAll}
-              onChange={(e) => setGenerateForAll(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="generateForAll" className="flex items-center text-sm font-medium text-gray-700">
-              <Users className="h-4 w-4 mr-1" />
-              Generate for All Contacts
-            </label>
-          </div>
+              {/* Generate for All Contacts */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="generateForAll"
+                  checked={generateForAll}
+                  onChange={(e) => setGenerateForAll(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="generateForAll" className="flex items-center text-sm font-medium text-gray-700">
+                  <Users className="h-4 w-4 mr-1" />
+                  Generate for All
+                </label>
+              </div>
 
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="useContactInfo"
-              checked={useContactInfo}
-              onChange={(e) => setUseContactInfo(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="useContactInfo" className="flex items-center text-sm font-medium text-gray-700">
-              <Database className="h-4 w-4 mr-1" />
-              Use Contact Information
-            </label>
-          </div>
+              {/* Use Contact Information */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="useContactInfo"
+                  checked={useContactInfo}
+                  onChange={(e) => setUseContactInfo(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="useContactInfo" className="flex items-center text-sm font-medium text-gray-700">
+                  <Database className="h-4 w-4 mr-1" />
+                  Use Contact Info
+                </label>
+              </div>
 
-          {generatedEmails.size > 0 && (
-            <div className="flex items-center text-sm text-green-700">
-              <CheckCircle className="h-4 w-4 mr-1" />
-              {generatedEmails.size} emails generated
+              {/* Generation Status */}
+              {generatedEmails.size > 0 && (
+                <div className="flex items-center text-sm text-green-700">
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  {generatedEmails.size} emails generated
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Personalise Email(s) Button - Improved UX placement */}
-        <div className="flex justify-center py-4 border-t border-gray-200">
-          <Button
-            onClick={handleGenerateAI}
-            disabled={isGeneratingAI || !selectedContact || !emailPurpose.trim()}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 text-base font-medium"
-            size="lg"
-          >
-            {isGeneratingAI ? (
-              <>
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                {generateForAll ? `Personalising All (${batchProgress.current}/${batchProgress.total})...` : 'Personalising...'}
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-5 w-5 mr-2" />
-                {generateForAll ? `Personalise All Emails (${contacts.length})` : 'Personalise Email(s)'}
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Email Purpose Requirement Notice */}
-        {!emailPurpose.trim() && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-            <div className="flex items-center justify-center space-x-2 text-amber-800">
-              <AlertCircle className="h-4 w-4" />
-              <p className="text-sm font-medium">Please fill out the "Email Purpose" field above to enable email personalisation</p>
-            </div>
+            {/* Right side: Personalise Button */}
+            <Button
+              onClick={handleGenerateAI}
+              disabled={isGeneratingAI || !selectedContact || !emailPurpose.trim()}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 text-sm font-medium whitespace-nowrap"
+            >
+              {isGeneratingAI ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {generateForAll ? `Personalising (${batchProgress.current}/${batchProgress.total})` : 'Personalising...'}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {generateForAll ? `Personalise All (${contacts.length})` : 'Personalise Email(s)'}
+                </>
+              )}
+            </Button>
           </div>
-        )}
+        </div>
 
         {/* Batch Progress */}
         {batchProgress.isRunning && (
