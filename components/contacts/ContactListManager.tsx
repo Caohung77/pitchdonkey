@@ -24,15 +24,19 @@ import {
 import { CreateContactListModal } from './CreateContactListModal'
 import { EditContactListModal } from './EditContactListModal'
 import { ViewContactListModal } from './ViewContactListModal'
+import { ContactListDetailView } from './ContactListDetailView'
 
 interface ContactList {
   id: string
   name: string
   description: string
+  contact_ids?: string[]
   contactCount: number
   tags: string[]
   isFavorite: boolean
   createdAt: string
+  created_at: string
+  updated_at: string
   type: 'list'
 }
 
@@ -46,6 +50,7 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingList, setEditingList] = useState<ContactList | null>(null)
   const [viewingList, setViewingList] = useState<ContactList | null>(null)
+  const [detailViewList, setDetailViewList] = useState<ContactList | null>(null)
 
   useEffect(() => {
     fetchLists()
@@ -110,6 +115,10 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
     setViewingList(list)
   }
 
+  const handleOpenDetailView = (list: ContactList) => {
+    setDetailViewList(list)
+  }
+
   const handleListUpdated = (updatedList: ContactList) => {
     setLists(prev => prev.map(l => 
       l.id === updatedList.id ? updatedList : l
@@ -129,6 +138,24 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
     )
   }
 
+  // If viewing detail view, render that instead
+  if (detailViewList) {
+    return (
+      <ContactListDetailView
+        list={detailViewList}
+        onBack={() => setDetailViewList(null)}
+        onListUpdated={(updatedList) => {
+          setLists(prev => prev.map(l => l.id === updatedList.id ? updatedList : l))
+          setDetailViewList(updatedList)
+        }}
+        onListDeleted={(listId) => {
+          setLists(prev => prev.filter(l => l.id !== listId))
+          setDetailViewList(null)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -145,7 +172,7 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
       {lists.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {lists.map((list) => (
-            <Card key={list.id} className="hover:shadow-md transition-shadow">
+            <Card key={list.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenDetailView(list)}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -163,7 +190,7 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>

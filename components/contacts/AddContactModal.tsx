@@ -11,6 +11,9 @@ import { EnrichmentButton } from './EnrichmentButton'
 interface AddContactModalProps {
   onContactAdded: () => void
   onNavigateToContacts?: () => void
+  isOpen?: boolean
+  onClose?: () => void
+  autoAddToList?: string
 }
 
 interface ContactFormData {
@@ -31,8 +34,10 @@ interface ContactFormData {
   source: string
 }
 
-export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddContactModalProps) {
-  const [isOpen, setIsOpen] = useState(false)
+export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: propIsOpen, onClose: propOnClose, autoAddToList }: AddContactModalProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false)
+  const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen
+  const onClose = propOnClose || (() => setInternalIsOpen(false))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdContactId, setCreatedContactId] = useState<string | null>(null)
@@ -111,10 +116,28 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddCon
       console.log('AddContactModal: Contact created successfully:', data)
       
       // Store the created contact ID for potential enrichment
+      let contactId = null
       if (data.data && data.data.id) {
+        contactId = data.data.id
         setCreatedContactId(data.data.id)
       } else if (data.id) {
+        contactId = data.id
         setCreatedContactId(data.id)
+      }
+      
+      // Auto-add to list if specified
+      if (autoAddToList && contactId) {
+        try {
+          await fetch(`/api/contacts/lists/${autoAddToList}/contacts`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ contact_ids: [contactId] }),
+          })
+        } catch (error) {
+          console.error('Failed to add contact to list:', error)
+        }
       }
       
       // Call parent callback
@@ -129,7 +152,7 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddCon
   }
 
   const handleClose = () => {
-    setIsOpen(false)
+    onClose()
     setError(null)
     setCreatedContactId(null)
     // Reset form data when closing after successful creation
@@ -162,8 +185,12 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts }: AddCon
   }
 
   if (!isOpen) {
+    // Only show button if not controlled externally
+    if (propIsOpen !== undefined) {
+      return null
+    }
     return (
-      <Button onClick={() => setIsOpen(true)} className="flex items-center space-x-2">
+      <Button onClick={() => setInternalIsOpen(true)} className="flex items-center space-x-2">
         <Plus className="h-4 w-4" />
         <span>Add Contact</span>
       </Button>
