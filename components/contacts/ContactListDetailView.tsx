@@ -9,6 +9,7 @@ import { ContactCard } from './ContactCard'
 import { AddContactModal } from './AddContactModal'
 import { EditContactModal } from './EditContactModal'
 import { BulkListManagementModal } from './BulkListManagementModal'
+import { ContactViewModal } from './ContactViewModal'
 import { ApiClient } from '@/lib/api-client'
 import { Contact } from '@/lib/contacts'
 import { 
@@ -73,6 +74,7 @@ export function ContactListDetailView({
   const [showAddExistingModal, setShowAddExistingModal] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [viewingContact, setViewingContact] = useState<Contact | null>(null)
   const [isSelectionMode, setIsSelectionMode] = useState(false)
 
   useEffect(() => {
@@ -210,6 +212,10 @@ export function ContactListDetailView({
   const handleAddTag = async (contactId: string) => {
     // This would open a tag management modal
     console.log('Add tag to contact:', contactId)
+  }
+
+  const handleViewContact = (contact: Contact) => {
+    setViewingContact(contact)
   }
 
   const handleContactAdded = () => {
@@ -419,6 +425,7 @@ export function ContactListDetailView({
               onEdit={handleEditContact}
               onDelete={handleDeleteContact}
               onAddTag={handleAddTag}
+              onClick={!isSelectionMode ? handleViewContact : undefined}
               isSelected={selectedContacts.includes(contact.id)}
               onSelect={isSelectionMode ? handleContactSelect : undefined}
             />
@@ -483,6 +490,15 @@ export function ContactListDetailView({
           onAdd={handleAddExistingContacts}
           isOpen={showAddExistingModal}
           onClose={() => setShowAddExistingModal(false)}
+        />
+      )}
+
+      {/* Contact Detail View Modal */}
+      {viewingContact && (
+        <ContactViewModal
+          contact={viewingContact}
+          isOpen={!!viewingContact}
+          onClose={() => setViewingContact(null)}
         />
       )}
     </div>

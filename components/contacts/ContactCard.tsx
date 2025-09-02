@@ -26,6 +26,7 @@ interface ContactCardProps {
   onEdit: (contact: Contact) => void
   onDelete: (contactId: string) => void
   onAddTag: (contactId: string) => void
+  onClick?: (contact: Contact) => void
   isSelected?: boolean
   onSelect?: (contactId: string, selected: boolean) => void
 }
@@ -35,6 +36,7 @@ export function ContactCard({
   onEdit, 
   onDelete, 
   onAddTag,
+  onClick,
   isSelected = false,
   onSelect
 }: ContactCardProps) {
@@ -74,6 +76,7 @@ export function ContactCard({
   }
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation()
     if (onSelect) {
       onSelect(contact.id, e.target.checked)
     }
@@ -83,7 +86,10 @@ export function ContactCard({
   const listsCount = contact.lists?.length || 0
 
   return (
-    <Card className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'}`}>
+    <Card 
+      className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'} ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick ? () => onClick(contact) : undefined}
+    >
       <CardContent className="p-4">
         {/* Header Row */}
         <div className="flex items-start justify-between gap-3 mb-3">
@@ -141,7 +147,10 @@ export function ContactCard({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onEdit(contact)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit(contact)
+              }}
               className="h-7 w-7 p-0 hover:bg-blue-100 hover:text-blue-700 transition-colors"
               title="Edit contact"
             >
@@ -151,7 +160,10 @@ export function ContactCard({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onAddTag(contact.id)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddTag(contact.id)
+              }}
               className="h-7 w-7 p-0 hover:bg-green-100 hover:text-green-700 transition-colors"
               title="Add tag"
             >
@@ -163,6 +175,7 @@ export function ContactCard({
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={(e) => e.stopPropagation()}
                   className="h-7 w-7 p-0 hover:bg-gray-100 transition-colors"
                   title="More actions"
                 >
