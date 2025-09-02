@@ -386,6 +386,17 @@ export default function CampaignsPage() {
     })
   }
 
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -598,17 +609,17 @@ export default function CampaignsPage() {
                       </div>
                     ) : (
                       <div className="mb-4">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Badge className={STATUS_COLORS[campaign.status]}>
-                            {STATUS_ICONS[campaign.status]} {campaign.status}
-                          </Badge>
-                        </div>
-                        
-                        {/* Show scheduled date for scheduled campaigns */}
-                        {campaign.status === 'scheduled' && campaign.scheduledDate && (
+                        {/* Show scheduled date for scheduled campaigns (replaces status badge) */}
+                        {campaign.status === 'scheduled' && campaign.scheduledDate ? (
                           <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full inline-flex mb-2">
                             <Calendar className="h-3 w-3" />
-                            <span>Scheduled for: {formatDate(campaign.scheduledDate)}</span>
+                            <span>Scheduled for: {formatDateTime(campaign.scheduledDate)}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2 mb-2">
+                            <Badge className={STATUS_COLORS[campaign.status]}>
+                              {STATUS_ICONS[campaign.status]} {campaign.status}
+                            </Badge>
                           </div>
                         )}
                         
