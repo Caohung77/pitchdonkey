@@ -237,15 +237,10 @@ export class EmailTracker {
       const { error: updateError } = await this.supabase
         .from('email_tracking')
         .update({
-          status: 'opened',
           opened_at: emailRecord.opened_at || now,
-          tracking_data: {
-            ...emailRecord.tracking_data || {},
-            open_count: (emailRecord.tracking_data?.open_count || 0) + 1,
-            last_opened_at: now,
-            user_agent: userAgent,
-            ip_address: ipAddress
-          }
+          first_opened_at: isFirstOpen ? now : emailRecord.first_opened_at,
+          last_opened_at: now,
+          open_count: (emailRecord.open_count || 0) + 1
         })
         .eq('tracking_pixel_id', pixelId)
 
