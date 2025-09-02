@@ -224,15 +224,18 @@ export default function CampaignsPage() {
       setCampaigns(prev => 
         prev.map(campaign => 
           campaign.id === campaignId 
-            ? { ...campaign, ...updatedCampaign }
+            ? { 
+                ...campaign, 
+                ...updatedCampaign,
+                // Normalize API field back to UI shape
+                scheduledDate: (updatedCampaign as any).scheduled_date || campaign.scheduledDate
+              }
             : campaign
           )
         )
         
-      // If rescheduled to start now, also update status to active
-      if (scheduleData.type === 'now') {
-        await handleStatusChange(campaignId, 'active')
-      }
+      // If rescheduled to start now, the API already sets status to
+      // 'sending'. No need to trigger a second status update request.
     } catch (error) {
       console.error('Error rescheduling campaign:', error)
       alert(`Failed to reschedule campaign: ${error.message || 'Please try again.'}`)

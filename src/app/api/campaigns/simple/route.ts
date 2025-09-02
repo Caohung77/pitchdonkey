@@ -47,8 +47,14 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
     }
 
     // If scheduling for later, validate scheduled date
-    if (!send_immediately && !scheduled_date) {
-      return NextResponse.json({ error: 'Scheduled date is required when not sending immediately' }, { status: 400 })
+    if (!send_immediately) {
+      if (!scheduled_date) {
+        return NextResponse.json({ error: 'Scheduled date is required when not sending immediately' }, { status: 400 })
+      }
+      const when = new Date(scheduled_date)
+      if (isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        return NextResponse.json({ error: 'Scheduled time must be in the future' }, { status: 400 })
+      }
     }
 
     // Create the simple campaign

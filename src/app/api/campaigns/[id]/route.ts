@@ -43,16 +43,18 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
 
     // Handle status changes
     if (body.status) {
-      // Map frontend status to database status
+      // Map frontend status to database status (normalize)
       let dbStatus = body.status
-      if (body.status === 'active') {
-        dbStatus = 'running' // Database uses 'running' instead of 'active'
+      if (body.status === 'running') {
+        dbStatus = 'active' // DB uses 'active' in most schemas
+      } else if (body.status === 'active') {
+        dbStatus = 'active'
       }
-      
+
       updates.status = dbStatus
-      
+
       // Set timestamps based on status changes
-      if (dbStatus === 'running' && !updates.start_date) {
+      if (dbStatus === 'active' && !updates.start_date) {
         updates.start_date = new Date().toISOString()
       } else if (dbStatus === 'completed' && !updates.end_date) {
         updates.end_date = new Date().toISOString()
@@ -70,21 +72,45 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
     // Handle schedule settings properly for rescheduling
     if (body.scheduleSettings) {
       const scheduleSettings = body.scheduleSettings
-      
+
+      // Normalize possible client field names
+      const normalizedScheduledDate =
+        scheduleSettings.scheduled_date ||
+        scheduleSettings.scheduledAt ||
+        scheduleSettings.scheduled_at ||
+        null
+
+      const sendImmediately =
+        typeof scheduleSettings.send_immediately === 'boolean'
+          ? scheduleSettings.send_immediately
+          : scheduleSettings.type === 'now'
+
+      // Optional server-side validation: scheduled time must be in the future
+      if (!sendImmediately && normalizedScheduledDate) {
+        const when = new Date(normalizedScheduledDate)
+        if (isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+          return NextResponse.json(
+            { error: 'Scheduled time must be in the future' },
+            { status: 400 }
+          )
+        }
+      }
+
       // Update the actual campaign fields based on schedule settings
-      if (scheduleSettings.send_immediately) {
+      if (sendImmediately) {
         updates.status = 'sending'
         updates.scheduled_date = null
         updates.send_immediately = true
       } else {
         updates.status = 'scheduled'
-        updates.scheduled_date = scheduleSettings.scheduled_date
+        updates.scheduled_date = normalizedScheduledDate
         updates.send_immediately = false
         updates.timezone = scheduleSettings.timezone || 'UTC'
       }
-      
-      // Also store the settings for reference
-      updates.schedule_settings = body.scheduleSettings
+
+      // Note: Avoid writing to schedule_settings JSON to maintain compatibility
+      // with databases that may not have this column. Explicit columns above
+      // (scheduled_date, send_immediately, timezone) are sufficient.
     }
 
     console.log('Campaign updates:', updates)

@@ -528,7 +528,15 @@ export default function SimpleCampaignPage() {
                       id="send-later"
                       name="sendType"
                       checked={!campaignData.send_immediately}
-                      onChange={() => setCampaignData(prev => ({ ...prev, send_immediately: false }))}
+                      onChange={() => {
+                        setCampaignData(prev => ({ ...prev, send_immediately: false }))
+                        if (!scheduleDate || !scheduleTime) {
+                          const next = getNext5MinSlot()
+                          setScheduleDate(next.date)
+                          setScheduleTime(next.time)
+                          setCampaignData(prev => ({ ...prev, scheduled_date: `${next.date}T${next.time}` }))
+                        }
+                      }}
                     />
                     <label htmlFor="send-later" className="flex items-center">
                       <Calendar className="h-4 w-4 mr-2 text-blue-600" />
@@ -545,17 +553,59 @@ export default function SimpleCampaignPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium mb-2">Date & Time</label>
-                        <input
-                          type="datetime-local"
-                          className={`w-full px-3 py-2 border rounded-md ${errors.scheduled_date ? 'border-red-500' : 'border-gray-300'}`}
-                          min={new Date().toISOString().slice(0, 16)}
-                          value={campaignData.scheduled_date || ''}
-                          onChange={(e) => setCampaignData(prev => ({ 
-                            ...prev, 
-                            scheduled_date: e.target.value 
-                          }))}
-                        />
-                        {errors.scheduled_date && <p className="text-red-500 text-sm mt-1">{errors.scheduled_date}</p>}
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="date"
+                            className={`w-full px-3 py-2 border rounded-md ${errors.scheduled_date ? 'border-red-500' : 'border-gray-300'}`}
+                            min={localDateString()}
+                            value={scheduleDate}
+                            onChange={(e) => {
+                              setScheduleDate(e.target.value)
+                              setCampaignData(prev => ({ ...prev, scheduled_date: `${e.target.value}T${scheduleTime || '00:00'}` }))
+                              setTimeout(validateSchedule, 0)
+                            }}
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              aria-label="Hour"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                              value={scheduleTime ? scheduleTime.split(':')[0] : ''}
+                              onChange={(e) => {
+                                const h = e.target.value.padStart(2, '0')
+                                const m = scheduleTime ? scheduleTime.split(':')[1] : '00'
+                                const t = `${h}:${m}`
+                                setScheduleTime(t)
+                                setCampaignData(prev => ({ ...prev, scheduled_date: `${scheduleDate}T${t}` }))
+                                setTimeout(validateSchedule, 0)
+                              }}
+                            >
+                              <option value="" disabled>Select hour</option>
+                              {Array.from({ length: 24 }).map((_, h) => (
+                                <option key={h} value={String(h).padStart(2, '0')}>{String(h).padStart(2, '0')}</option>
+                              ))}
+                            </select>
+                            <select
+                              aria-label="Minute"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                              value={scheduleTime ? scheduleTime.split(':')[1] : ''}
+                              onChange={(e) => {
+                                const m = e.target.value.padStart(2, '0')
+                                const h = scheduleTime ? scheduleTime.split(':')[0] : '00'
+                                const t = `${h}:${m}`
+                                setScheduleTime(t)
+                                setCampaignData(prev => ({ ...prev, scheduled_date: `${scheduleDate}T${t}` }))
+                                setTimeout(validateSchedule, 0)
+                              }}
+                            >
+                              <option value="" disabled>Select minutes</option>
+                              {Array.from({ length: 12 }).map((_, i) => {
+                                const m = String(i * 5).padStart(2, '0')
+                                return <option key={m} value={m}>{m}</option>
+                              })}
+                            </select>
+                          </div>
+                        </div>
+                        {(errors.scheduled_date || scheduleError) && <p className="text-red-500 text-sm mt-1">{errors.scheduled_date || scheduleError}</p>}
                       </div>
 
                       <div>
@@ -580,14 +630,14 @@ export default function SimpleCampaignPage() {
                       </div>
                     </div>
 
-                    {campaignData.scheduled_date && (
+                    {scheduleDate && scheduleTime && (
                       <div className="bg-blue-50 p-3 rounded-lg">
                         <div className="flex items-start">
                           <Info className="h-4 w-4 text-blue-600 mt-0.5 mr-2" />
                           <div className="text-sm">
                             <p className="font-medium text-blue-900">Scheduled for:</p>
                             <p className="text-blue-700">
-                              {new Date(campaignData.scheduled_date).toLocaleString()} ({campaignData.timezone})
+                              {parseLocalDateTime(scheduleDate, scheduleTime).toLocaleString()} ({campaignData.timezone})
                             </p>
                           </div>
                         </div>
@@ -717,7 +767,7 @@ export default function SimpleCampaignPage() {
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={handleLaunch} disabled={loading} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={handleLaunch} disabled={loading || (!campaignData.send_immediately && !!scheduleError)} className="bg-green-600 hover:bg-green-700">
               <Play className="h-4 w-4 mr-2" />
               {campaignData.send_immediately ? 'Send Now' : 'Schedule Campaign'}
             </Button>

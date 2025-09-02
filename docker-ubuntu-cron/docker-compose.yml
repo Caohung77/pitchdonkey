@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  campaign-cron:
+    image: alpine:latest
+    container_name: pitchdonkey-cron
+    restart: unless-stopped
+    environment:
+      - VERCEL_APP_URL=${VERCEL_APP_URL}
+      - CRON_SECRET=${CRON_SECRET}
+    command: >
+      sh -c "
+        apk add --no-cache curl &&
+        echo 'Setting up cron job for campaign processing...' &&
+        echo '*/5 * * * * echo \"[cron] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 25 -X GET \"$${VERCEL_APP_URL}/api/cron/process-campaigns\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[cron] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"' > /tmp/crontab &&
+        crontab /tmp/crontab &&
+        echo 'Cron job installed! Processing campaigns every 5 minutes.' &&
+        echo 'Container starting... Check logs with: docker logs pitchdonkey-cron' &&
+        crond -f -l 2
+      "
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

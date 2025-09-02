@@ -53,10 +53,9 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     console.log(`🕐 Current time (UTC): ${now.toISOString()}`)
 
-    // For Hobby plan: Process campaigns scheduled in the past 24 hours
-    // This ensures we don't miss campaigns that were scheduled between daily runs
-    const past24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000))
-    console.log(`📅 Looking for campaigns scheduled between ${past24Hours.toISOString()} and ${now.toISOString()}`)
+    // Process any campaigns scheduled up to now (no lower bound).
+    // This prevents missing campaigns if the cron was down for >24h.
+    console.log(`📅 Looking for campaigns scheduled up to ${now.toISOString()}`)
 
     // Find scheduled campaigns that are ready to send
     console.log('🔍 Searching for scheduled campaigns ready to send...')
@@ -73,8 +72,8 @@ export async function GET(request: NextRequest) {
         created_at
       `)
       .eq('status', 'scheduled')
+      .not('scheduled_date', 'is', null)
       .lte('scheduled_date', now.toISOString())
-      .gte('scheduled_date', past24Hours.toISOString())
       .order('scheduled_date', { ascending: true })
 
     if (fetchError) {
@@ -112,6 +111,7 @@ export async function GET(request: NextRequest) {
           .from('campaigns')
           .update({ 
             status: 'sending',
+            send_immediately: true,
             updated_at: now.toISOString()
           })
           .eq('id', campaign.id)
