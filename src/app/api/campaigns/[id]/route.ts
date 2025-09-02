@@ -66,7 +66,26 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
     if (body.description !== undefined) updates.description = body.description
     if (body.emailSequence) updates.email_sequence = body.emailSequence
     if (body.aiSettings) updates.ai_settings = body.aiSettings
-    if (body.scheduleSettings) updates.schedule_settings = body.scheduleSettings
+    
+    // Handle schedule settings properly for rescheduling
+    if (body.scheduleSettings) {
+      const scheduleSettings = body.scheduleSettings
+      
+      // Update the actual campaign fields based on schedule settings
+      if (scheduleSettings.send_immediately) {
+        updates.status = 'sending'
+        updates.scheduled_date = null
+        updates.send_immediately = true
+      } else {
+        updates.status = 'scheduled'
+        updates.scheduled_date = scheduleSettings.scheduled_date
+        updates.send_immediately = false
+        updates.timezone = scheduleSettings.timezone || 'UTC'
+      }
+      
+      // Also store the settings for reference
+      updates.schedule_settings = body.scheduleSettings
+    }
 
     console.log('Campaign updates:', updates)
 

@@ -387,7 +387,35 @@ export default function CampaignsPage() {
   }
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-US', {
+    // Handle datetime-local format properly to avoid timezone conversion issues
+    if (dateString.includes('T') && !dateString.includes('Z') && !dateString.includes('+')) {
+      // This is likely from datetime-local input (YYYY-MM-DDTHH:MM format)
+      // Parse it manually to avoid timezone conversion
+      const [datePart, timePart] = dateString.split('T')
+      const [year, month, day] = datePart.split('-')
+      const [hour, minute] = timePart.split(':')
+      
+      const date = new Date(
+        parseInt(year),
+        parseInt(month) - 1, // Month is 0-indexed
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute)
+      )
+      
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      })
+    }
+    
+    // For other date formats, use normal parsing
+    const date = new Date(dateString)
+    return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
