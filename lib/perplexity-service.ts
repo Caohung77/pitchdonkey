@@ -175,7 +175,7 @@ SEARCH STRATEGY:
 
 OUTPUT FORMAT (MANDATORY):
 Return ONLY a fenced JSON block that conforms to this schema, with no prose before or after:
-\n```json
+\n\`\`\`json
 {
   "company_name": "",
   "industry": "",
@@ -184,7 +184,7 @@ Return ONLY a fenced JSON block that conforms to this schema, with no prose befo
   "unique_points": [],
   "tone_style": ""
 }
-```
+\`\`\`
 
 QUALITY REQUIREMENTS (GERMAN SITES COMMON):
 - company_name: Exact name as it appears on website
