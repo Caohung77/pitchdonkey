@@ -107,11 +107,19 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
   useEffect(() => {
     if (contact) {
       const enrichmentData = contact.enrichment_data
+      const hasMeaningful = !!(enrichmentData && (
+        (enrichmentData.company_name && enrichmentData.company_name.trim().length > 0) ||
+        (enrichmentData.industry && enrichmentData.industry.trim().length > 0) ||
+        (Array.isArray(enrichmentData.products_services) && enrichmentData.products_services.length > 0) ||
+        (Array.isArray(enrichmentData.target_audience) && enrichmentData.target_audience.length > 0) ||
+        (Array.isArray(enrichmentData.unique_points) && enrichmentData.unique_points.length > 0) ||
+        (enrichmentData.tone_style && enrichmentData.tone_style.trim().length > 0)
+      ))
       setFormData({
         email: contact.email || '',
         first_name: contact.first_name || '',
         last_name: contact.last_name || '',
-        company: enrichmentData?.company_name || contact.company || '',
+        company: (enrichmentData?.company_name && enrichmentData.company_name.trim().length > 0) ? enrichmentData.company_name : (contact.company || ''),
         position: contact.position || '',
         phone: contact.phone || '',
         website: contact.website || '',
@@ -131,8 +139,8 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         source: contact.source || 'manual'
       })
       
-      // Show enrichment fields if we have enrichment data
-      setShowEnrichmentFields(!!enrichmentData && contact.enrichment_status === 'completed')
+      // Show enrichment fields only if we truly have meaningful enrichment data
+      setShowEnrichmentFields(Boolean(hasMeaningful && contact.enrichment_status === 'completed'))
     }
   }, [contact])
 
@@ -423,7 +431,7 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
             </div>
 
             {/* Enrichment Section */}
-            {contact?.enrichment_status === 'completed' && (
+            {contact?.enrichment_status === 'completed' && contact?.enrichment_data && (
               <div className="border-t pt-6 mt-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-2">
@@ -452,7 +460,11 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
                 </div>
 
                 {/* Display enrichment data */}
-                {contact?.enrichment_data && !showEnrichmentFields && (
+                {(() => {
+                  const d = contact?.enrichment_data
+                  const meaningful = !!(d && ((d.company_name && d.company_name.trim().length > 0) || (d.industry && d.industry.trim().length > 0) || (Array.isArray(d.products_services) && d.products_services.length > 0) || (Array.isArray(d.target_audience) && d.target_audience.length > 0) || (Array.isArray(d.unique_points) && d.unique_points.length > 0) || (d.tone_style && d.tone_style.trim().length > 0)))
+                  return meaningful && !showEnrichmentFields
+                })() && (
                   <div className="mb-4">
                     <EnrichmentDisplay
                       enrichmentData={contact.enrichment_data}

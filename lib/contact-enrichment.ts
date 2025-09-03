@@ -85,6 +85,26 @@ export class ContactEnrichmentService {
       // 5. Analyze website with Perplexity
       const enrichmentData = await this.perplexityService.analyzeWebsite(websiteUrl)
 
+      // If nothing useful was extracted, mark as failed and do not label as enriched
+      const hasMeaningful = !!(
+        (enrichmentData.company_name && enrichmentData.company_name.trim().length > 0) ||
+        (enrichmentData.industry && enrichmentData.industry.trim().length > 0) ||
+        (Array.isArray(enrichmentData.products_services) && enrichmentData.products_services.length > 0) ||
+        (Array.isArray(enrichmentData.target_audience) && enrichmentData.target_audience.length > 0) ||
+        (Array.isArray(enrichmentData.unique_points) && enrichmentData.unique_points.length > 0) ||
+        (enrichmentData.tone_style && enrichmentData.tone_style.trim().length > 0)
+      )
+
+      if (!hasMeaningful) {
+        await this.updateEnrichmentStatus(contactId, 'failed', 'No extractable data found on website')
+        return {
+          success: false,
+          error: 'No extractable data found on website',
+          contact_id: contactId,
+          website_url: websiteUrl
+        }
+      }
+
       // 6. Save enrichment data to database and overwrite company field
       const { error: updateError } = await supabase
         .from('contacts')
