@@ -254,6 +254,31 @@ export class EmailTracker {
         await this.updateContactEngagement(emailRecord.contact_id, 'opened', now)
       }
 
+      // Update campaign stats (unique and total opens)
+      if (emailRecord.campaign_id) {
+        await this.updateCampaignStats(emailRecord.campaign_id, 'opened', isFirstOpen)
+      }
+
+      // Store an 'opened' event for richer analytics
+      try {
+        await this.supabase
+          .from('email_events')
+          .insert({
+            id: this.generateEventId(),
+            message_id: emailRecord.message_id || emailRecord.id, // tolerate schemas without message_id
+            type: 'opened',
+            timestamp: now,
+            recipient_email: emailRecord.recipient_email,
+            provider_id: 'tracking',
+            event_data: { pixelId, userAgent, ipAddress, firstOpen: isFirstOpen },
+            campaign_id: emailRecord.campaign_id,
+            contact_id: emailRecord.contact_id
+          })
+      } catch (e) {
+        // Non-fatal if email_events schema differs
+        console.warn('open-event logging skipped:', e?.message || e)
+      }
+
       console.log(`✅ Email open tracked successfully: ${pixelId}`)
       return { success: true, firstOpen: isFirstOpen }
 

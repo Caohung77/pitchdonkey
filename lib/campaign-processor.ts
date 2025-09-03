@@ -473,7 +473,10 @@ export class CampaignProcessor {
         })
 
         // Generate tracking pixel URL for this email using the actual pixelId
-        const trackingPixelUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/tracking/pixel/${params.pixelId || params.trackingId}`
+        const baseUrl =
+          process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        const trackingPixelUrl = `${baseUrl}/api/tracking/pixel/${params.pixelId || params.trackingId}`
         console.log(`📡 Using tracking pixel URL: ${trackingPixelUrl}`)
         
         // Insert tracking pixel into HTML content

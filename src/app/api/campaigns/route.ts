@@ -73,16 +73,21 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
 
         if (emailStats && emailStats.length > 0) {
           emailStats.forEach(email => {
-            if (['sent', 'delivered', 'opened', 'clicked', 'replied'].includes(email.status)) {
+            // Treat presence of timestamps as ground truth
+            const isSent = !!email.sent_at || ['sent','delivered','opened','clicked','replied'].includes(email.status)
+            const isDelivered = !!email.delivered_at || ['delivered','opened','clicked','replied'].includes(email.status)
+            const isOpened = !!email.opened_at || !!email.clicked_at || !!email.replied_at || ['opened','clicked','replied'].includes(email.status)
+
+            if (isSent) {
               emailsSent++
               if (email.sent_at && (!lastEmailSentAt || email.sent_at > lastEmailSentAt)) {
                 lastEmailSentAt = email.sent_at
               }
             }
-            if (['delivered', 'opened', 'clicked', 'replied'].includes(email.status)) emailsDelivered++
-            if (['opened', 'clicked', 'replied'].includes(email.status)) emailsOpened++
+            if (isDelivered) emailsDelivered++
+            if (isOpened) emailsOpened++
             if (email.clicked_at) emailsClicked++
-            if (email.status === 'replied') emailsReplied++
+            if (email.replied_at || email.status === 'replied') emailsReplied++
             if (email.status === 'failed') emailsFailed++
             if (email.status === 'bounced' || email.bounce_reason) emailsBounced++
           })

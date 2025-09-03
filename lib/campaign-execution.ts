@@ -964,7 +964,10 @@ export class CampaignExecutionEngine {
         })
 
         // Generate tracking pixel URL for this email
-        const trackingPixelUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/tracking/pixel/${params.trackingId}`
+        const baseUrl =
+          process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        const trackingPixelUrl = `${baseUrl}/api/tracking/pixel/${params.trackingId}`
         
         // Insert tracking pixel into HTML content
         const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="">`
