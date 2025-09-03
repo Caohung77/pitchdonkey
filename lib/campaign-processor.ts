@@ -345,11 +345,12 @@ export class CampaignProcessor {
             emailsSent++
             console.log(`✅ Email ${i+1}/${contacts.length} sent to ${contact.email}`)
 
-            // Update tracking record with sent timestamp
+            // Update tracking record with sent+delivered timestamps (SMTP accepted)
             await supabase
               .from('email_tracking')
               .update({
-                sent_at: new Date().toISOString()
+                sent_at: new Date().toISOString(),
+                delivered_at: new Date().toISOString()
               })
               .eq('tracking_pixel_id', pixelId)
 

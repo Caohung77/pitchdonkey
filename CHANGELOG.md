@@ -11,4 +11,8 @@
 - Daily stats, pipeline, and recent activity now reflect real openings and deliveries.
 - Added API: `GET /api/campaigns/[id]/email-details` to return real email rows (with contact info + timestamps).
 - UI: EmailDetailsTable now fetches from the new endpoint (removed mock data).
+## v0.3.3 - Define Delivered (Reached) as SMTP accepted
+
+- Mark `delivered_at` at send time for SMTP success in both execution paths.
+- Ensures Analytics “Delivered/Reached” > 0 even if no separate delivery webhook exists.
 
