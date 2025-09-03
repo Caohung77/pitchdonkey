@@ -431,6 +431,21 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
             </div>
 
             {/* Enrichment Section */}
+            {/* Informational banner when enrichment could not find/extract data */}
+            {(() => {
+              const d = contact?.enrichment_data as any
+              const meaningful = !!(d && ((d.company_name && d.company_name.trim().length > 0) || (d.industry && d.industry.trim().length > 0) || (Array.isArray(d.products_services) && d.products_services.length > 0) || (Array.isArray(d.target_audience) && d.target_audience.length > 0) || (Array.isArray(d.unique_points) && d.unique_points.length > 0) || (d.tone_style && d.tone_style.trim().length > 0)))
+              const failed = contact?.enrichment_status === 'failed'
+              return failed || (contact?.enrichment_status === 'completed' && !meaningful)
+            })() && (
+              <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start space-x-2 text-yellow-800 text-sm">
+                <AlertTriangle className="h-4 w-4 mt-0.5" />
+                <div>
+                  We couldn’t find or extract reliable information from the website. The enrichment was not applied.
+                </div>
+              </div>
+            )}
+
             {contact?.enrichment_status === 'completed' && contact?.enrichment_data && (
               <div className="border-t pt-6 mt-6">
                 <div className="flex items-center justify-between mb-4">
