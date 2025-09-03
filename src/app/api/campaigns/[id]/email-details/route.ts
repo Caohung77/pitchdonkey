@@ -68,19 +68,43 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
     if (contactIds.length > 0) {
       const { data: contacts } = await supabase
         .from('contacts')
-        .select('id, email, first_name, last_name, company_name')
+        .select('id, email, first_name, last_name, company')
         .in('id', contactIds as string[])
       contactMap = Object.fromEntries((contacts || []).map(c => [c.id, c]))
     }
 
+    // For rows missing contact_id, attempt to backfill via email_jobs.message_id
+    const rowsMissingContact = (rows || []).filter(r => !r.contact_id && r.message_id)
+    if (rowsMissingContact.length > 0) {
+      const messageIds = Array.from(new Set(rowsMissingContact.map(r => r.message_id)))
+      const { data: jobs } = await supabase
+        .from('email_jobs')
+        .select('id, contact_id')
+        .in('id', messageIds)
+      const jobContactMap = Object.fromEntries((jobs || []).map(j => [j.id, j.contact_id]))
+      const extraContactIds = Array.from(new Set(Object.values(jobContactMap).filter(Boolean))) as string[]
+      if (extraContactIds.length > 0) {
+        const { data: moreContacts } = await supabase
+          .from('contacts')
+          .select('id, email, first_name, last_name, company')
+          .in('id', extraContactIds)
+        for (const c of moreContacts || []) contactMap[c.id] = c
+        // Mutate rows to include contact_id for consistent enrichment
+        for (const r of rowsMissingContact) {
+          const cid = jobContactMap[r.message_id]
+          if (cid) (r as any).contact_id = cid
+        }
+      }
+    }
+
     // Enrich rows
     const details = (rows || []).map(r => {
-      const c = contactMap[r.contact_id] || {}
+      const c = r.contact_id ? (contactMap[r.contact_id] || {}) : {}
       const derivedStatus = r.replied_at ? 'replied' : r.clicked_at ? 'clicked' : r.opened_at ? 'opened' : (r.delivered_at || r.opened_at || r.clicked_at || r.replied_at) ? 'delivered' : r.sent_at ? 'sent' : (r.bounced_at || r.bounce_reason) ? 'bounced' : r.status || 'pending'
       return {
         id: r.id,
-        recipient_email: c.email || r.recipient_email || 'Unknown',
-        subject: r.subject || '',
+        recipient_email: c.email || (r as any).recipient_email || 'Unknown',
+        subject: (r as any).subject || (r as any).subject_line || '',
         status: derivedStatus,
         sent_at: r.sent_at,
         delivered_at: r.delivered_at,
@@ -89,7 +113,7 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
         replied_at: r.replied_at,
         bounce_reason: r.bounce_reason || null,
         contact_name: [c.first_name, c.last_name].filter(Boolean).join(' ') || null,
-        contact_company: c.company_name || null,
+        contact_company: c.company || null,
       }
     })
 
@@ -113,4 +137,3 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
     return handleApiError(error)
   }
 })
-
