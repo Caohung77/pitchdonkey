@@ -120,7 +120,7 @@ REQUIRED TASKS:
 
 CRITICAL: You must actually search for and access the website content. Do not make assumptions based on the domain name alone.
 
-Provide the extracted information in the exact JSON format specified in your system instructions.`
+Provide the extracted information strictly as a single fenced JSON block as specified in the system instructions. Do not include any explanation.`
   }
 
   /**
@@ -142,7 +142,9 @@ SEARCH STRATEGY:
 - Look for: homepage, about page, services page, contact information
 - Focus on business-relevant information for outreach
 
-OUTPUT FORMAT (MANDATORY JSON SCHEMA):
+OUTPUT FORMAT (MANDATORY):
+Return ONLY a fenced JSON block that conforms to this schema, with no prose before or after:
+\n```json
 {
   "company_name": "",
   "industry": "",
@@ -151,6 +153,7 @@ OUTPUT FORMAT (MANDATORY JSON SCHEMA):
   "unique_points": [],
   "tone_style": ""
 }
+```
 
 QUALITY REQUIREMENTS:
 - company_name: Exact name as it appears on website
@@ -160,7 +163,7 @@ QUALITY REQUIREMENTS:
 - unique_points: Actual differentiators mentioned on site
 - tone_style: Professional communication style observed
 
-If website is not accessible or contains insufficient information, return empty fields rather than guessing.`
+If website is not accessible or contains insufficient information, return an empty JSON object that still matches the schema (empty strings/arrays). Do not include commentary.`
   }
 
   /**
@@ -174,12 +177,23 @@ If website is not accessible or contains insufficient information, return empty 
       let cleanContent = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
       console.log('🧹 Cleaned content:', cleanContent.substring(0, 300) + '...')
       
-      // Look for JSON in the response - try multiple patterns
-      let jsonMatch = cleanContent.match(/\{[\s\S]*?"company_name"[\s\S]*?"tone_style"[\s\S]*?\}/);
-      
+      // Look for JSON in the response - support fenced blocks first
+      let jsonMatch: RegExpMatchArray | null = null
+      const fenced = cleanContent.match(/```json[\s\S]*?```/i) || cleanContent.match(/```[\s\S]*?```/)
+      if (fenced) {
+        const inside = fenced[0].replace(/```json|```/gi, '').trim()
+        try {
+          const parsed = JSON.parse(inside)
+          if (this.validateEnrichmentData(parsed)) {
+            return parsed
+          }
+        } catch {}
+      }
+      // Then look for object containing required keys
+      jsonMatch = cleanContent.match(/\{[\s\S]*?"company_name"[\s\S]*?"tone_style"[\s\S]*?\}/)
       if (!jsonMatch) {
-        // Try broader JSON pattern
-        jsonMatch = cleanContent.match(/\{[\s\S]*?\}/);
+        // Try broader JSON pattern as last resort
+        jsonMatch = cleanContent.match(/\{[\s\S]*?\}/)
       }
       
       if (jsonMatch) {
@@ -234,19 +248,23 @@ If website is not accessible or contains insufficient information, return empty 
       company_name = companyMatches[1].trim().substring(0, 100)
     }
     
-    // Try to extract industry information
+    // Try to extract industry information (EN + DE)
     let industry = ''
     const industryMatches = content.match(/industry[:\s]+(.*?)(?:\n|\.|\,|$)/i) ||
                            content.match(/sector[:\s]+(.*?)(?:\n|\.|\,|$)/i) ||
-                           content.match(/business[:\s]+(.*?)(?:\n|\.|\,|$)/i)
+                           content.match(/business[:\s]+(.*?)(?:\n|\.|\,|$)/i) ||
+                           content.match(/branche[:\s]+(.*?)(?:\n|\.|\,|$)/i)
     if (industryMatches) {
       industry = industryMatches[1].trim().substring(0, 100)
     }
     
-    // Try to extract products/services
+    // Try to extract products/services (EN + DE)
     let products_services: string[] = []
     const productsText = content.match(/products?[:\s]+(.*?)(?:\n\n|\.|$)/i) ||
-                        content.match(/services?[:\s]+(.*?)(?:\n\n|\.|$)/i)
+                        content.match(/services?[:\s]+(.*?)(?:\n\n|\.|$)/i) ||
+                        content.match(/produkte?[:\s]+(.*?)(?:\n\n|\.|$)/i) ||
+                        content.match(/dienstleistungen?[:\s]+(.*?)(?:\n\n|\.|$)/i) ||
+                        content.match(/leistungen?[:\s]+(.*?)(?:\n\n|\.|$)/i)
     if (productsText) {
       products_services = productsText[1].split(/[,;]/).map(s => s.trim()).filter(s => s.length > 0).slice(0, 5)
     }
