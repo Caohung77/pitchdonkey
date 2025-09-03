@@ -5,4 +5,10 @@
 - Analytics counts opens from timestamps (opened_at/clicked_at/replied_at), not only status.
 - Pixel URL generation hardened: uses `NEXT_PUBLIC_APP_URL` or falls back to `https://${VERCEL_URL}`.
 - Added `scripts/diagnose-tracking.js` for quick Supabase-based verification.
+## v0.3.2 - Campaign Analytics fixes
+
+- Analytics derives sent/delivered/opened metrics from timestamps (not only `status`).
+- Daily stats, pipeline, and recent activity now reflect real openings and deliveries.
+- Added API: `GET /api/campaigns/[id]/email-details` to return real email rows (with contact info + timestamps).
+- UI: EmailDetailsTable now fetches from the new endpoint (removed mock data).
 

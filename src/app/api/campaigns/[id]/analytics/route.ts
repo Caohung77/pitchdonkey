@@ -32,15 +32,24 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
 
     const emails = emailTracking || []
 
+    // Derive state from timestamps to support schemas without a `status` column
+    const isSent = (e: any) => !!(e.sent_at || e.delivered_at || e.opened_at || e.clicked_at || e.replied_at)
+    const isDelivered = (e: any) => !!(e.delivered_at || e.opened_at || e.clicked_at || e.replied_at)
+    const isOpened = (e: any) => !!e.opened_at
+    const isClicked = (e: any) => !!e.clicked_at
+    const isReplied = (e: any) => !!e.replied_at
+    const isBounced = (e: any) => (e.bounced_at || e.bounce_reason) ? true : (e.status === 'bounced')
+    const isComplained = (e: any) => e.status === 'complained'
+
     // Calculate analytics
     const totalEmails = emails.length
-    const sentEmails = emails.filter(e => e.status === 'sent' || e.status === 'delivered').length
-    const deliveredEmails = emails.filter(e => e.status === 'delivered').length
-    const openedEmails = emails.filter(e => e.opened_at).length
-    const clickedEmails = emails.filter(e => e.clicked_at).length
-    const repliedEmails = emails.filter(e => e.replied_at).length
-    const bouncedEmails = emails.filter(e => e.status === 'bounced').length
-    const complainedEmails = emails.filter(e => e.status === 'complained').length
+    const sentEmails = emails.filter(isSent).length
+    const deliveredEmails = emails.filter(isDelivered).length
+    const openedEmails = emails.filter(isOpened).length
+    const clickedEmails = emails.filter(isClicked).length
+    const repliedEmails = emails.filter(isReplied).length
+    const bouncedEmails = emails.filter(isBounced).length
+    const complainedEmails = emails.filter(isComplained).length
 
     // Calculate rates
     const deliveryRate = sentEmails > 0 ? Math.round((deliveredEmails / sentEmails) * 100) : 0
@@ -73,18 +82,20 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
       })
     }
 
-    // Populate with actual data
+    // Populate with actual data (derive counts by timestamps)
     emails.forEach(email => {
-      if (email.sent_at) {
-        const dateStr = email.sent_at.split('T')[0]
+      // Use sent_at day for sent; fallback to first available timestamp
+      const sentTs = email.sent_at || email.delivered_at || email.opened_at || email.clicked_at || email.replied_at
+      if (sentTs) {
+        const dateStr = String(sentTs).split('T')[0]
         const stats = dailyStatsMap.get(dateStr)
         if (stats) {
-          if (email.status === 'sent' || email.status === 'delivered') stats.sent++
-          if (email.status === 'delivered') stats.delivered++
-          if (email.opened_at) stats.opened++
-          if (email.clicked_at) stats.clicked++
-          if (email.replied_at) stats.replied++
-          if (email.status === 'bounced') stats.bounced++
+          if (isSent(email)) stats.sent++
+          if (isDelivered(email)) stats.delivered++
+          if (isOpened(email)) stats.opened++
+          if (isClicked(email)) stats.clicked++
+          if (isReplied(email)) stats.replied++
+          if (isBounced(email)) stats.bounced++
         }
       }
     })
@@ -94,16 +105,16 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
 
     // Get top performing emails (by open rate)
     const emailPerformance = emails
-      .filter(e => e.status === 'delivered')
+      .filter(e => isDelivered(e))
       .reduce((acc, email) => {
         const key = email.subject || 'No Subject'
         if (!acc[key]) {
           acc[key] = { subject: key, sent: 0, opened: 0, clicked: 0, replied: 0 }
         }
         acc[key].sent++
-        if (email.opened_at) acc[key].opened++
-        if (email.clicked_at) acc[key].clicked++
-        if (email.replied_at) acc[key].replied++
+        if (isOpened(email)) acc[key].opened++
+        if (isClicked(email)) acc[key].clicked++
+        if (isReplied(email)) acc[key].replied++
         return acc
       }, {})
 
@@ -125,8 +136,8 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
         type: email.replied_at ? 'reply' : email.clicked_at ? 'click' : email.opened_at ? 'open' : 'sent',
         recipient: email.recipient_email,
         subject: email.subject,
-        timestamp: email.replied_at || email.clicked_at || email.opened_at || email.sent_at,
-        status: email.status
+        timestamp: email.replied_at || email.clicked_at || email.opened_at || email.sent_at || email.delivered_at,
+        status: email.status || (isBounced(email) ? 'bounced' : isReplied(email) ? 'replied' : isClicked(email) ? 'clicked' : isOpened(email) ? 'opened' : isDelivered(email) ? 'delivered' : isSent(email) ? 'sent' : 'pending')
       }))
 
     const analytics = {

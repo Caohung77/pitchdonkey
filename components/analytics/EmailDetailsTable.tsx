@@ -55,52 +55,21 @@ export function EmailDetailsTable({ campaignId, analytics }: EmailDetailsTablePr
   const fetchEmailDetails = async () => {
     try {
       setLoading(true)
-      // Since we don't have a specific email details endpoint, 
-      // we'll use the analytics data or create sample data
-      
-      // For now, let's create sample data based on analytics
-      const sampleEmails: EmailDetails[] = []
-      const statusDistribution = [
-        { status: 'sent', count: analytics.overview.sentEmails },
-        { status: 'delivered', count: analytics.overview.deliveredEmails },
-        { status: 'opened', count: analytics.overview.openedEmails },
-        { status: 'clicked', count: analytics.overview.clickedEmails },
-        { status: 'replied', count: analytics.overview.repliedEmails },
-        { status: 'bounced', count: analytics.overview.bouncedEmails }
-      ]
-      
-      let emailId = 1
-      statusDistribution.forEach(({ status, count }) => {
-        for (let i = 0; i < count && emailId <= 100; i++) { // Limit to 100 for demo
-          const now = new Date()
-          const sentTime = new Date(now.getTime() - (Math.random() * 7 * 24 * 60 * 60 * 1000)) // Within last 7 days
-          
-          sampleEmails.push({
-            id: emailId.toString(),
-            recipient_email: `contact${emailId}@example.com`,
-            subject: analytics.campaign?.name ? `${analytics.campaign.name} - Email ${emailId}` : `Email ${emailId}`,
-            status,
-            sent_at: sentTime.toISOString(),
-            delivered_at: ['delivered', 'opened', 'clicked', 'replied'].includes(status) 
-              ? new Date(sentTime.getTime() + 60000).toISOString() : null,
-            opened_at: ['opened', 'clicked', 'replied'].includes(status) 
-              ? new Date(sentTime.getTime() + 300000).toISOString() : null,
-            clicked_at: ['clicked', 'replied'].includes(status) 
-              ? new Date(sentTime.getTime() + 600000).toISOString() : null,
-            replied_at: status === 'replied' 
-              ? new Date(sentTime.getTime() + 1800000).toISOString() : null,
-            bounce_reason: status === 'bounced' ? 'Mailbox full' : null,
-            contact_name: `Contact ${emailId}`,
-            contact_company: `Company ${Math.floor(Math.random() * 50) + 1}`
-          })
-          emailId++
-        }
-      })
-      
-      setEmailDetails(sampleEmails)
-      setTotalCount(sampleEmails.length)
+      // Fetch real email details for this campaign
+      const res = await ApiClient.get(`/api/campaigns/${campaignId}/email-details?page=1&pageSize=200`)
+      if (res?.success) {
+        const items = res.data.items as EmailDetails[]
+        setEmailDetails(items)
+        setTotalCount(res.data.count || items.length)
+      } else {
+        console.error('Email details API returned error', res)
+        setEmailDetails([])
+        setTotalCount(0)
+      }
     } catch (error) {
       console.error('Error fetching email details:', error)
+      setEmailDetails([])
+      setTotalCount(0)
     } finally {
       setLoading(false)
     }
