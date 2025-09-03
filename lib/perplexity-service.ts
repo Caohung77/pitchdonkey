@@ -69,6 +69,7 @@ export class PerplexityService {
               content: prompt
             }
           ],
+          // First try: restrict browsing to the target domain
           search_domain_filter: [websiteUrl.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '')],
           temperature: 0.1,
           max_tokens: 1500,
@@ -95,7 +96,37 @@ export class PerplexityService {
       console.log('📄 Generated content preview:', content.substring(0, 200) + '...')
 
       // Parse the JSON response
-      const enrichmentData = this.parseEnrichmentResponse(content)
+      let enrichmentData = this.parseEnrichmentResponse(content)
+      const meaningful = this.validateMeaningful(enrichmentData)
+      
+      // Fallback: if nothing meaningful, try a broader search without strict domain filter
+      if (!meaningful) {
+        console.warn('⚠️ No meaningful data parsed; attempting fallback search without domain filter')
+        const fallbackResp = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'sonar-reasoning',
+            messages: [
+              { role: 'system', content: this.getSystemPrompt() },
+              { role: 'user', content: `${prompt}\nIf the site blocks access, use search results to locate its official pages (Impressum, Was wir machen, Leistungen) and extract only from those pages.` }
+            ],
+            temperature: 0.1,
+            max_tokens: 1500,
+            search_recency_filter: 'month'
+          })
+        })
+        if (fallbackResp.ok) {
+          const fb = await fallbackResp.json()
+          const fbContent = fb.choices?.[0]?.message?.content || ''
+          enrichmentData = this.parseEnrichmentResponse(fbContent)
+        } else {
+          console.warn('⚠️ Fallback search failed:', await fallbackResp.text())
+        }
+      }
       
       console.log('📊 Parsed enrichment data:', enrichmentData)
       return enrichmentData
@@ -155,7 +186,7 @@ Return ONLY a fenced JSON block that conforms to this schema, with no prose befo
 }
 ```
 
-QUALITY REQUIREMENTS:
+QUALITY REQUIREMENTS (GERMAN SITES COMMON):
 - company_name: Exact name as it appears on website
 - industry: Specific industry/sector (not generic terms)
 - products_services: Specific offerings (max 5 items)
@@ -163,7 +194,7 @@ QUALITY REQUIREMENTS:
 - unique_points: Actual differentiators mentioned on site
 - tone_style: Professional communication style observed
 
-If website is not accessible or contains insufficient information, return an empty JSON object that still matches the schema (empty strings/arrays). Do not include commentary.`
+If website content is in German, extract in English while keeping proper names (company name) in original. If the website is not accessible or contains insufficient information, return an empty JSON object that still matches the schema (empty strings/arrays). Do not include commentary.`
   }
 
   /**
@@ -232,6 +263,18 @@ If website is not accessible or contains insufficient information, return an emp
       Array.isArray(data.target_audience) &&
       Array.isArray(data.unique_points) &&
       typeof data.tone_style === 'string'
+    )
+  }
+
+  private validateMeaningful(data: EnrichmentData): boolean {
+    if (!data) return false
+    return Boolean(
+      (data.company_name && data.company_name.trim().length > 0) ||
+      (data.industry && data.industry.trim().length > 0) ||
+      (Array.isArray(data.products_services) && data.products_services.length > 0) ||
+      (Array.isArray(data.target_audience) && data.target_audience.length > 0) ||
+      (Array.isArray(data.unique_points) && data.unique_points.length > 0) ||
+      (data.tone_style && data.tone_style.trim().length > 0)
     )
   }
 
