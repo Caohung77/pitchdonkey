@@ -23,7 +23,8 @@ import {
   Shield,
   Palette,
   X,
-  AlertCircle
+  AlertCircle,
+  Inbox
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -46,6 +47,7 @@ interface Notification {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
+  { name: 'Inbox', href: '/dashboard/inbox', icon: Inbox },
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },

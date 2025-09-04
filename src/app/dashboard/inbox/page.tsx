@@ -1,0 +1,306 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { 
+  RefreshCw, 
+  Search, 
+  Filter,
+  Archive,
+  Trash2,
+  ExternalLink,
+  Mail,
+  MailOpen,
+  Clock,
+  AlertCircle,
+  CheckCircle,
+  MessageSquare
+} from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
+interface IncomingEmail {
+  id: string
+  from_address: string
+  subject: string
+  date_received: string
+  classification_status: 'unclassified' | 'bounce' | 'auto_reply' | 'human_reply' | 'unsubscribe' | 'spam'
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed'
+  classification_confidence: number | null
+  text_content: string | null
+  html_content: string | null
+  created_at: string
+}
+
+export default function InboxPage() {
+  const [emails, setEmails] = useState<IncomingEmail[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filter, setFilter] = useState<string>('all')
+  const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null)
+
+  useEffect(() => {
+    fetchEmails()
+  }, [])
+
+  const fetchEmails = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/inbox/emails')
+      if (response.ok) {
+        const data = await response.json()
+        setEmails(data.emails || [])
+      }
+    } catch (error) {
+      console.error('Error fetching emails:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getClassificationBadge = (classification: string, confidence: number | null) => {
+    const badges = {
+      human_reply: { icon: MessageSquare, color: 'bg-green-100 text-green-800', label: 'Reply' },
+      bounce: { icon: AlertCircle, color: 'bg-red-100 text-red-800', label: 'Bounce' },
+      auto_reply: { icon: Clock, color: 'bg-blue-100 text-blue-800', label: 'Auto-Reply' },
+      unsubscribe: { icon: Trash2, color: 'bg-orange-100 text-orange-800', label: 'Unsubscribe' },
+      spam: { icon: AlertCircle, color: 'bg-gray-100 text-gray-800', label: 'Spam' },
+      unclassified: { icon: Mail, color: 'bg-gray-100 text-gray-600', label: 'Unclassified' }
+    }
+
+    const badge = badges[classification as keyof typeof badges] || badges.unclassified
+    const Icon = badge.icon
+
+    return (
+      <Badge className={`${badge.color} flex items-center gap-1`}>
+        <Icon className="h-3 w-3" />
+        {badge.label}
+        {confidence && (
+          <span className="text-xs opacity-75">
+            {Math.round(confidence * 100)}%
+          </span>
+        )}
+      </Badge>
+    )
+  }
+
+  const filteredEmails = emails.filter(email => {
+    const matchesSearch = !searchTerm || 
+      email.from_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      email.subject.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesFilter = filter === 'all' || email.classification_status === filter
+
+    return matchesSearch && matchesFilter
+  })
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffTime = Math.abs(now.getTime() - date.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 1) return 'Today'
+    if (diffDays === 2) return 'Yesterday'
+    if (diffDays <= 7) return `${diffDays} days ago`
+    
+    return date.toLocaleDateString()
+  }
+
+  const getEmailPreview = (email: IncomingEmail) => {
+    const content = email.text_content || email.html_content || ''
+    return content.length > 100 ? content.substring(0, 100) + '...' : content
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Inbox</h1>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Inbox</h1>
+          <p className="text-gray-600">
+            {emails.length} emails • {filteredEmails.length} showing
+          </p>
+        </div>
+        <Button onClick={fetchEmails} disabled={loading}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search emails..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        
+        <Select value={filter} onValueChange={setFilter}>
+          <SelectTrigger className="w-48">
+            <Filter className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Filter by type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Emails</SelectItem>
+            <SelectItem value="human_reply">Human Replies</SelectItem>
+            <SelectItem value="bounce">Bounces</SelectItem>
+            <SelectItem value="auto_reply">Auto-Replies</SelectItem>
+            <SelectItem value="unsubscribe">Unsubscribes</SelectItem>
+            <SelectItem value="unclassified">Unclassified</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Email List */}
+      <div className="bg-white rounded-lg border shadow">
+        {filteredEmails.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium mb-2">No emails found</p>
+            <p>Try adjusting your search or filter criteria</p>
+          </div>
+        ) : (
+          <div className="divide-y">
+            {filteredEmails.map((email) => (
+              <div
+                key={email.id}
+                className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => setSelectedEmail(email)}
+              >
+                <div className="flex items-start gap-4">
+                  {/* Email Icon */}
+                  <div className="mt-1">
+                    {email.processing_status === 'completed' ? (
+                      <MailOpen className="h-5 w-5 text-gray-400" />
+                    ) : (
+                      <Mail className="h-5 w-5 text-blue-600" />
+                    )}
+                  </div>
+
+                  {/* Email Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium text-gray-900 truncate">
+                            {email.from_address}
+                          </p>
+                          {getClassificationBadge(email.classification_status, email.classification_confidence)}
+                        </div>
+                        <p className="font-medium text-gray-800 mb-1 truncate">
+                          {email.subject || '(No Subject)'}
+                        </p>
+                        <p className="text-sm text-gray-600 truncate">
+                          {getEmailPreview(email)}
+                        </p>
+                      </div>
+                      
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm text-gray-500 mb-2">
+                          {formatDate(email.date_received)}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              // Open in external email client
+                              window.open(`mailto:${email.from_address}`, '_blank')
+                            }}
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            Reply
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Email Reading Modal */}
+      {selectedEmail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h3 className="text-lg font-semibold">
+                  {selectedEmail.subject || '(No Subject)'}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  From: {selectedEmail.from_address}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {getClassificationBadge(selectedEmail.classification_status, selectedEmail.classification_confidence)}
+                <Button variant="outline" onClick={() => setSelectedEmail(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {selectedEmail.html_content ? (
+                <div 
+                  dangerouslySetInnerHTML={{ __html: selectedEmail.html_content }}
+                  className="prose max-w-none"
+                />
+              ) : selectedEmail.text_content ? (
+                <pre className="whitespace-pre-wrap font-sans text-gray-800">
+                  {selectedEmail.text_content}
+                </pre>
+              ) : (
+                <p className="text-gray-500 italic">No content available</p>
+              )}
+            </div>
+            
+            <div className="flex justify-between items-center p-6 border-t bg-gray-50">
+              <div className="text-sm text-gray-600">
+                Received: {new Date(selectedEmail.date_received).toLocaleString()}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    window.open(`mailto:${selectedEmail.from_address}?subject=Re: ${selectedEmail.subject}`, '_blank')
+                  }}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Reply in Email Client
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
