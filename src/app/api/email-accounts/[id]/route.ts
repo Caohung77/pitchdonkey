@@ -16,6 +16,12 @@ const updateEmailAccountSchema = z.object({
     username: z.string().optional(),
     password: z.string().optional(),
     secure: z.boolean().optional()
+  }).optional(),
+  imap_config: z.object({
+    enabled: z.boolean().optional(),
+    host: z.string().optional(),
+    port: z.number().optional(),
+    secure: z.boolean().optional()
   }).optional()
 })
 
@@ -138,6 +144,22 @@ export const PUT = withAuth(async (
       }
       if (updateData.smtp_config.secure !== undefined) {
         updateObject.smtp_secure = updateData.smtp_config.secure
+      }
+    }
+
+    // Handle IMAP config updates - map to individual columns
+    if (updateData.imap_config) {
+      if (updateData.imap_config.enabled !== undefined) {
+        updateObject.imap_enabled = updateData.imap_config.enabled
+      }
+      if (updateData.imap_config.host !== undefined) {
+        updateObject.imap_host = updateData.imap_config.host
+      }
+      if (updateData.imap_config.port !== undefined) {
+        updateObject.imap_port = updateData.imap_config.port
+      }
+      if (updateData.imap_config.secure !== undefined) {
+        updateObject.imap_secure = updateData.imap_config.secure
       }
     }
 

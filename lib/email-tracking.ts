@@ -987,6 +987,79 @@ export class EmailTracker {
   }
 
   /**
+   * Get reply tracking data
+   */
+  async getReplyTrackingData(campaignId?: string, timeRange: 'hour' | 'day' | 'week' = 'day'): Promise<{
+    totalReplies: number
+    humanReplies: number
+    bounces: number
+    autoReplies: number
+    unsubscribes: number
+    sentimentBreakdown: {
+      positive: number
+      negative: number
+      neutral: number
+    }
+    replyRate: number
+  }> {
+    try {
+      const startTime = timeRange === 'hour' 
+        ? new Date(Date.now() - 60 * 60 * 1000).toISOString()
+        : timeRange === 'day'
+        ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+      // Build query
+      let query = this.supabase
+        .from('email_replies')
+        .select('reply_type, sentiment')
+        .gte('created_at', startTime)
+
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      }
+
+      const { data: replies, error } = await query
+
+      if (error) throw error
+
+      // Calculate statistics
+      const stats = {
+        totalReplies: replies?.length || 0,
+        humanReplies: replies?.filter(r => r.reply_type === 'human_reply').length || 0,
+        bounces: replies?.filter(r => r.reply_type === 'bounce').length || 0,
+        autoReplies: replies?.filter(r => r.reply_type === 'auto_reply').length || 0,
+        unsubscribes: replies?.filter(r => r.reply_type === 'unsubscribe').length || 0,
+        sentimentBreakdown: {
+          positive: replies?.filter(r => r.sentiment === 'positive').length || 0,
+          negative: replies?.filter(r => r.sentiment === 'negative').length || 0,
+          neutral: replies?.filter(r => r.sentiment === 'neutral').length || 0
+        },
+        replyRate: 0
+      }
+
+      // Calculate reply rate if we have a specific campaign
+      if (campaignId) {
+        const { data: campaign } = await this.supabase
+          .from('campaigns')
+          .select('total_contacts')
+          .eq('id', campaignId)
+          .single()
+
+        if (campaign?.total_contacts) {
+          stats.replyRate = stats.totalReplies / campaign.total_contacts
+        }
+      }
+
+      return stats
+
+    } catch (error) {
+      console.error('Error getting reply tracking data:', error)
+      throw error
+    }
+  }
+
+  /**
    * Get real-time tracking data for dashboard
    */
   async getRealTimeTrackingData(timeRange: 'hour' | 'day' = 'hour'): Promise<{
@@ -994,11 +1067,13 @@ export class EmailTracker {
     recentClicks: number
     recentBounces: number
     recentUnsubscribes: number
+    recentReplies: number
     topPerformingCampaigns: Array<{
       campaignId: string
       campaignName: string
       opens: number
       clicks: number
+      replies: number
       engagementRate: number
     }>
   }> {
@@ -1015,10 +1090,19 @@ export class EmailTracker {
 
       if (error) throw error
 
+      // Get recent replies
+      const { data: replies, error: repliesError } = await this.supabase
+        .from('email_replies')
+        .select('reply_type, campaign_id')
+        .gte('created_at', startTime)
+
+      if (repliesError) console.error('Error fetching replies:', repliesError)
+
       const recentOpens = events?.filter(e => e.type === 'opened').length || 0
       const recentClicks = events?.filter(e => e.type === 'clicked').length || 0
       const recentBounces = events?.filter(e => e.type === 'bounced').length || 0
       const recentUnsubscribes = events?.filter(e => e.type === 'unsubscribed').length || 0
+      const recentReplies = replies?.filter(r => r.reply_type === 'human_reply').length || 0
 
       // Get top performing campaigns
       const campaignEvents = events?.filter(e => e.campaign_id) || []
@@ -1036,6 +1120,7 @@ export class EmailTracker {
 
             const opens = events.filter((e: any) => e.type === 'opened').length
             const clicks = events.filter((e: any) => e.type === 'clicked').length
+            const campaignReplies = replies?.filter((r: any) => r.campaign_id === campaignId && r.reply_type === 'human_reply').length || 0
             const total = events.length
 
             return {
@@ -1043,7 +1128,8 @@ export class EmailTracker {
               campaignName: campaign?.name || 'Unknown Campaign',
               opens,
               clicks,
-              engagementRate: total > 0 ? (opens + clicks) / total : 0
+              replies: campaignReplies,
+              engagementRate: total > 0 ? (opens + clicks + campaignReplies) / total : 0
             }
           })
       )
@@ -1053,6 +1139,7 @@ export class EmailTracker {
         recentClicks,
         recentBounces,
         recentUnsubscribes,
+        recentReplies,
         topPerformingCampaigns: topPerformingCampaigns.sort(
           (a, b) => b.engagementRate - a.engagementRate
         )
