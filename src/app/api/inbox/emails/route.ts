@@ -14,8 +14,9 @@ export const GET = withAuth(async (
     const offset = parseInt(searchParams.get('offset') || '0')
     const classification = searchParams.get('classification')
     const search = searchParams.get('search')
+    const accountId = searchParams.get('account_id')
 
-    // Build the query
+    // Build the query with JOINs for email account, campaign, and contact info
     let query = supabase
       .from('incoming_emails')
       .select(`
@@ -30,11 +31,36 @@ export const GET = withAuth(async (
         text_content,
         html_content,
         created_at,
-        updated_at
+        updated_at,
+        email_accounts!inner (
+          id,
+          email,
+          provider
+        ),
+        email_replies (
+          campaign_id,
+          contact_id,
+          campaigns (
+            id,
+            name
+          ),
+          contacts (
+            id,
+            first_name,
+            last_name,
+            email
+          )
+        )
       `)
       .eq('user_id', user.id)
+      .is('archived_at', null)
       .order('date_received', { ascending: false })
       .range(offset, offset + limit - 1)
+
+    // Add email account filter if specified
+    if (accountId && accountId !== 'all') {
+      query = query.eq('email_account_id', accountId)
+    }
 
     // Add classification filter if specified
     if (classification && classification !== 'all') {
@@ -62,6 +88,7 @@ export const GET = withAuth(async (
       .from('incoming_emails')
       .select('classification_status')
       .eq('user_id', user.id)
+      .is('archived_at', null)
 
     const classificationStats = stats?.reduce((acc, email) => {
       acc[email.classification_status] = (acc[email.classification_status] || 0) + 1

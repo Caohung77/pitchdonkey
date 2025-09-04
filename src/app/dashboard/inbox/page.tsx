@@ -15,7 +15,10 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
-  MessageSquare
+  MessageSquare,
+  Target,
+  User,
+  ChevronDown
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -25,6 +28,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+
+interface EmailAccount {
+  id: string
+  email: string
+  provider: string
+}
+
+interface Campaign {
+  id: string
+  name: string
+}
+
+interface Contact {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  email: string
+}
+
+interface EmailReply {
+  campaign_id: string | null
+  contact_id: string | null
+  campaigns: Campaign | null
+  contacts: Contact | null
+}
 
 interface IncomingEmail {
   id: string
@@ -37,6 +71,8 @@ interface IncomingEmail {
   text_content: string | null
   html_content: string | null
   created_at: string
+  email_accounts: EmailAccount
+  email_replies: EmailReply[]
 }
 
 export default function InboxPage() {
@@ -46,15 +82,36 @@ export default function InboxPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null)
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<string>('all')
+  const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
     fetchEmails()
+    fetchEmailAccounts()
   }, [])
+
+  useEffect(() => {
+    fetchEmails()
+  }, [selectedAccount, filter, searchTerm])
 
   const fetchEmails = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/inbox/emails')
+      const params = new URLSearchParams()
+      
+      if (selectedAccount !== 'all') {
+        params.append('account_id', selectedAccount)
+      }
+      if (filter !== 'all') {
+        params.append('classification', filter)
+      }
+      if (searchTerm) {
+        params.append('search', searchTerm)
+      }
+      
+      const url = `/api/inbox/emails${params.toString() ? `?${params.toString()}` : ''}`
+      const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
         setEmails(data.emails || [])
@@ -63,6 +120,53 @@ export default function InboxPage() {
       console.error('Error fetching emails:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchEmailAccounts = async () => {
+    try {
+      const response = await fetch('/api/inbox/email-accounts')
+      if (response.ok) {
+        const data = await response.json()
+        setEmailAccounts(data.emailAccounts || [])
+      }
+    } catch (error) {
+      console.error('Error fetching email accounts:', error)
+    }
+  }
+
+  const forceSync = async (accountId?: string) => {
+    try {
+      setSyncing(true)
+      
+      const response = await fetch('/api/inbox/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          emailAccountId: accountId === 'all' ? null : accountId
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        console.log('Sync completed:', data.message)
+      } else {
+        console.error('Sync failed:', data.error)
+        // You might want to show a toast notification here
+      }
+      
+      // Wait a moment for sync to complete, then refresh emails
+      setTimeout(() => {
+        fetchEmails()
+      }, 3000) // Increased to 3 seconds to allow more time for sync
+      
+    } catch (error) {
+      console.error('Error during force sync:', error)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -92,15 +196,7 @@ export default function InboxPage() {
     )
   }
 
-  const filteredEmails = emails.filter(email => {
-    const matchesSearch = !searchTerm || 
-      email.from_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      email.subject.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesFilter = filter === 'all' || email.classification_status === filter
-
-    return matchesSearch && matchesFilter
-  })
+  const filteredEmails = emails // Server-side filtering now handles all filters
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -118,6 +214,25 @@ export default function InboxPage() {
   const getEmailPreview = (email: IncomingEmail) => {
     const content = email.text_content || email.html_content || ''
     return content.length > 100 ? content.substring(0, 100) + '...' : content
+  }
+
+  const getCampaignInfo = (email: IncomingEmail) => {
+    // Find the first reply that has campaign info
+    const replyWithCampaign = email.email_replies?.find(reply => reply.campaigns)
+    return replyWithCampaign?.campaigns || null
+  }
+
+  const getContactInfo = (email: IncomingEmail) => {
+    // Find the first reply that has contact info
+    const replyWithContact = email.email_replies?.find(reply => reply.contacts)
+    return replyWithContact?.contacts || null
+  }
+
+  const getContactDisplayName = (contact: Contact) => {
+    const firstName = contact.first_name || ''
+    const lastName = contact.last_name || ''
+    const fullName = `${firstName} ${lastName}`.trim()
+    return fullName || contact.email
   }
 
   if (loading) {
@@ -141,10 +256,31 @@ export default function InboxPage() {
             {emails.length} emails • {filteredEmails.length} showing
           </p>
         </div>
-        <Button onClick={fetchEmails} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button disabled={loading || syncing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${(loading || syncing) ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Refresh'}
+              <ChevronDown className="h-4 w-4 ml-2" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={fetchEmails}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Quick Refresh (Database Only)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => forceSync('all')}>
+              <Mail className="h-4 w-4 mr-2" />
+              Force IMAP Sync (All Accounts)
+            </DropdownMenuItem>
+            {selectedAccount !== 'all' && (
+              <DropdownMenuItem onClick={() => forceSync(selectedAccount)}>
+                <User className="h-4 w-4 mr-2" />
+                Force Sync Selected Account
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Filters */}
@@ -158,6 +294,21 @@ export default function InboxPage() {
             className="pl-10"
           />
         </div>
+        
+        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+          <SelectTrigger className="w-56">
+            <Mail className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Filter by account" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Accounts</SelectItem>
+            {emailAccounts.map((account) => (
+              <SelectItem key={account.id} value={account.id}>
+                {account.email} ({account.provider})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-48">
@@ -214,6 +365,29 @@ export default function InboxPage() {
                         <p className="font-medium text-gray-800 mb-1 truncate">
                           {email.subject || '(No Subject)'}
                         </p>
+                        <div className="flex items-center gap-4 mb-1">
+                          {getCampaignInfo(email) && (
+                            <div className="flex items-center gap-1 text-xs text-blue-600">
+                              <Target className="h-3 w-3" />
+                              <span className="truncate">{getCampaignInfo(email)?.name}</span>
+                            </div>
+                          )}
+                          {getContactInfo(email) && (
+                            <div className="flex items-center gap-1 text-xs text-green-600">
+                              <User className="h-3 w-3" />
+                              <button 
+                                className="truncate hover:underline"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  // TODO: Open contact modal or navigate to contact detail
+                                  console.log('Open contact:', getContactInfo(email)?.id)
+                                }}
+                              >
+                                {getContactDisplayName(getContactInfo(email)!)}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-600 truncate">
                           {getEmailPreview(email)}
                         </p>

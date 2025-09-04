@@ -162,6 +162,13 @@ export class IMAPMonitor {
         connection.last_processed_uid || 0
       )
 
+      // Reconcile deletions to mirror server state
+      try {
+        await imapProcessor.reconcileDeletions(account.id, 'INBOX')
+      } catch (reconErr) {
+        console.warn('⚠️ IMAP reconcile warning:', reconErr?.message || reconErr)
+      }
+
       // Update connection status based on result
       if (syncResult.errors.length === 0) {
         await this.updateConnectionSuccess(connection, syncResult)

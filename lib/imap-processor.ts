@@ -12,6 +12,8 @@ export interface IMAPConfig {
 
 export interface ProcessedEmail {
   messageId: string
+  imapUid?: number
+  flags?: string[]
   inReplyTo?: string
   emailReferences?: string
   from: string
@@ -347,6 +349,8 @@ export class IMAPProcessor {
   private convertParsedEmail(parsed: ParsedMail, attributes: any): ProcessedEmail {
     return {
       messageId: parsed.messageId || `generated-${Date.now()}-${Math.random()}`,
+      imapUid: attributes?.uid,
+      flags: Array.isArray(attributes?.flags) ? attributes.flags : undefined,
       inReplyTo: parsed.inReplyTo,
       emailReferences: parsed.references,
       from: parsed.from?.text || '',
@@ -373,9 +377,8 @@ export class IMAPProcessor {
     userId: string,
     emailAccountId: string
   ): Promise<void> {
-    const { error } = await this.supabase
-      .from('incoming_emails')
-      .insert({
+    // Try to include imap metadata, but fall back if columns not present
+    const base = {
         user_id: userId,
         email_account_id: emailAccountId,
         message_id: email.messageId,
@@ -396,11 +399,67 @@ export class IMAPProcessor {
         })),
         processing_status: 'pending',
         classification_status: 'unclassified'
+      }
+
+    // Attempt to set imap_uid and flags if the columns exist
+    let payload: any = base
+    try {
+      payload = { ...base, imap_uid: email.imapUid, flags: email.flags }
+      const { error } = await this.supabase.from('incoming_emails').insert(payload)
+      if (error) throw error
+    } catch (e: any) {
+      // Retry without optional columns if the insert failed due to unknown columns
+      console.warn('⚠️ Insert with IMAP columns failed, retrying without optional fields:', e?.message)
+      const { error: fallbackError } = await this.supabase.from('incoming_emails').insert(base)
+      if (fallbackError) {
+        console.error('❌ Error storing incoming email:', fallbackError)
+        throw new Error(`Database insert failed: ${fallbackError.message}`)
+      }
+    }
+  }
+
+  /**
+   * Reconcile deletions: mark emails as archived if their UID is no longer on server
+   */
+  async reconcileDeletions(
+    emailAccountId: string,
+    folder: string = 'INBOX'
+  ): Promise<void> {
+    if (!this.imap) return
+    const uidsOnServer: number[] = await new Promise((resolve, reject) => {
+      this.imap!.search(['ALL'], (err, uids) => {
+        if (err) reject(err)
+        else resolve(uids || [])
       })
+    })
+
+    // Fetch known UIDs from DB (only rows where we have imap_uid and not archived)
+    const { data: localRows, error } = await this.supabase
+      .from('incoming_emails')
+      .select('id, imap_uid')
+      .eq('email_account_id', emailAccountId)
+      .is('archived_at', null)
+      .not('imap_uid', 'is', null)
 
     if (error) {
-      console.error('❌ Error storing incoming email:', error)
-      throw new Error(`Database insert failed: ${error.message}`)
+      console.error('❌ Failed to load local IMAP UIDs:', error)
+      return
+    }
+
+    const serverUIDSet = new Set(uidsOnServer)
+    const toArchive = (localRows || [])
+      .filter(r => typeof r.imap_uid === 'number' && !serverUIDSet.has(r.imap_uid as any))
+      .map(r => r.id)
+
+    if (toArchive.length > 0) {
+      console.log(`🧹 Archiving ${toArchive.length} emails deleted on server`)
+      const { error: updErr } = await this.supabase
+        .from('incoming_emails')
+        .update({ archived_at: new Date().toISOString() })
+        .in('id', toArchive)
+      if (updErr) {
+        console.error('❌ Failed to archive deleted emails:', updErr)
+      }
     }
   }
 
