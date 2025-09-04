@@ -426,6 +426,7 @@ export class IMAPProcessor {
     folder: string = 'INBOX'
   ): Promise<void> {
     if (!this.imap) return
+    // List UIDs on server
     const uidsOnServer: number[] = await new Promise((resolve, reject) => {
       this.imap!.search(['ALL'], (err, uids) => {
         if (err) reject(err)
@@ -433,34 +434,75 @@ export class IMAPProcessor {
       })
     })
 
-    // Fetch known UIDs from DB (only rows where we have imap_uid and not archived)
+    // Fetch known rows (with/without UID) not archived
     const { data: localRows, error } = await this.supabase
       .from('incoming_emails')
-      .select('id, imap_uid')
+      .select('id, imap_uid, message_id')
       .eq('email_account_id', emailAccountId)
       .is('archived_at', null)
-      .not('imap_uid', 'is', null)
+      
 
     if (error) {
       console.error('❌ Failed to load local IMAP UIDs:', error)
       return
     }
 
+    // First pass: by UID
     const serverUIDSet = new Set(uidsOnServer)
-    const toArchive = (localRows || [])
+    const toArchiveByUid = (localRows || [])
       .filter(r => typeof r.imap_uid === 'number' && !serverUIDSet.has(r.imap_uid as any))
       .map(r => r.id)
 
-    if (toArchive.length > 0) {
-      console.log(`🧹 Archiving ${toArchive.length} emails deleted on server`)
+    if (toArchiveByUid.length > 0) {
+      console.log(`🧹 Archiving ${toArchiveByUid.length} emails (UID not on server)`)
       const { error: updErr } = await this.supabase
         .from('incoming_emails')
         .update({ archived_at: new Date().toISOString() })
-        .in('id', toArchive)
-      if (updErr) {
-        console.error('❌ Failed to archive deleted emails:', updErr)
+        .in('id', toArchiveByUid)
+      if (updErr) console.error('❌ Failed to archive by UID:', updErr)
+    }
+
+    // Second pass: for rows without imap_uid, compare Message-ID
+    const withoutUid = (localRows || []).filter(r => !r.imap_uid)
+    if (withoutUid.length > 0) {
+      // Fetch Message-ID headers for ALL on server
+      const serverMessageIds = await this.fetchServerMessageIds()
+      const toArchiveByMsgId = withoutUid
+        .filter(r => r.message_id && !serverMessageIds.has(r.message_id))
+        .map(r => r.id)
+      if (toArchiveByMsgId.length > 0) {
+        console.log(`🧹 Archiving ${toArchiveByMsgId.length} emails (Message-ID not on server)`)
+        const { error: upd2 } = await this.supabase
+          .from('incoming_emails')
+          .update({ archived_at: new Date().toISOString() })
+          .in('id', toArchiveByMsgId)
+        if (upd2) console.error('❌ Failed to archive by Message-ID:', upd2)
       }
     }
+  }
+
+  /**
+   * Fetch Message-ID values for all messages in the currently opened mailbox
+   */
+  private async fetchServerMessageIds(): Promise<Set<string>> {
+    return new Promise((resolve, reject) => {
+      const ids = new Set<string>()
+      if (!this.imap) return resolve(ids)
+      // Fetch headers only
+      const f = this.imap!.fetch('1:*', { bodies: 'HEADER.FIELDS (MESSAGE-ID)', struct: false })
+      f.on('message', (msg) => {
+        let header = ''
+        msg.on('body', (stream) => {
+          stream.on('data', (chunk) => { header += chunk.toString('utf8') })
+        })
+        msg.once('end', () => {
+          const m = header.match(/Message-ID:\s*<([^>]+)>/i)
+          if (m && m[1]) ids.add(`<${m[1]}>`)
+        })
+      })
+      f.once('error', (err) => reject(err))
+      f.once('end', () => resolve(ids))
+    })
   }
 
   /**
