@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +14,7 @@ interface AddContactModalProps {
   isOpen?: boolean
   onClose?: () => void
   autoAddToList?: string
+  initialData?: Partial<ContactFormData>
 }
 
 interface ContactFormData {
@@ -34,7 +35,7 @@ interface ContactFormData {
   source: string
 }
 
-export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: propIsOpen, onClose: propOnClose, autoAddToList }: AddContactModalProps) {
+export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: propIsOpen, onClose: propOnClose, autoAddToList, initialData }: AddContactModalProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen
   const onClose = propOnClose || (() => setInternalIsOpen(false))
@@ -58,6 +59,36 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: 
     timezone: '',
     source: 'manual' // Default to manual for new contacts
   })
+
+  // Update form data when initial data changes
+  useEffect(() => {
+    if (initialData && isOpen) {
+      setFormData(prev => ({
+        ...prev,
+        ...initialData,
+        source: initialData.source || 'inbox'
+      }))
+    } else if (!isOpen) {
+      // Reset form when modal closes
+      setFormData({
+        email: '',
+        first_name: '',
+        last_name: '',
+        company: '',
+        position: '',
+        phone: '',
+        website: '',
+        linkedin_url: '',
+        twitter_url: '',
+        address: '',
+        postcode: '',
+        country: '',
+        city: '',
+        timezone: '',
+        source: 'manual'
+      })
+    }
+  }, [initialData, isOpen])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target

@@ -18,7 +18,9 @@ import {
   MessageSquare,
   Target,
   User,
-  ChevronDown
+  ChevronDown,
+  Eye,
+  UserPlus
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -34,6 +36,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ContactViewModal } from '@/components/contacts/ContactViewModal'
+import { AddContactModal } from '@/components/contacts/AddContactModal'
 
 interface EmailAccount {
   id: string
@@ -85,6 +89,12 @@ export default function InboxPage() {
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([])
   const [selectedAccount, setSelectedAccount] = useState<string>('all')
   const [syncing, setSyncing] = useState(false)
+  
+  // Contact modal states
+  const [contactViewModalOpen, setContactViewModalOpen] = useState(false)
+  const [addContactModalOpen, setAddContactModalOpen] = useState(false)
+  const [selectedContact, setSelectedContact] = useState<any>(null)
+  const [contactsData, setContactsData] = useState<Map<string, any>>(new Map())
 
   useEffect(() => {
     fetchEmails()
@@ -230,6 +240,111 @@ export default function InboxPage() {
     const lastName = contact.last_name || ''
     const fullName = `${firstName} ${lastName}`.trim()
     return fullName || contact.email
+  }
+
+  // Contact lookup and management functions
+  const lookupContactByEmail = async (emailAddress: string) => {
+    try {
+      // Check if already cached
+      if (contactsData.has(emailAddress)) {
+        return contactsData.get(emailAddress)
+      }
+
+      const response = await fetch(`/api/contacts/lookup?email=${encodeURIComponent(emailAddress)}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const contact = data.contact
+        // Cache the contact data (including null if not found)
+        setContactsData(prev => new Map(prev.set(emailAddress, contact)))
+        return contact
+      }
+      
+      return null
+    } catch (error) {
+      console.error('Error looking up contact:', error)
+      return null
+    }
+  }
+
+  const handleViewContact = async (emailAddress: string) => {
+    const contact = await lookupContactByEmail(emailAddress)
+    if (contact) {
+      setSelectedContact(contact)
+      setContactViewModalOpen(true)
+    }
+  }
+
+  const handleAddContact = (emailAddress: string) => {
+    // Pre-fill the email in the add contact form
+    setSelectedContact({ email: emailAddress })
+    setAddContactModalOpen(true)
+  }
+
+  const extractEmailAddress = (fromAddress: string): string => {
+    // Extract email from formats like "Name <email@domain.com>" or just "email@domain.com"
+    const match = fromAddress.match(/<([^>]+)>/)
+    return match ? match[1] : fromAddress.trim()
+  }
+
+  // Component for contact action buttons
+  const ContactActionButtons = ({ fromAddress }: { fromAddress: string }) => {
+    const emailAddress = extractEmailAddress(fromAddress)
+    const [isLoading, setIsLoading] = useState(false)
+    const [contactExists, setContactExists] = useState<boolean | null>(null)
+
+    // Check if contact exists when component mounts
+    useEffect(() => {
+      const checkContact = async () => {
+        setIsLoading(true)
+        const contact = await lookupContactByEmail(emailAddress)
+        setContactExists(!!contact)
+        setIsLoading(false)
+      }
+      
+      checkContact()
+    }, [emailAddress])
+
+    if (isLoading) {
+      return (
+        <Button size="sm" variant="outline" disabled>
+          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400 mr-1"></div>
+          Loading...
+        </Button>
+      )
+    }
+
+    if (contactExists) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleViewContact(emailAddress)
+          }}
+          className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+        >
+          <Eye className="h-3 w-3 mr-1" />
+          View Contact
+        </Button>
+      )
+    } else {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleAddContact(emailAddress)
+          }}
+          className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+        >
+          <UserPlus className="h-3 w-3 mr-1" />
+          Add Contact
+        </Button>
+      )
+    }
   }
 
   if (loading) {
@@ -394,7 +509,8 @@ export default function InboxPage() {
                         <p className="text-sm text-gray-500 mb-2">
                           {formatDate(email.date_received)}
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-col">
+                          <ContactActionButtons fromAddress={email.from_address} />
                           <Button
                             size="sm"
                             variant="outline"
@@ -472,6 +588,36 @@ export default function InboxPage() {
           </div>
         </div>
       )}
+
+      {/* Contact View Modal */}
+      <ContactViewModal
+        contact={selectedContact}
+        isOpen={contactViewModalOpen}
+        onClose={() => {
+          setContactViewModalOpen(false)
+          setSelectedContact(null)
+        }}
+        onEdit={(contact) => {
+          // Handle edit if needed - for now just close the modal
+          setContactViewModalOpen(false)
+        }}
+      />
+
+      {/* Add Contact Modal */}
+      <AddContactModal
+        isOpen={addContactModalOpen}
+        onClose={() => {
+          setAddContactModalOpen(false)
+          setSelectedContact(null)
+        }}
+        onContactAdded={() => {
+          setAddContactModalOpen(false)
+          setSelectedContact(null)
+          // Refresh contacts data cache
+          setContactsData(new Map())
+        }}
+        initialData={selectedContact}
+      />
     </div>
   )
 }
