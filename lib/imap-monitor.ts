@@ -119,7 +119,8 @@ export class IMAPMonitor {
           imap_port,
           imap_username,
           imap_password,
-          imap_secure
+          imap_secure,
+          smtp_password
         )
       `)
       .or(`next_sync_at.is.null,next_sync_at.lte.${now.toISOString()}`)
@@ -145,14 +146,49 @@ export class IMAPMonitor {
       // Update connection status
       await this.updateConnectionStatus(connection.email_account_id, 'connecting')
 
-      // Prepare IMAP configuration
+      // Prepare IMAP configuration - use same credentials as SMTP
+      console.log('🔍 Debug account data:', {
+        email: account.email,
+        has_imap_password: !!account.imap_password,
+        has_smtp_password: !!account.smtp_password,
+        imap_password_length: account.imap_password?.length || 0,
+        smtp_password_length: account.smtp_password?.length || 0
+      })
+      
+      let password = null
+      let passwordSource = 'none'
+      
+      if (account.imap_password) {
+        try {
+          password = this.decryptPassword(account.imap_password)
+          passwordSource = 'imap_password (decrypted)'
+        } catch (error) {
+          console.log('⚠️ IMAP password decryption failed, using raw:', error.message)
+          password = account.imap_password
+          passwordSource = 'imap_password (raw)'
+        }
+      } else if (account.smtp_password) {
+        try {
+          password = this.decryptPassword(account.smtp_password)
+          passwordSource = 'smtp_password (decrypted)'
+        } catch (error) {
+          console.log('⚠️ SMTP password decryption failed, using raw:', error.message)
+          password = account.smtp_password
+          passwordSource = 'smtp_password (raw)'
+        }
+      }
+      
+      console.log(`🔐 Password source: ${passwordSource} (length: ${password?.length || 0})`)
+      
       const imapConfig = {
         host: account.imap_host,
         port: account.imap_port || 993,
         tls: account.imap_secure !== false,
         user: account.imap_username || account.email,
-        password: account.imap_password ? this.decryptPassword(account.imap_password) : account.smtp_password
+        password: password
       }
+      
+      console.log(`📧 IMAP Config: ${account.email}@${imapConfig.host}:${imapConfig.port} (TLS: ${imapConfig.tls})`)
 
       // Perform sync
       const syncResult = await imapProcessor.syncEmails(
@@ -305,7 +341,7 @@ export class IMAPMonitor {
       const decrypted = decryptSMTPConfig(encryptedPassword)
       return decrypted.password || decrypted
     } catch (error) {
-      console.error('❌ Error decrypting IMAP password:', error)
+      console.log('⚠️  Password decryption failed, using raw password:', error.message)
       return encryptedPassword // Fallback to assume it's not encrypted
     }
   }

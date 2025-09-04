@@ -58,14 +58,21 @@ export class IMAPProcessor {
     details?: any
   }> {
     return new Promise((resolve) => {
-      const testImap = new Imap({
+      console.log(`🔍 Testing IMAP connection: ${config.user}@${config.host}:${config.port} (TLS: ${config.tls})`)
+      
+      const imapConfig: any = {
         host: config.host,
         port: config.port,
         tls: config.tls,
         user: config.user,
         password: config.password,
-        tlsOptions: { rejectUnauthorized: false }
-      })
+        tlsOptions: { rejectUnauthorized: false },
+        authTimeout: 30000,
+        connTimeout: 60000,
+        debug: console.log // Enable debug logging
+      }
+      
+      const testImap = new Imap(imapConfig)
 
       const timeout = setTimeout(() => {
         testImap.destroy()
@@ -110,14 +117,20 @@ export class IMAPProcessor {
    */
   async connect(config: IMAPConfig): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.imap = new Imap({
+      console.log(`📧 Connecting to IMAP: ${config.user}@${config.host}:${config.port} (TLS: ${config.tls})`)
+      
+      const imapConfig: any = {
         host: config.host,
         port: config.port,
         tls: config.tls,
         user: config.user,
         password: config.password,
-        tlsOptions: { rejectUnauthorized: false }
-      })
+        tlsOptions: { rejectUnauthorized: false },
+        authTimeout: 30000,
+        connTimeout: 60000
+      }
+      
+      this.imap = new Imap(imapConfig)
 
       this.imap.once('ready', () => {
         console.log('📧 IMAP connection established')
@@ -244,17 +257,25 @@ export class IMAPProcessor {
       }
 
       // Search for emails newer than last processed UID
-      const searchCriteria = lastProcessedUID > 0 
-        ? [`UID`, `${lastProcessedUID + 1}:*`]
-        : ['ALL']
-
-      this.imap.search(searchCriteria, (err, uids) => {
-        if (err) {
-          reject(err)
-        } else {
-          resolve(uids || [])
-        }
-      })
+      if (lastProcessedUID > 0) {
+        // Use UID search for emails with UID greater than last processed
+        this.imap.search([['UID', `${lastProcessedUID + 1}:*`]], (err, uids) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve(uids || [])
+          }
+        })
+      } else {
+        // Get all emails if no last processed UID
+        this.imap.search(['ALL'], (err, uids) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve(uids || [])
+          }
+        })
+      }
     })
   }
 

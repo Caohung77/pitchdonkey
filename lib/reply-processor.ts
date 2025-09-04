@@ -192,13 +192,25 @@ export class ReplyProcessor {
     classification: EmailClassificationResult,
     context: any
   ): Promise<string> {
+    // Map classification type to valid reply_type
+    const mapClassificationToReplyType = (classificationType: string): string => {
+      switch (classificationType) {
+        case 'spam':
+          return 'complaint'
+        case 'unclassified':
+          return 'human_reply'
+        default:
+          return classificationType
+      }
+    }
+
     const replyData = {
       user_id: email.user_id,
       incoming_email_id: email.id,
       campaign_id: context.campaignId,
       contact_id: context.contactId,
       original_message_id: context.originalMessageId,
-      reply_type: classification.type,
+      reply_type: mapClassificationToReplyType(classification.type),
       reply_subtype: classification.subtype,
       sentiment: classification.sentiment,
       intent: classification.intent,

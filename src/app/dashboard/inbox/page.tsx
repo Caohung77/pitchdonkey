@@ -153,15 +153,12 @@ export default function InboxPage() {
       
       if (response.ok) {
         console.log('Sync completed:', data.message)
+        // Automatically refresh emails after successful sync
+        await fetchEmails()
       } else {
         console.error('Sync failed:', data.error)
         // You might want to show a toast notification here
       }
-      
-      // Wait a moment for sync to complete, then refresh emails
-      setTimeout(() => {
-        fetchEmails()
-      }, 3000) // Increased to 3 seconds to allow more time for sync
       
     } catch (error) {
       console.error('Error during force sync:', error)

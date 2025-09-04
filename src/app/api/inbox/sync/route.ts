@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, addSecurityHeaders, withRateLimit } from '@/lib/auth-middleware'
 import { imapMonitor } from '@/lib/imap-monitor'
+import { IMAPProcessor } from '@/lib/imap-processor'
 
 // POST /api/inbox/sync - Force IMAP sync for user's email accounts
 export const POST = withAuth(async (
@@ -30,13 +31,13 @@ export const POST = withAuth(async (
         }, { status: 404 })
       }
 
-      // Force sync specific account
+      // Force sync specific account using working sync function
       try {
-        const result = await imapMonitor.forceSyncAccount(emailAccountId)
+        const result = await syncEmailAccount(supabase, emailAccountId)
         
         const response = NextResponse.json({
-          success: true,
-          message: 'Account sync completed successfully',
+          success: result.success,
+          message: `Account sync completed: ${result.newEmails} new emails found`,
           data: result
         })
 
@@ -50,21 +51,55 @@ export const POST = withAuth(async (
         }, { status: 500 })
       }
     } else {
-      // Run general monitoring cycle
+      // Sync all accounts for user using working sync function
       try {
-        await imapMonitor.runMonitoringCycle()
+        // Get all user's email accounts
+        const { data: accounts, error: accountsError } = await supabase
+          .from('email_accounts')
+          .select('id, email')
+          .eq('user_id', user.id)
+          
+        if (accountsError) {
+          throw new Error('Failed to fetch user accounts: ' + accountsError.message)
+        }
+        
+        console.log(`🔄 Syncing ${accounts?.length || 0} accounts for user`)
+        
+        const results = []
+        let totalNewEmails = 0
+        
+        // Sync each account
+        for (const account of accounts || []) {
+          try {
+            const result = await syncEmailAccount(supabase, account.id)
+            results.push(result)
+            totalNewEmails += result.newEmails
+            console.log(`✅ ${account.email}: ${result.newEmails} new emails`)
+          } catch (error) {
+            console.error(`❌ Failed to sync ${account.email}:`, error)
+            results.push({
+              success: false,
+              account: account.email,
+              error: error.message
+            })
+          }
+        }
         
         const response = NextResponse.json({
           success: true,
-          message: 'IMAP monitoring cycle completed successfully'
+          message: `Sync completed: ${totalNewEmails} new emails found across ${accounts?.length || 0} accounts`,
+          data: {
+            totalNewEmails,
+            accountResults: results
+          }
         })
 
         return addSecurityHeaders(response)
       } catch (syncError) {
-        console.error('IMAP cycle error:', syncError)
+        console.error('All accounts sync error:', syncError)
         return NextResponse.json({
           success: false,
-          error: syncError.message || 'Failed to run IMAP sync cycle',
+          error: syncError.message || 'Failed to sync accounts',
           code: 'SYNC_ERROR'
         }, { status: 500 })
       }
@@ -79,3 +114,111 @@ export const POST = withAuth(async (
     }, { status: 500 })
   }
 })
+
+// Working sync function using fixed IMAP processor
+async function syncEmailAccount(supabase: any, accountId: string) {
+  // Get the account details
+  const { data: account, error: accountError } = await supabase
+    .from('email_accounts')
+    .select(`
+      id,
+      user_id,
+      email,
+      provider,
+      imap_host,
+      imap_port,
+      imap_username,
+      imap_password,
+      imap_secure,
+      smtp_password
+    `)
+    .eq('id', accountId)
+    .single()
+
+  if (accountError || !account) {
+    throw new Error('Account not found: ' + accountError?.message)
+  }
+
+  console.log('🔄 Syncing account:', account.email)
+  
+  // Prepare IMAP config using working logic
+  let password = null
+  let passwordSource = 'none'
+  
+  if (account.imap_password) {
+    password = account.imap_password
+    passwordSource = 'imap_password (raw)'
+  } else if (account.smtp_password) {
+    password = account.smtp_password
+    passwordSource = 'smtp_password (raw)'
+  }
+  
+  console.log(`🔐 Password source: ${passwordSource} (length: ${password?.length || 0})`)
+  
+  const imapConfig = {
+    host: account.imap_host,
+    port: account.imap_port || 993,
+    tls: account.imap_secure !== false,
+    user: account.imap_username || account.email,
+    password: password
+  }
+
+  // Get current IMAP connection to find last processed UID
+  const { data: connection } = await supabase
+    .from('imap_connections')
+    .select('last_processed_uid')
+    .eq('email_account_id', account.id)
+    .single()
+
+  const lastProcessedUID = connection?.last_processed_uid || 0
+  console.log(`📧 Last processed UID: ${lastProcessedUID}`)
+
+  // Create IMAP processor and sync
+  const imapProcessor = new IMAPProcessor()
+  
+  const syncResult = await imapProcessor.syncEmails(
+    account.user_id,
+    account.id,
+    imapConfig,
+    lastProcessedUID
+  )
+
+  console.log(`✅ Sync completed: ${syncResult.newEmails} new emails, ${syncResult.errors.length} errors`)
+  
+  if (syncResult.errors.length > 0) {
+    console.error('❌ Sync errors:', syncResult.errors)
+  }
+
+  // Update connection status if sync succeeded
+  if (syncResult.errors.length === 0) {
+    await supabase
+      .from('imap_connections')
+      .update({
+        status: 'active',
+        last_sync_at: new Date().toISOString(),
+        next_sync_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        last_processed_uid: syncResult.lastProcessedUID,
+        consecutive_failures: 0,
+        last_successful_connection: new Date().toISOString(),
+        last_error: null
+      })
+      .eq('email_account_id', account.id)
+  } else {
+    await supabase
+      .from('imap_connections')
+      .update({
+        status: 'error',
+        last_sync_at: new Date().toISOString(),
+        last_error: syncResult.errors.join('; ')
+      })
+      .eq('email_account_id', account.id)
+  }
+
+  return {
+    success: syncResult.errors.length === 0,
+    newEmails: syncResult.newEmails,
+    totalProcessed: syncResult.totalProcessed,
+    errors: syncResult.errors,
+    account: account.email
+  }
+}
