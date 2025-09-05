@@ -33,6 +33,10 @@ export class IMAPMonitor {
       return
     }
 
+    // TEMPORARILY DISABLED: IMAP monitor causing database connection issues
+    console.log('⏸️ IMAP Monitor temporarily disabled due to connection issues')
+    return
+
     const intervalMs = intervalMinutes * 60 * 1000
     console.log(`🚀 Starting IMAP Monitor (checking every ${intervalMinutes} minutes)`)
     

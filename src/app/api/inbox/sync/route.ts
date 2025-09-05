@@ -65,11 +65,23 @@ export const POST = withAuth(async (
         
         console.log(`🔄 Syncing ${accounts?.length || 0} accounts for user`)
         
+        // Check if user has any email accounts
+        if (!accounts || accounts.length === 0) {
+          return NextResponse.json({
+            success: true,
+            message: 'No email accounts configured for sync',
+            data: {
+              totalNewEmails: 0,
+              accountResults: []
+            }
+          })
+        }
+        
         const results = []
         let totalNewEmails = 0
         
         // Sync each account
-        for (const account of accounts || []) {
+        for (const account of accounts) {
           try {
             const result = await syncEmailAccount(supabase, account.id)
             results.push(result)
@@ -106,11 +118,22 @@ export const POST = withAuth(async (
     }
 
   } catch (error) {
-    console.error('Error in inbox sync API:', error)
+    console.error('❌ Error in inbox sync API:', error)
+    console.error('❌ Error details:', {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+      cause: error?.cause
+    })
+    
     return NextResponse.json({
       success: false,
-      error: 'Internal server error',
-      code: 'INTERNAL_ERROR'
+      error: error?.message || 'Internal server error',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? {
+        stack: error?.stack,
+        name: error?.name
+      } : undefined
     }, { status: 500 })
   }
 })
@@ -135,8 +158,12 @@ async function syncEmailAccount(supabase: any, accountId: string) {
     .eq('id', accountId)
     .single()
 
-  if (accountError || !account) {
-    throw new Error('Account not found: ' + accountError?.message)
+  if (accountError) {
+    throw new Error('Database error: ' + accountError.message)
+  }
+  
+  if (!account) {
+    throw new Error('Email account not found or user does not have permission')
   }
 
   console.log('🔄 Syncing account:', account.email)
@@ -154,6 +181,15 @@ async function syncEmailAccount(supabase: any, accountId: string) {
   }
   
   console.log(`🔐 Password source: ${passwordSource} (length: ${password?.length || 0})`)
+  
+  // Validate IMAP configuration
+  if (!account.imap_host) {
+    throw new Error(`IMAP host not configured for account ${account.email}`)
+  }
+  
+  if (!password) {
+    throw new Error(`IMAP password not available for account ${account.email}`)
+  }
   
   const imapConfig = {
     host: account.imap_host,

@@ -415,12 +415,14 @@ export class CampaignProcessor {
       }
 
       // Update campaign statistics
+      const processedCount = emailsSent + emailsFailed
       await supabase
         .from('campaigns')
         .update({
           emails_sent: emailsSent,
+          emails_failed: emailsFailed,
           total_contacts: contacts.length,
-          status: emailsSent > 0 ? 'completed' : 'paused'
+          status: processedCount >= contacts.length ? 'completed' : (emailsSent > 0 ? 'running' : 'paused')
         })
         .eq('id', campaign.id)
 

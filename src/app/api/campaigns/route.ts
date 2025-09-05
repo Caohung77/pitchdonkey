@@ -38,23 +38,47 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       (campaigns || []).map(async (campaign) => {
         let contactCount = campaign.total_contacts || 0
 
-        // For simple campaigns, get contact count from contact_list_ids
+        // ENHANCED: Get contact count with multiple fallback strategies
+        let realContactCount = 0
+        
+        // Strategy 1: Get from contact_list_ids
+        let listNames = []
         if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
           const { data: contactLists } = await supabase
             .from('contact_lists')
-            .select('contact_ids')
+            .select('id, name, contact_ids')
             .in('id', campaign.contact_list_ids)
           
-          if (contactLists) {
+          if (contactLists && contactLists.length > 0) {
             const allContactIds = []
             contactLists.forEach(list => {
               if (list.contact_ids && Array.isArray(list.contact_ids)) {
                 allContactIds.push(...list.contact_ids)
               }
+              if (list.name) {
+                listNames.push(list.name)
+              }
             })
-            contactCount = [...new Set(allContactIds)].length // Remove duplicates
+            realContactCount = [...new Set(allContactIds)].length // Remove duplicates
           }
         }
+        
+        // Strategy 2: Count actual email tracking records (most accurate for completed campaigns)
+        if (realContactCount === 0) {
+          const { data: emailTrackingCount } = await supabase
+            .from('email_tracking')
+            .select('contact_id', { count: 'exact' })
+            .eq('campaign_id', campaign.id)
+          
+          realContactCount = emailTrackingCount || 0
+        }
+        
+        // Strategy 3: Use stored total_contacts as final fallback
+        if (realContactCount === 0) {
+          realContactCount = campaign.total_contacts || 0
+        }
+        
+        contactCount = realContactCount
 
         // Get DETAILED email tracking stats from email_tracking table
         const { data: emailStats } = await supabase
@@ -107,8 +131,11 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         const bounceRate = emailsSent > 0 ? Math.round((emailsBounced / emailsSent) * 100) : 0
 
         // Calculate progress and estimated completion
-        const queuedEmails = Math.max(0, contactCount - emailsSent - emailsFailed)
-        const completionPercentage = contactCount > 0 ? Math.round((emailsSent / contactCount) * 100) : 0
+        const processedEmails = emailsSent + emailsFailed
+        const queuedEmails = Math.max(0, contactCount - processedEmails)
+        let completionPercentage = contactCount > 0 ? Math.round((processedEmails / contactCount) * 100) : 0
+        // If campaign is explicitly completed, force 100% to avoid confusion
+        if (campaign.status === 'completed') completionPercentage = 100
         
         // Estimate completion time for active campaigns
         let estimatedCompletionAt = null
@@ -165,7 +192,10 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           completion_percentage: completionPercentage,
           last_email_sent_at: lastEmailSentAt,
           estimated_completion_at: estimatedCompletionAt,
-          updated_at: campaign.updated_at || campaign.created_at
+          updated_at: campaign.updated_at || campaign.created_at,
+          // Contact list information
+          list_names: listNames,
+          contact_list_ids: campaign.contact_list_ids
         }
       })
     )
