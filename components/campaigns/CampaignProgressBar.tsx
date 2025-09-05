@@ -217,15 +217,25 @@ export function CampaignProgressBar({
       const failedCount = emailStats?.filter(e => e.bounced_at !== null).length || 0
       const openedCount = emailStats?.filter(e => e.opened_at !== null).length || 0
 
-      if (campaignData) {
+      // Use email tracking count as total for active campaigns (ground truth)
+      // This ensures campaigns show accurate completion when contacts are deleted from lists after launch
+      const totalContactsFromTracking = emailStats?.length || 0
+      const effectiveTotal = totalContactsFromTracking > 0 
+        ? totalContactsFromTracking 
+        : (campaignData?.total_contacts || campaign.contactCount || campaign.total_contacts || 0)
+      
+      console.log(`  📊 Email tracking records: ${totalContactsFromTracking}`)
+      console.log(`  📊 Using effective total: ${effectiveTotal}`)
+
+      if (campaignData || emailStats) {
         const newProgress = {
-          total: campaignData.total_contacts || campaign.contactCount || campaign.total_contacts || 0,
+          total: effectiveTotal,
           sent: sentCount,
           delivered: deliveredCount,
           opened: openedCount || 0,
           failed: failedCount,
-          queued: Math.max(0, (campaignData.total_contacts || 0) - sentCount - failedCount),
-          lastUpdated: campaignData.updated_at
+          queued: Math.max(0, effectiveTotal - sentCount - failedCount),
+          lastUpdated: campaignData?.updated_at || new Date().toISOString()
         }
         
         console.log(`📊 Real progress for campaign ${campaign.id}:`, newProgress)

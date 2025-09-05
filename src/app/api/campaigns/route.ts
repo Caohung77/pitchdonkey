@@ -82,41 +82,64 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
             }
           }
         } else {
-          // FOR ACTIVE/DRAFT CAMPAIGNS: Use current contact lists  
-          // Strategy 1: Get from contact_list_ids
+          // FOR ACTIVE CAMPAIGNS: Use email tracking records as ground truth
+          console.log(`🔍 [ACTIVE CAMPAIGN DEBUG] ${campaign.name}:`)
+          
+          // Strategy 1: Count actual email tracking records (most accurate for active campaigns)
+          const { count: emailTrackingCount } = await supabase
+            .from('email_tracking')
+            .select('contact_id', { count: 'exact' })
+            .eq('campaign_id', campaign.id)
+          
+          console.log(`  📊 Email tracking count: ${emailTrackingCount}`)
+          console.log(`  💾 Stored total_contacts: ${campaign.total_contacts}`)
+          
+          // For active campaigns, use email tracking as ground truth since it represents
+          // the actual contacts that were targeted when the campaign started
+          if (emailTrackingCount > 0) {
+            realContactCount = emailTrackingCount
+            console.log(`  ✅ Using email tracking count (ground truth): ${realContactCount}`)
+          } else {
+            // Strategy 2: Get from contact_list_ids (only for draft campaigns)
+            if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
+              const { data: contactLists } = await supabase
+                .from('contact_lists')
+                .select('id, name, contact_ids')
+                .in('id', campaign.contact_list_ids)
+              
+              if (contactLists && contactLists.length > 0) {
+                const allContactIds = []
+                contactLists.forEach(list => {
+                  if (list.contact_ids && Array.isArray(list.contact_ids)) {
+                    allContactIds.push(...list.contact_ids)
+                  }
+                })
+                realContactCount = [...new Set(allContactIds)].length // Remove duplicates
+                console.log(`  📋 Using current contact lists count: ${realContactCount}`)
+              }
+            }
+            
+            // Strategy 3: Use stored total_contacts as final fallback
+            if (realContactCount === 0) {
+              realContactCount = campaign.total_contacts || 0
+              console.log(`  ⚠️ Using fallback stored count: ${realContactCount}`)
+            }
+          }
+          
+          // Get list names for display
           if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
             const { data: contactLists } = await supabase
               .from('contact_lists')
-              .select('id, name, contact_ids')
+              .select('id, name')
               .in('id', campaign.contact_list_ids)
             
             if (contactLists && contactLists.length > 0) {
-              const allContactIds = []
               contactLists.forEach(list => {
-                if (list.contact_ids && Array.isArray(list.contact_ids)) {
-                  allContactIds.push(...list.contact_ids)
-                }
                 if (list.name) {
                   listNames.push(list.name)
                 }
               })
-              realContactCount = [...new Set(allContactIds)].length // Remove duplicates
             }
-          }
-          
-          // Strategy 2: Count actual email tracking records
-          if (realContactCount === 0) {
-            const { count: emailTrackingCount } = await supabase
-              .from('email_tracking')
-              .select('contact_id', { count: 'exact' })
-              .eq('campaign_id', campaign.id)
-            
-            realContactCount = emailTrackingCount || 0
-          }
-          
-          // Strategy 3: Use stored total_contacts as final fallback
-          if (realContactCount === 0) {
-            realContactCount = campaign.total_contacts || 0
           }
         }
         
