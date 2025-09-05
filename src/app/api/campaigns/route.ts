@@ -36,55 +36,100 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     // For each campaign, get REAL contact count and email stats from database
     const campaignsWithStats = await Promise.all(
       (campaigns || []).map(async (campaign) => {
+        console.log(`🔍 Processing campaign: ${campaign.name} (status: ${campaign.status})`)
         let contactCount = campaign.total_contacts || 0
 
         // ENHANCED: Get contact count with multiple fallback strategies
         let realContactCount = 0
-        
-        // Strategy 1: Get from contact_list_ids
         let listNames = []
-        if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
-          const { data: contactLists } = await supabase
-            .from('contact_lists')
-            .select('id, name, contact_ids')
-            .in('id', campaign.contact_list_ids)
-          
-          if (contactLists && contactLists.length > 0) {
-            const allContactIds = []
-            contactLists.forEach(list => {
-              if (list.contact_ids && Array.isArray(list.contact_ids)) {
-                allContactIds.push(...list.contact_ids)
-              }
-              if (list.name) {
-                listNames.push(list.name)
-              }
-            })
-            realContactCount = [...new Set(allContactIds)].length // Remove duplicates
-          }
-        }
         
-        // Strategy 2: Count actual email tracking records (most accurate for completed campaigns)
-        if (realContactCount === 0) {
-          const { data: emailTrackingCount } = await supabase
+        // FOR COMPLETED CAMPAIGNS: Use historical data to avoid deleted contact issues
+        if (campaign.status === 'completed') {
+          console.log(`🔍 [COMPLETED CAMPAIGN DEBUG] ${campaign.name}:`)
+          
+          // Strategy 1: Count actual email tracking records (most accurate for completed campaigns)
+          const { count: emailTrackingCount } = await supabase
             .from('email_tracking')
             .select('contact_id', { count: 'exact' })
             .eq('campaign_id', campaign.id)
           
+          console.log(`  📊 Email tracking count: ${emailTrackingCount}`)
+          console.log(`  💾 Stored total_contacts: ${campaign.total_contacts}`)
+          
           realContactCount = emailTrackingCount || 0
-        }
-        
-        // Strategy 3: Use stored total_contacts as final fallback
-        if (realContactCount === 0) {
-          realContactCount = campaign.total_contacts || 0
+          
+          // Strategy 2: Use stored total_contacts as fallback
+          if (realContactCount === 0) {
+            realContactCount = campaign.total_contacts || 0
+            console.log(`  ⚠️ Using fallback stored count: ${realContactCount}`)
+          }
+          
+          console.log(`  ✅ Final realContactCount: ${realContactCount}`)
+          
+          // Still get list names for display, but don't use for contact count
+          if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
+            const { data: contactLists } = await supabase
+              .from('contact_lists')
+              .select('id, name')
+              .in('id', campaign.contact_list_ids)
+            
+            if (contactLists && contactLists.length > 0) {
+              contactLists.forEach(list => {
+                if (list.name) {
+                  listNames.push(list.name)
+                }
+              })
+            }
+          }
+        } else {
+          // FOR ACTIVE/DRAFT CAMPAIGNS: Use current contact lists  
+          // Strategy 1: Get from contact_list_ids
+          if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
+            const { data: contactLists } = await supabase
+              .from('contact_lists')
+              .select('id, name, contact_ids')
+              .in('id', campaign.contact_list_ids)
+            
+            if (contactLists && contactLists.length > 0) {
+              const allContactIds = []
+              contactLists.forEach(list => {
+                if (list.contact_ids && Array.isArray(list.contact_ids)) {
+                  allContactIds.push(...list.contact_ids)
+                }
+                if (list.name) {
+                  listNames.push(list.name)
+                }
+              })
+              realContactCount = [...new Set(allContactIds)].length // Remove duplicates
+            }
+          }
+          
+          // Strategy 2: Count actual email tracking records
+          if (realContactCount === 0) {
+            const { count: emailTrackingCount } = await supabase
+              .from('email_tracking')
+              .select('contact_id', { count: 'exact' })
+              .eq('campaign_id', campaign.id)
+            
+            realContactCount = emailTrackingCount || 0
+          }
+          
+          // Strategy 3: Use stored total_contacts as final fallback
+          if (realContactCount === 0) {
+            realContactCount = campaign.total_contacts || 0
+          }
         }
         
         contactCount = realContactCount
+        console.log(`  📊 Final contactCount for ${campaign.name}: ${contactCount}`)
 
         // Get DETAILED email tracking stats from email_tracking table
         const { data: emailStats } = await supabase
           .from('email_tracking')
           .select('status, sent_at, delivered_at, opened_at, clicked_at, replied_at, bounce_reason')
           .eq('campaign_id', campaign.id)
+          
+        console.log(`  📧 Email stats records: ${emailStats?.length || 0}`)
 
         let emailsSent = 0
         let emailsDelivered = 0
@@ -96,11 +141,14 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         let lastEmailSentAt = null
 
         if (emailStats && emailStats.length > 0) {
-          emailStats.forEach(email => {
+          console.log(`  📧 Analyzing ${emailStats.length} email tracking records:`)
+          emailStats.forEach((email, index) => {
             // Treat presence of timestamps as ground truth
             const isSent = !!email.sent_at || ['sent','delivered','opened','clicked','replied'].includes(email.status)
             const isDelivered = !!email.delivered_at || ['delivered','opened','clicked','replied'].includes(email.status)
             const isOpened = !!email.opened_at || !!email.clicked_at || !!email.replied_at || ['opened','clicked','replied'].includes(email.status)
+
+            console.log(`    [${index + 1}] Status: ${email.status}, sent_at: ${email.sent_at}, isSent: ${isSent}`)
 
             if (isSent) {
               emailsSent++
@@ -115,6 +163,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
             if (email.status === 'failed') emailsFailed++
             if (email.status === 'bounced' || email.bounce_reason) emailsBounced++
           })
+          console.log(`  📊 Final counts: ${emailsSent} sent, ${emailsDelivered} delivered, ${emailsFailed} failed`)
         } else {
           // Fallback to campaign columns if email_tracking has no data
           emailsSent = campaign.emails_sent || 0
@@ -134,12 +183,33 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         const processedEmails = emailsSent + emailsFailed
         const queuedEmails = Math.max(0, contactCount - processedEmails)
         let completionPercentage = contactCount > 0 ? Math.round((processedEmails / contactCount) * 100) : 0
-        // If campaign is explicitly completed, force 100% to avoid confusion
-        if (campaign.status === 'completed') completionPercentage = 100
+        console.log(`  🔢 Calculated percentage: ${completionPercentage}% (${processedEmails}/${contactCount})`)
         
+        // If campaign is explicitly completed, force 100% to avoid confusion
+        if (campaign.status === 'completed') {
+          completionPercentage = 100
+          console.log(`  ✅ Forced to 100% for completed campaign`)
+        }
+        
+        // If fully processed, fix status if necessary
+        const shouldBeCompleted = contactCount > 0 && processedEmails >= contactCount
+        let derivedStatus = campaign.status
+        if (shouldBeCompleted && campaign.status !== 'completed') {
+          derivedStatus = 'completed'
+          // Best-effort DB update to prevent stuck 'sending' label
+          try {
+            await supabase
+              .from('campaigns')
+              .update({ status: 'completed', end_date: new Date().toISOString() })
+              .eq('id', campaign.id)
+          } catch (e) {
+            console.warn('⚠️ Failed to auto-complete campaign', campaign.id, e)
+          }
+        }
+
         // Estimate completion time for active campaigns
         let estimatedCompletionAt = null
-        if ((campaign.status === 'sending' || campaign.status === 'running') && queuedEmails > 0) {
+        if ((derivedStatus === 'sending' || derivedStatus === 'running') && queuedEmails > 0) {
           // Assuming 45-second average delay between emails
           const avgDelaySeconds = 45
           const estimatedSeconds = queuedEmails * avgDelaySeconds
@@ -149,7 +219,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
 
         // Calculate next send time for running campaigns
         let nextSendAt = null
-        if ((campaign.status === 'sending' || campaign.status === 'running') && queuedEmails > 0) {
+        if ((derivedStatus === 'sending' || derivedStatus === 'running') && queuedEmails > 0) {
           // Next email in approximately 45 seconds from last sent
           if (lastEmailSentAt) {
             const nextTime = new Date(new Date(lastEmailSentAt).getTime() + (45 * 1000))
@@ -167,7 +237,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           id: campaign.id,
           name: campaign.name,
           description: campaign.description || '',
-          status: campaign.status,
+          status: derivedStatus,
           contactCount,
           emailsSent,
           openRate,

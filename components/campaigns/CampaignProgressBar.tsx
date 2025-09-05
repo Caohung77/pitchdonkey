@@ -70,6 +70,11 @@ export function CampaignProgressBar({
   const openRate = progress.delivered > 0 ? Math.round((progress.opened / progress.delivered) * 100) : 0
   const queuedEmails = Math.max(0, progress.total - progress.sent - progress.failed)
 
+  // Effective status for UI: if fully processed, show completed regardless of stale DB status
+  const isFullyProcessed = progress.total > 0 && (progress.sent + progress.failed) >= progress.total
+  const effectiveStatus: 'draft' | 'scheduled' | 'sending' | 'running' | 'paused' | 'stopped' | 'completed' | 'archived' =
+    isFullyProcessed ? 'completed' : campaign.status
+
   // Real-time subscription for campaign updates + auto-refresh during sending
   useEffect(() => {
     const supabase = createClientSupabase()
@@ -99,7 +104,7 @@ export function CampaignProgressBar({
 
     // Auto-refresh every 10 seconds when campaign is actively sending
     let refreshInterval: NodeJS.Timeout | null = null
-    if (campaign.status === 'sending' || campaign.status === 'running') {
+    if (effectiveStatus === 'sending' || effectiveStatus === 'running') {
       refreshInterval = setInterval(() => {
         console.log(`🔄 Auto-refreshing progress for sending campaign ${campaign.id}`)
         fetchLatestProgress()
@@ -157,7 +162,43 @@ export function CampaignProgressBar({
       // DEBUG: Log current campaign status
       console.log(`🔍 fetchLatestProgress for campaign ${campaign.id}: current status = ${campaign.status}`)
       
-      // Get updated campaign stats
+      // FOR COMPLETED CAMPAIGNS: Use historical data, don't recalculate total_contacts
+      if (effectiveStatus === 'completed') {
+        console.log(`✅ Skipping contact count recalculation for completed campaign - using original data`)
+        
+        // Count actual emails from tracking table using timestamp fields
+        const { data: emailStats } = await supabase
+          .from('email_tracking')
+          .select('sent_at, delivered_at, opened_at, bounced_at')
+          .eq('campaign_id', campaign.id)
+
+        // Count emails based on timestamp fields
+        const sentCount = emailStats?.filter(e => e.sent_at !== null).length || 0
+        const deliveredCount = emailStats?.filter(e => e.delivered_at !== null).length || sentCount
+        const failedCount = emailStats?.filter(e => e.bounced_at !== null).length || 0
+        const openedCount = emailStats?.filter(e => e.opened_at !== null).length || 0
+
+        // Use the original contact count from props, not from database recalculation
+        const originalTotal = campaign.contactCount || campaign.total_contacts || 0
+        
+        const newProgress = {
+          total: originalTotal, // Use original total, don't recalculate
+          sent: sentCount,
+          delivered: deliveredCount,
+          opened: openedCount || 0,
+          failed: failedCount,
+          queued: Math.max(0, originalTotal - sentCount - failedCount),
+          lastUpdated: new Date().toISOString()
+        }
+        
+        console.log(`📊 Real progress for campaign ${campaign.id}:`, newProgress)
+        setProgress(newProgress)
+        
+        setIsLoading(false)
+        return
+      }
+      
+      // FOR ACTIVE CAMPAIGNS: Get updated campaign stats from database
       const { data: campaignData } = await supabase
         .from('campaigns')
         .select('total_contacts, updated_at')
@@ -208,25 +249,40 @@ export function CampaignProgressBar({
               
               const { data: updatedCampaign, error: queryError } = await supabase
                 .from('campaigns')
-                .select('status, completed_at')
+                .select('status, updated_at')
                 .eq('id', campaign.id)
                 .maybeSingle()
 
-              // Log non-null errors only; avoid throwing empty/undefined error objects
-              if (queryError && (queryError as any)?.code) {
-                console.error(`❌ Query error for campaign ${campaign.id}:`, queryError)
-                throw queryError
+              // Handle query errors with better error checking
+              if (queryError) {
+                // Check if it's a meaningful error object
+                if (queryError.code || queryError.message || queryError.details) {
+                  console.error(`❌ Query error for campaign ${campaign.id}:`, {
+                    code: queryError.code,
+                    message: queryError.message,
+                    details: queryError.details,
+                    hint: queryError.hint
+                  })
+                  throw queryError
+                } else {
+                  // Log empty error objects for debugging but don't throw
+                  console.warn(`⚠️ Empty error object for campaign ${campaign.id}:`, queryError)
+                }
               }
               
-              console.log(`📊 Database status for campaign ${campaign.id}:`, updatedCampaign && 'status' in updatedCampaign ? updatedCampaign.status : 'unknown')
+              if (!updatedCampaign) {
+                console.warn(`⚠️ No campaign data returned for campaign ${campaign.id} - it may have been deleted`)
+                return
+              }
               
-              if (updatedCampaign && 'status' in updatedCampaign && updatedCampaign.status === 'completed') {
+              console.log(`📊 Database status for campaign ${campaign.id}:`, updatedCampaign?.status || 'unknown')
+              
+              if (updatedCampaign && updatedCampaign.status === 'completed') {
                 console.log(`✅ Campaign ${campaign.id} status updated to completed - refreshing UI`)
                 onProgressUpdate?.(campaign.id, { 
                   ...campaign, 
                   status: 'completed',
-                  completed_at: updatedCampaign && 'completed_at' in updatedCampaign ? updatedCampaign.completed_at : new Date().toISOString(),
-                  updated_at: new Date().toISOString()
+                  updated_at: updatedCampaign.updated_at || new Date().toISOString()
                 })
               } else {
                 console.log(`⏳ Campaign ${campaign.id} not completed yet, will retry in 3 seconds`)
@@ -234,16 +290,24 @@ export function CampaignProgressBar({
                 setTimeout(checkCompletion, 3000)
               }
             } catch (error) {
-              console.error(`❌ Campaign completion check failed for ${campaign.id}:`, {
-                error: error?.message || error,
-                code: error?.code,
-                details: error?.details,
-                hint: error?.hint
-              })
+              const errorDetails = {
+                message: error?.message || 'Unknown error',
+                code: error?.code || 'NO_CODE',
+                details: error?.details || 'No details',
+                hint: error?.hint || 'No hint'
+              }
+              
+              console.error(`❌ Campaign completion check failed for ${campaign.id}:`, errorDetails)
               
               // If we get authentication or RLS errors, stop retrying
               if (error?.code === 'PGRST301' || error?.code === '42501' || error?.message?.includes('400') || error?.message?.includes('permission denied')) {
                 console.error('🚨 Authentication or RLS policy error - stopping retries for campaign', campaign.id)
+                return
+              }
+              
+              // If we get schema/column errors, stop retrying
+              if (error?.code === 'PGRST116' || error?.message?.includes('column') || error?.message?.includes('relation')) {
+                console.error('🚨 Schema or column error - stopping retries for campaign', campaign.id)
                 return
               }
             }
@@ -299,7 +363,7 @@ export function CampaignProgressBar({
 
   // Get status icon and color
   const getStatusDisplay = () => {
-    switch (campaign.status) {
+    switch (effectiveStatus) {
       case 'sending':
       case 'running':
         return {
@@ -354,7 +418,7 @@ export function CampaignProgressBar({
           {isLoading && (
             <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
           )}
-          {(campaign.status === 'sending' || campaign.status === 'running') && (
+          {(effectiveStatus === 'sending' || effectiveStatus === 'running') && (
             <button
               onClick={() => {
                 fetchLatestProgress()
@@ -393,15 +457,15 @@ export function CampaignProgressBar({
           value={completionPercentage} 
           className="h-2"
           indicatorClassName={
-            campaign.status === 'sending' || campaign.status === 'running' 
+            effectiveStatus === 'sending' || effectiveStatus === 'running' 
               ? 'bg-blue-500 transition-all duration-500' 
-              : campaign.status === 'completed' 
+              : effectiveStatus === 'completed' 
                 ? 'bg-green-500' 
                 : 'bg-gray-400'
           }
         />
         
-        {queuedEmails > 0 && (campaign.status === 'sending' || campaign.status === 'running') && (
+        {queuedEmails > 0 && (effectiveStatus === 'sending' || effectiveStatus === 'running') && (
           <div className="text-xs text-gray-500">
             {queuedEmails} emails queued for sending
           </div>

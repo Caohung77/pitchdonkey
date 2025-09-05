@@ -120,8 +120,11 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
   }
 
   const handleListUpdated = (updatedList: ContactList) => {
+    const contactCount = Array.isArray((updatedList as any).contact_ids)
+      ? (updatedList as any).contact_ids.length
+      : (updatedList as any).contactCount || 0
     setLists(prev => prev.map(l => 
-      l.id === updatedList.id ? updatedList : l
+      l.id === updatedList.id ? { ...updatedList, contactCount } as any : l
     ))
     setEditingList(null)
   }

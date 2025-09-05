@@ -22,13 +22,24 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }, { p
       return NextResponse.json({ error: 'Contact list not found' }, { status: 404 })
     }
 
+    // Count existing contacts for accurate count
+    let count = 0
+    if (list.contact_ids && list.contact_ids.length > 0) {
+      const { count: existingCount } = await supabase
+        .from('contacts')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .in('id', list.contact_ids)
+      count = existingCount || 0
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         id: list.id,
         name: list.name,
         description: list.description,
-        contactCount: list.contact_ids ? list.contact_ids.length : 0,
+        contactCount: count,
         contact_ids: list.contact_ids || [],
         tags: list.tags || [],
         isFavorite: list.is_favorite,

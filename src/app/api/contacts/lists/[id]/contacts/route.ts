@@ -60,7 +60,8 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }, { p
 
     return NextResponse.json({
       success: true,
-      data: contacts || []
+      data: contacts || [],
+      count: contacts?.length || 0
     })
 
   } catch (error) {

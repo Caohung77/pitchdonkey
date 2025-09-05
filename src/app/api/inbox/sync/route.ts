@@ -9,7 +9,7 @@ export const POST = withAuth(async (
   { user, supabase }
 ) => {
   try {
-    await withRateLimit(user, 10, 60000) // 10 sync requests per minute
+    await withRateLimit(user, 20, 300000) // 20 sync requests per 5 minutes (more generous)
 
     const body = await request.json()
     const { emailAccountId } = body
@@ -119,6 +119,17 @@ export const POST = withAuth(async (
 
   } catch (error) {
     console.error('❌ Error in inbox sync API:', error)
+    
+    // Handle rate limiting errors specifically
+    if (error?.message?.includes('Rate limit exceeded') || error?.name === 'RateLimitError') {
+      return NextResponse.json({
+        success: false,
+        error: 'Rate limit exceeded - please wait before syncing again',
+        code: 'RATE_LIMIT_EXCEEDED',
+        retryAfter: 300 // 5 minutes in seconds
+      }, { status: 429 })
+    }
+    
     console.error('❌ Error details:', {
       message: error?.message,
       stack: error?.stack,

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { AlertCircle, X, Sparkles, Eye, EyeOff } from 'lucide-react'
+import { AlertCircle, AlertTriangle, X, Sparkles, Eye, EyeOff } from 'lucide-react'
 import { EnrichmentDisplay } from './EnrichmentDisplay'
 
 // Simple Contact interface to avoid import issues

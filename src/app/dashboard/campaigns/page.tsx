@@ -159,6 +159,18 @@ export default function CampaignsPage() {
       // Debug log to see what fields are available
       if (campaignsData.length > 0) {
         console.log('Sample campaign data:', campaignsData[0])
+        
+        // Debug completed campaigns specifically
+        const completedCampaigns = campaignsData.filter(c => c.status === 'completed')
+        console.log('Completed campaigns:', completedCampaigns.length)
+        completedCampaigns.forEach(campaign => {
+          console.log(`Completed campaign: ${campaign.name}`, {
+            status: campaign.status,
+            contactCount: campaign.contactCount,
+            total_contacts: campaign.total_contacts,
+            emailsSent: campaign.emailsSent
+          })
+        })
       }
     } catch (error) {
       console.error('Error fetching campaigns:', error)
@@ -531,7 +543,9 @@ export default function CampaignsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Array.isArray(campaigns) ? campaigns.filter(c => c.status === 'running' || c.status === 'sending').length : 0}
+              {Array.isArray(campaigns) 
+                ? campaigns.filter(c => (c.status === 'running' || c.status === 'sending') && (c as any).queued_emails > 0).length 
+                : 0}
             </div>
           </CardContent>
         </Card>

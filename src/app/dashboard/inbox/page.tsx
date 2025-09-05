@@ -91,6 +91,7 @@ export default function InboxPage() {
   const [syncing, setSyncing] = useState(false)
   const [autoSyncing, setAutoSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState<string>('')
+  const [lastSyncTime, setLastSyncTime] = useState<number>(0)
   
   // Contact modal states
   const [contactViewModalOpen, setContactViewModalOpen] = useState(false)
@@ -105,11 +106,17 @@ export default function InboxPage() {
       await fetchEmailAccounts()
       
       // Then trigger IMAP sync in the background (slower but ensures fresh data)
-      // Only auto-sync if not already syncing to avoid conflicts
-      if (!syncing && !autoSyncing) {
+      // Only auto-sync if not already syncing to avoid conflicts AND respect rate limits
+      const now = Date.now()
+      const timeSinceLastSync = now - lastSyncTime
+      const minSyncInterval = 30 * 1000 // 30 seconds minimum between auto-syncs
+      
+      if (!syncing && !autoSyncing && timeSinceLastSync >= minSyncInterval) {
         console.log('🔄 Auto-syncing IMAP on inbox load...')
         setAutoSyncing(true)
         setSyncStatus('')
+        setLastSyncTime(now)
+        
         try {
           const syncResult = await forceSync('all')
           const newEmailsCount = syncResult?.data?.totalNewEmails || 0
@@ -119,11 +126,22 @@ export default function InboxPage() {
           setTimeout(() => setSyncStatus(''), 3000)
         } catch (error) {
           console.error('Auto-sync failed:', error)
-          setSyncStatus('❌ Auto-sync failed')
-          setTimeout(() => setSyncStatus(''), 5000)
+          
+          // Handle rate limit errors specifically
+          if (error.message?.includes('Rate limit exceeded')) {
+            setSyncStatus('⏳ Rate limit reached - sync paused for 1 minute')
+            setTimeout(() => setSyncStatus(''), 60000) // Clear after 1 minute
+          } else {
+            setSyncStatus(`❌ Auto-sync failed: ${error.message}`)
+            setTimeout(() => setSyncStatus(''), 5000)
+          }
         } finally {
           setAutoSyncing(false)
         }
+      } else if (timeSinceLastSync < minSyncInterval) {
+        console.log(`⏳ Skipping auto-sync - last sync was ${Math.round(timeSinceLastSync / 1000)}s ago`)
+        setSyncStatus('⏳ Auto-sync skipped - too soon since last sync')
+        setTimeout(() => setSyncStatus(''), 3000)
       }
     }
     
@@ -181,6 +199,7 @@ export default function InboxPage() {
   const forceSync = async (accountId?: string) => {
     try {
       setSyncing(true)
+      setLastSyncTime(Date.now()) // Update last sync time for rate limiting
       
       const response = await fetch('/api/inbox/sync', {
         method: 'POST',
@@ -201,7 +220,13 @@ export default function InboxPage() {
         return data // Return the sync result
       } else {
         console.error('Sync failed:', data.error)
-        throw new Error(data.error || 'Sync failed')
+        
+        // Handle different error types
+        if (response.status === 429 || data.error?.includes('Rate limit')) {
+          throw new Error('Rate limit exceeded - please wait before syncing again')
+        } else {
+          throw new Error(data.error || 'Sync failed')
+        }
       }
       
     } catch (error) {

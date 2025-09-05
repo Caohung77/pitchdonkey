@@ -1,60 +1,21 @@
-import { NextRequest } from 'next/server'
-import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-middleware'
 import { ContactService } from '@/lib/contacts'
-import { updateContactSchema } from '@/lib/validations'
 
-export const GET = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
+// DELETE /api/contacts/[id] - Delete a single contact and prune from all lists
+export async function DELETE(request: NextRequest, ctx: { params: { id: string } }) {
   try {
-    const { id: contactId } = await params
-
-    const contactService = new ContactService()
-    const contact = await contactService.getContact(contactId, user.id)
-
-    if (!contact) {
-      return createSuccessResponse({ error: 'Contact not found' }, 404)
+    const { user } = await requireAuth(request)
+    const contactId = ctx?.params?.id
+    if (!contactId) {
+      return NextResponse.json({ error: 'Missing contact id' }, { status: 400 })
     }
 
-    return createSuccessResponse({ contact })
-
-  } catch (error) {
-    console.error('Get contact error:', error)
-    return handleApiError(error)
+    const service = new ContactService()
+    const result = await service.bulkDeleteContacts([contactId], user.id)
+    return NextResponse.json({ success: true, ...result })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message || 'Failed to delete contact' }, { status: 500 })
   }
-})
+}
 
-export const PUT = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
-  try {
-    const { id: contactId } = await params
-    const body = await request.json()
-    
-    console.log('PUT /api/contacts/[id] - Updating contact:', contactId, body)
-    
-    // Validate input
-    const validatedData = updateContactSchema.parse(body)
-
-    const contactService = new ContactService()
-    const contact = await contactService.updateContact(contactId, user.id, validatedData)
-
-    return createSuccessResponse({ contact }, 200)
-
-  } catch (error) {
-    console.error('Update contact error:', error)
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available')
-    return handleApiError(error)
-  }
-})
-
-export const DELETE = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
-  try {
-    const { id: contactId } = await params
-
-    const contactService = new ContactService()
-    await contactService.deleteContact(contactId, user.id)
-
-    return createSuccessResponse({ message: 'Contact deleted successfully' })
-
-  } catch (error) {
-    console.error('Delete contact error:', error)
-    return handleApiError(error)
-  }
-})

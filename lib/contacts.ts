@@ -867,6 +867,29 @@ export class ContactService {
       throw new Error(`Failed to delete contacts: ${error.message}`)
     }
 
+    // After deletion, prune these IDs from any contact_lists.contact_ids arrays
+    try {
+      // Find lists that reference any of the deleted IDs
+      const { data: lists } = await supabase
+        .from('contact_lists')
+        .select('id, contact_ids')
+        .eq('user_id', userId)
+        .overlaps('contact_ids', contactIds)
+
+      if (lists && lists.length > 0) {
+        for (const list of lists) {
+          const updated = (list.contact_ids || []).filter((id: string) => !contactIds.includes(id))
+          await supabase
+            .from('contact_lists')
+            .update({ contact_ids: updated, updated_at: new Date().toISOString() })
+            .eq('id', list.id)
+            .eq('user_id', userId)
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to prune deleted contacts from contact_lists:', e)
+    }
+
     return {
       success: true,
       deleted_count: data?.length || 0,

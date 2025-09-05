@@ -24,16 +24,30 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     }
 
     // Format the response with contact counts
-    const formattedLists = (lists || []).map(list => ({
-      id: list.id,
-      name: list.name,
-      description: list.description,
-      contactCount: list.contact_ids ? list.contact_ids.length : 0,
-      tags: list.tags || [],
-      isFavorite: list.is_favorite,
-      createdAt: list.created_at,
-      type: 'list' // To distinguish from segments
-    }))
+    // Compute counts based on existing contacts to avoid stale numbers
+    const formattedLists = [] as any[]
+    for (const list of lists || []) {
+      let count = 0
+      if (list.contact_ids && list.contact_ids.length > 0) {
+        const { count: existingCount } = await supabase
+          .from('contacts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .in('id', list.contact_ids)
+        count = existingCount || 0
+      }
+
+      formattedLists.push({
+        id: list.id,
+        name: list.name,
+        description: list.description,
+        contactCount: count,
+        tags: list.tags || [],
+        isFavorite: list.is_favorite,
+        createdAt: list.created_at,
+        type: 'list'
+      })
+    }
 
     return NextResponse.json({
       success: true,
