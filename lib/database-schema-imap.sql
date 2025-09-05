@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS public.incoming_emails (
   raw_email TEXT, -- Full raw email for debugging
   email_size INTEGER,
   
+  -- IMAP specific columns
+  imap_uid INTEGER, -- IMAP UID for tracking server-side changes
+  flags TEXT[], -- IMAP flags (seen, flagged, etc.)
+  archived_at TIMESTAMP WITH TIME ZONE, -- When email was deleted/archived
+  
   -- Indexing and timestamps
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -129,6 +134,7 @@ CREATE TABLE IF NOT EXISTS public.imap_connections (
   status VARCHAR(50) DEFAULT 'inactive' CHECK (status IN ('active', 'inactive', 'error', 'connecting')),
   last_sync_at TIMESTAMP WITH TIME ZONE,
   next_sync_at TIMESTAMP WITH TIME ZONE,
+  last_full_reconciliation_at TIMESTAMP WITH TIME ZONE,
   
   -- Sync configuration
   sync_interval_minutes INTEGER DEFAULT 15,
@@ -155,6 +161,8 @@ CREATE INDEX IF NOT EXISTS idx_incoming_emails_in_reply_to ON public.incoming_em
 CREATE INDEX IF NOT EXISTS idx_incoming_emails_processing_status ON public.incoming_emails(processing_status);
 CREATE INDEX IF NOT EXISTS idx_incoming_emails_classification_status ON public.incoming_emails(classification_status);
 CREATE INDEX IF NOT EXISTS idx_incoming_emails_date_received ON public.incoming_emails(date_received DESC);
+CREATE INDEX IF NOT EXISTS idx_incoming_emails_imap_uid ON public.incoming_emails(email_account_id, imap_uid);
+CREATE INDEX IF NOT EXISTS idx_incoming_emails_archived_at ON public.incoming_emails(archived_at);
 
 CREATE INDEX IF NOT EXISTS idx_email_replies_user_id ON public.email_replies(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_replies_campaign_id ON public.email_replies(campaign_id);

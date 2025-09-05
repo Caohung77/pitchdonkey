@@ -186,12 +186,27 @@ export class IMAPProcessor {
       // Open INBOX
       await this.openMailbox('INBOX')
 
-      // Search for new emails
+      // 1. First reconcile deletions to sync server state
+      console.log('🔄 Reconciling deleted emails...')
+      const reconcileResult = await this.reconcileDeletions(emailAccountId, 'INBOX')
+      
+      if (reconcileResult.errors.length > 0) {
+        console.warn('⚠️ Reconciliation warnings:', reconcileResult.errors)
+        // Don't fail the sync, just log warnings
+      }
+      
+      const archivedTotal = reconcileResult.archivedByUID + reconcileResult.archivedByMessageId
+      if (archivedTotal > 0) {
+        console.log(`✅ Archived ${archivedTotal} deleted emails`)
+      }
+
+      // 2. Search for new emails
       const newUIDs = await this.searchNewEmails(lastProcessedUID)
       
       console.log(`📧 Found ${newUIDs.length} new emails to process`)
 
       if (newUIDs.length === 0) {
+        console.log('✅ No new emails to process')
         await this.disconnect()
         return result
       }
@@ -445,60 +460,120 @@ export class IMAPProcessor {
   async reconcileDeletions(
     emailAccountId: string,
     folder: string = 'INBOX'
-  ): Promise<void> {
-    if (!this.imap) return
-    // List UIDs on server
-    const uidsOnServer: number[] = await new Promise((resolve, reject) => {
-      this.imap!.search(['ALL'], (err, uids) => {
-        if (err) reject(err)
-        else resolve(uids || [])
+  ): Promise<{
+    archivedByUID: number
+    archivedByMessageId: number
+    errors: string[]
+  }> {
+    const result = {
+      archivedByUID: 0,
+      archivedByMessageId: 0,
+      errors: []
+    }
+
+    if (!this.imap) {
+      result.errors.push('IMAP connection not available')
+      return result
+    }
+
+    try {
+      // List UIDs on server
+      const uidsOnServer: number[] = await new Promise((resolve, reject) => {
+        this.imap!.search(['ALL'], (err, uids) => {
+          if (err) reject(err)
+          else resolve(uids || [])
+        })
       })
-    })
 
-    // Fetch known rows (with/without UID) not archived
-    const { data: localRows, error } = await this.supabase
-      .from('incoming_emails')
-      .select('id, imap_uid, message_id')
-      .eq('email_account_id', emailAccountId)
-      .is('archived_at', null)
-      
+      console.log(`🔍 Server has ${uidsOnServer.length} emails`)
 
-    if (error) {
-      console.error('❌ Failed to load local IMAP UIDs:', error)
-      return
-    }
-
-    // First pass: by UID
-    const serverUIDSet = new Set(uidsOnServer)
-    const toArchiveByUid = (localRows || [])
-      .filter(r => typeof r.imap_uid === 'number' && !serverUIDSet.has(r.imap_uid as any))
-      .map(r => r.id)
-
-    if (toArchiveByUid.length > 0) {
-      console.log(`🧹 Archiving ${toArchiveByUid.length} emails (UID not on server)`)
-      const { error: updErr } = await this.supabase
+      // Fetch known rows (with/without UID) not archived
+      const { data: localRows, error } = await this.supabase
         .from('incoming_emails')
-        .update({ archived_at: new Date().toISOString() })
-        .in('id', toArchiveByUid)
-      if (updErr) console.error('❌ Failed to archive by UID:', updErr)
-    }
+        .select('id, imap_uid, message_id, subject, from_address')
+        .eq('email_account_id', emailAccountId)
+        .is('archived_at', null)
+        .order('date_received', { ascending: false })
 
-    // Second pass: for rows without imap_uid, compare Message-ID
-    const withoutUid = (localRows || []).filter(r => !r.imap_uid)
-    if (withoutUid.length > 0) {
-      // Fetch Message-ID headers for ALL on server
-      const serverMessageIds = await this.fetchServerMessageIds()
-      const toArchiveByMsgId = withoutUid
-        .filter(r => r.message_id && !serverMessageIds.has(r.message_id))
-        .map(r => r.id)
-      if (toArchiveByMsgId.length > 0) {
-        console.log(`🧹 Archiving ${toArchiveByMsgId.length} emails (Message-ID not on server)`)
-        const { error: upd2 } = await this.supabase
+      if (error) {
+        result.errors.push(`Failed to load local emails: ${error.message}`)
+        return result
+      }
+
+      console.log(`🔍 Database has ${localRows?.length || 0} unarchived emails`)
+
+      if (!localRows || localRows.length === 0) {
+        console.log('✅ No emails to reconcile')
+        return result
+      }
+
+      // First pass: by UID
+      const serverUIDSet = new Set(uidsOnServer)
+      const toArchiveByUid = (localRows || [])
+        .filter(r => typeof r.imap_uid === 'number' && !serverUIDSet.has(r.imap_uid as any))
+
+      if (toArchiveByUid.length > 0) {
+        console.log(`🧹 Archiving ${toArchiveByUid.length} emails (UID not on server)`)
+        for (const email of toArchiveByUid) {
+          console.log(`  - Archiving: ${email.from_address} - ${email.subject} (UID: ${email.imap_uid})`)
+        }
+        
+        const { error: updErr } = await this.supabase
           .from('incoming_emails')
           .update({ archived_at: new Date().toISOString() })
-          .in('id', toArchiveByMsgId)
-        if (upd2) console.error('❌ Failed to archive by Message-ID:', upd2)
+          .in('id', toArchiveByUid.map(r => r.id))
+        
+        if (updErr) {
+          result.errors.push(`Failed to archive by UID: ${updErr.message}`)
+        } else {
+          result.archivedByUID = toArchiveByUid.length
+        }
       }
+
+      // Second pass: for rows without imap_uid, compare Message-ID
+      const withoutUid = (localRows || []).filter(r => !r.imap_uid && r.message_id)
+      if (withoutUid.length > 0) {
+        console.log(`🔍 Checking ${withoutUid.length} emails without UID by Message-ID`)
+        
+        try {
+          // Fetch Message-ID headers for ALL on server
+          const serverMessageIds = await this.fetchServerMessageIds()
+          console.log(`🔍 Server has ${serverMessageIds.size} Message-IDs`)
+          
+          const toArchiveByMsgId = withoutUid
+            .filter(r => r.message_id && !serverMessageIds.has(r.message_id))
+          
+          if (toArchiveByMsgId.length > 0) {
+            console.log(`🧹 Archiving ${toArchiveByMsgId.length} emails (Message-ID not on server)`)
+            for (const email of toArchiveByMsgId) {
+              console.log(`  - Archiving: ${email.from_address} - ${email.subject} (Message-ID: ${email.message_id})`)
+            }
+            
+            const { error: upd2 } = await this.supabase
+              .from('incoming_emails')
+              .update({ archived_at: new Date().toISOString() })
+              .in('id', toArchiveByMsgId.map(r => r.id))
+            
+            if (upd2) {
+              result.errors.push(`Failed to archive by Message-ID: ${upd2.message}`)
+            } else {
+              result.archivedByMessageId = toArchiveByMsgId.length
+            }
+          }
+        } catch (msgIdError) {
+          result.errors.push(`Failed to fetch server Message-IDs: ${msgIdError.message}`)
+        }
+      }
+
+      const total = result.archivedByUID + result.archivedByMessageId
+      console.log(`✅ Reconciliation complete: ${total} emails archived (${result.archivedByUID} by UID, ${result.archivedByMessageId} by Message-ID)`)
+      
+      return result
+
+    } catch (error) {
+      result.errors.push(`Reconciliation failed: ${error.message}`)
+      console.error('❌ Reconciliation error:', error)
+      return result
     }
   }
 
@@ -524,6 +599,71 @@ export class IMAPProcessor {
       f.once('error', (err) => reject(err))
       f.once('end', () => resolve(ids))
     })
+  }
+
+  /**
+   * Perform full reconciliation (should be run periodically, e.g., daily)
+   */
+  async performFullReconciliation(
+    userId: string,
+    emailAccountId: string,
+    config: IMAPConfig
+  ): Promise<{
+    success: boolean
+    archivedEmails: number
+    errors: string[]
+    message: string
+  }> {
+    const result = {
+      success: false,
+      archivedEmails: 0,
+      errors: [],
+      message: ''
+    }
+
+    try {
+      console.log('🔄 Starting full IMAP reconciliation...')
+      
+      await this.connect(config)
+      if (!this.imap) {
+        throw new Error('Failed to establish IMAP connection')
+      }
+
+      await this.openMailbox('INBOX')
+      
+      const reconcileResult = await this.reconcileDeletions(emailAccountId, 'INBOX')
+      
+      result.archivedEmails = reconcileResult.archivedByUID + reconcileResult.archivedByMessageId
+      result.errors = reconcileResult.errors
+      result.success = reconcileResult.errors.length === 0
+      result.message = `Full reconciliation completed: ${result.archivedEmails} emails archived`
+      
+      // Update the full reconciliation timestamp
+      await this.supabase
+        .from('imap_connections')
+        .update({
+          last_full_reconciliation_at: new Date().toISOString()
+        })
+        .eq('email_account_id', emailAccountId)
+
+      await this.disconnect()
+      
+      console.log(`✅ Full reconciliation completed: ${result.archivedEmails} emails archived`)
+      return result
+
+    } catch (error) {
+      result.errors.push(error.message)
+      result.message = `Full reconciliation failed: ${error.message}`
+      console.error('❌ Full reconciliation error:', error)
+      
+      try {
+        await this.disconnect()
+      } catch (disconnectError) {
+        console.error('❌ Error disconnecting after reconciliation failure:', disconnectError)
+      }
+      
+      return result
+    }
   }
 
   /**

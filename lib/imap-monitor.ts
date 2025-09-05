@@ -91,6 +91,9 @@ export class IMAPMonitor {
       // Process unclassified emails across all users
       await this.processUnclassifiedEmails()
 
+      // Periodic full reconciliation (every 6 hours)
+      await this.performPeriodicReconciliation()
+
       console.log('🎉 === IMAP MONITORING CYCLE COMPLETED ===')
 
     } catch (error) {
@@ -198,12 +201,8 @@ export class IMAPMonitor {
         connection.last_processed_uid || 0
       )
 
-      // Reconcile deletions to mirror server state
-      try {
-        await imapProcessor.reconcileDeletions(account.id, 'INBOX')
-      } catch (reconErr) {
-        console.warn('⚠️ IMAP reconcile warning:', reconErr?.message || reconErr)
-      }
+      // Reconciliation is now handled within syncEmails
+      // No separate reconcilation call needed here
 
       // Update connection status based on result
       if (syncResult.errors.length === 0) {
@@ -331,6 +330,88 @@ export class IMAPMonitor {
     
     const delay = Math.min(baseDelay * Math.pow(2, consecutiveFailures - 1), maxDelay)
     return delay
+  }
+
+  /**
+   * Perform periodic full reconciliation for accounts that need it
+   */
+  private async performPeriodicReconciliation(): Promise<void> {
+    console.log('🔄 Checking for accounts needing full reconciliation...')
+    
+    try {
+      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000) // 6 hours ago
+      
+      const { data: accountsNeedingReconciliation } = await this.supabase
+        .from('imap_connections')
+        .select(`
+          *,
+          email_accounts (
+            id,
+            user_id,
+            email,
+            provider,
+            imap_host,
+            imap_port,
+            imap_username,
+            imap_password,
+            imap_secure,
+            smtp_password
+          )
+        `)
+        .eq('status', 'active')
+        .or(`last_full_reconciliation_at.is.null,last_full_reconciliation_at.lt.${sixHoursAgo.toISOString()}`)
+        .limit(5) // Limit to prevent overload
+      
+      if (!accountsNeedingReconciliation || accountsNeedingReconciliation.length === 0) {
+        console.log('✅ No accounts need full reconciliation')
+        return
+      }
+      
+      console.log(`🔄 Found ${accountsNeedingReconciliation.length} accounts needing full reconciliation`)
+      
+      for (const connection of accountsNeedingReconciliation) {
+        const account = connection.email_accounts
+        
+        try {
+          console.log(`🔄 Full reconciliation for ${account.email}`)
+          
+          // Prepare IMAP config
+          let password = null
+          if (account.imap_password) {
+            password = this.decryptPassword(account.imap_password)
+          } else if (account.smtp_password) {
+            password = this.decryptPassword(account.smtp_password)
+          }
+          
+          const imapConfig = {
+            host: account.imap_host,
+            port: account.imap_port || 993,
+            tls: account.imap_secure !== false,
+            user: account.imap_username || account.email,
+            password: password
+          }
+          
+          // Perform full reconciliation
+          const result = await imapProcessor.performFullReconciliation(
+            account.user_id,
+            account.id,
+            imapConfig
+          )
+          
+          if (result.success) {
+            console.log(`✅ Full reconciliation for ${account.email}: ${result.archivedEmails} emails archived`)
+          } else {
+            console.warn(`⚠️ Full reconciliation warnings for ${account.email}:`, result.errors)
+          }
+          
+        } catch (error) {
+          console.error(`❌ Full reconciliation failed for ${account.email}:`, error)
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error in periodic reconciliation:', error)
+    }
   }
 
   /**

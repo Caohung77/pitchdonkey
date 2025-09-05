@@ -89,6 +89,8 @@ export default function InboxPage() {
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([])
   const [selectedAccount, setSelectedAccount] = useState<string>('all')
   const [syncing, setSyncing] = useState(false)
+  const [autoSyncing, setAutoSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<string>('')
   
   // Contact modal states
   const [contactViewModalOpen, setContactViewModalOpen] = useState(false)
@@ -97,8 +99,35 @@ export default function InboxPage() {
   const [contactsData, setContactsData] = useState<Map<string, any>>(new Map())
 
   useEffect(() => {
-    fetchEmails()
-    fetchEmailAccounts()
+    const initializeInbox = async () => {
+      // Start with existing data from database (fast)
+      await fetchEmails()
+      await fetchEmailAccounts()
+      
+      // Then trigger IMAP sync in the background (slower but ensures fresh data)
+      // Only auto-sync if not already syncing to avoid conflicts
+      if (!syncing && !autoSyncing) {
+        console.log('🔄 Auto-syncing IMAP on inbox load...')
+        setAutoSyncing(true)
+        setSyncStatus('')
+        try {
+          const syncResult = await forceSync('all')
+          const newEmailsCount = syncResult?.data?.totalNewEmails || 0
+          setSyncStatus(`✅ Auto-sync completed: ${newEmailsCount} new emails found`)
+          
+          // Clear success message after 3 seconds
+          setTimeout(() => setSyncStatus(''), 3000)
+        } catch (error) {
+          console.error('Auto-sync failed:', error)
+          setSyncStatus('❌ Auto-sync failed')
+          setTimeout(() => setSyncStatus(''), 5000)
+        } finally {
+          setAutoSyncing(false)
+        }
+      }
+    }
+    
+    initializeInbox()
   }, [])
 
   useEffect(() => {
@@ -124,7 +153,11 @@ export default function InboxPage() {
       const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
-        setEmails(data.emails || [])
+        const emailList = data.emails || []
+        setEmails(emailList)
+        
+        // Preload contact data to prevent button flashing
+        await preloadContactsForEmails(emailList)
       }
     } catch (error) {
       console.error('Error fetching emails:', error)
@@ -165,13 +198,15 @@ export default function InboxPage() {
         console.log('Sync completed:', data.message)
         // Automatically refresh emails after successful sync
         await fetchEmails()
+        return data // Return the sync result
       } else {
         console.error('Sync failed:', data.error)
-        // You might want to show a toast notification here
+        throw new Error(data.error || 'Sync failed')
       }
       
     } catch (error) {
       console.error('Error during force sync:', error)
+      throw error // Re-throw so calling code can handle it
     } finally {
       setSyncing(false)
     }
@@ -267,6 +302,26 @@ export default function InboxPage() {
     }
   }
 
+  // Batch lookup all contacts when emails load to prevent flashing
+  const preloadContactsForEmails = async (emailList: IncomingEmail[]) => {
+    const uniqueEmails = [...new Set(emailList.map(email => extractEmailAddress(email.from_address)))]
+    const uncachedEmails = uniqueEmails.filter(email => !contactsData.has(email))
+    
+    if (uncachedEmails.length === 0) return
+
+    try {
+      // Do parallel lookups for all uncached emails
+      const lookupPromises = uncachedEmails.map(async (emailAddress) => {
+        const contact = await lookupContactByEmail(emailAddress)
+        return { emailAddress, contact }
+      })
+      
+      await Promise.all(lookupPromises)
+    } catch (error) {
+      console.error('Error preloading contacts:', error)
+    }
+  }
+
   const handleViewContact = async (emailAddress: string) => {
     const contact = await lookupContactByEmail(emailAddress)
     if (contact) {
@@ -296,6 +351,14 @@ export default function InboxPage() {
     // Check if contact exists when component mounts
     useEffect(() => {
       const checkContact = async () => {
+        // Check if already cached first (to prevent flashing)
+        if (contactsData.has(emailAddress)) {
+          const cachedContact = contactsData.get(emailAddress)
+          setContactExists(!!cachedContact)
+          return
+        }
+
+        // Only show loading if not cached
         setIsLoading(true)
         const contact = await lookupContactByEmail(emailAddress)
         setContactExists(!!contact)
@@ -303,13 +366,23 @@ export default function InboxPage() {
       }
       
       checkContact()
-    }, [emailAddress])
+    }, [emailAddress, contactsData])
 
     if (isLoading) {
       return (
         <Button size="sm" variant="outline" disabled>
           <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400 mr-1"></div>
           Loading...
+        </Button>
+      )
+    }
+
+    // Show a neutral state while data is loading to prevent flashing
+    if (contactExists === null) {
+      return (
+        <Button size="sm" variant="outline" disabled>
+          <User className="h-3 w-3 mr-1" />
+          Contact
         </Button>
       )
     }
@@ -363,10 +436,25 @@ export default function InboxPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Inbox</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            Inbox
+            {autoSyncing && (
+              <div className="flex items-center gap-1 text-sm text-blue-600 font-normal">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Auto-syncing...
+              </div>
+            )}
+          </h1>
           <p className="text-gray-600">
             {emails.length} emails • {filteredEmails.length} showing
           </p>
+          {syncStatus && (
+            <p className={`text-sm mt-1 ${
+              syncStatus.includes('✅') ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {syncStatus}
+            </p>
+          )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
