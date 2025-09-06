@@ -64,8 +64,8 @@ export class DNSLookupService {
       const txtRecords = await this.lookupTXTWithRetry(dkimDomain)
       const responseTime = Date.now() - startTime
       
-      // Find DKIM record (should contain v=DKIM1)
-      const dkimRecord = txtRecords.find(record => 
+      // Find and reconstruct DKIM record (may be split across multiple strings)
+      let dkimRecord = txtRecords.find(record => 
         record.includes('v=DKIM1')
       )
       
@@ -74,6 +74,17 @@ export class DNSLookupService {
           record: null,
           responseTime,
           rawResponse: txtRecords
+        }
+      }
+
+      // If this is a multi-part DKIM record, concatenate all parts
+      // DKIM records are often split when they exceed DNS string limits
+      if (txtRecords.length > 1) {
+        // Find the starting record with v=DKIM1
+        const startIndex = txtRecords.findIndex(record => record.includes('v=DKIM1'))
+        if (startIndex !== -1) {
+          // Concatenate all records from the DKIM start record onward
+          dkimRecord = txtRecords.slice(startIndex).join('').replace(/\s/g, '')
         }
       }
       
