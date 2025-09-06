@@ -56,6 +56,8 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
   const [status, setStatus] = useState<DomainAuthStatus | null>(null)
   const [generatedRecords, setGeneratedRecords] = useState<DNSRecord[]>([])
   const [error, setError] = useState('')
+  const [dkimSelector, setDkimSelector] = useState<string>('coldreach2024')
+  const [recordMeta, setRecordMeta] = useState<{ providers?: string[]; smtpHosts?: string[]; smtpIps?: string[] } | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -83,6 +85,8 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
     try {
       const data = await ApiClient.get(`/api/domains/${encodeURIComponent(domain)}/records`)
       setGeneratedRecords(data.records)
+      if (data.selector) setDkimSelector(data.selector)
+      if (data.meta) setRecordMeta(data.meta)
     } catch (error) {
       console.error('Error generating DNS records:', error)
     }
@@ -393,6 +397,28 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
           </Tabs>
 
           {/* Help Links */}
+          {recordMeta && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Provider‑Specific Notes</CardTitle>
+                <CardDescription>Instructions tailored to your current email account settings.</CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                {recordMeta.providers && recordMeta.providers.length > 0 && (
+                  <p>
+                    Detected providers: <span className="font-mono">{recordMeta.providers.join(', ')}</span>. Your SPF includes these providers so mail sent through them is authorized.
+                  </p>
+                )}
+                {recordMeta.smtpHosts && recordMeta.smtpHosts.length > 0 && (
+                  <p>
+                    Custom SMTP host(s): <span className="font-mono">{recordMeta.smtpHosts.join(', ')}</span>. We resolved their IPs and added ip4/ip6 to your SPF. DKIM uses selector <span className="font-mono">{dkimSelector}</span>.
+                  </p>
+                )}
+                <p className="text-gray-600">IMAP is for receiving; SPF/DKIM/DMARC depend on your sending (SMTP) settings only.</p>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Need Help?</CardTitle>

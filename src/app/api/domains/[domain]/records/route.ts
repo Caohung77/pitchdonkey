@@ -1,115 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth-middleware'
-import { DomainAuthService } from '@/lib/domain-auth'
+import { SPFGenerator } from '@/lib/dns-record-generators/spf-generator'
+import { DKIMGenerator } from '@/lib/dns-record-generators/dkim-generator'
+import { DMARCGenerator } from '@/lib/dns-record-generators/dmarc-generator'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { promises as dns } from 'dns'
 
-// GET /api/domains/[domain]/records - Generate DNS records for domain
-export const GET = withAuth(async (
-  request: NextRequest,
-  { user, supabase },
-  { params }: { params: Promise<{ domain: string }> }
-) => {
+export const GET = withAuth(async (request: NextRequest, { user }, { params }: { params: { domain: string } }) => {
   try {
-    const resolvedParams = await params
-    const domain = decodeURIComponent(resolvedParams.domain)
-    const domainAuthService = new DomainAuthService()
+    const domain = decodeURIComponent(params.domain).toLowerCase()
+    const supabase = createServerSupabaseClient()
 
-    // Get or create domain authentication record
-    let domainAuth = await domainAuthService.getDomain(user.id, domain)
-    
-    if (!domainAuth) {
-      domainAuth = await domainAuthService.createDomain(user.id, {
-        domain,
-        dns_provider: 'manual',
-        auto_configure: false
-      })
+    // Infer providers from the user's email accounts on this domain
+    const { data: accounts } = await supabase
+      .from('email_accounts')
+      .select('provider, smtp_host')
+      .eq('user_id', user.id)
+      .ilike('email', `%@${domain}`)
+
+    // Derive SPF sources from actual accounts
+    const providers = new Set<string>()
+    const smtpHosts = new Set<string>()
+    for (const acc of accounts || []) {
+      if (acc.provider === 'smtp' && acc.smtp_host) smtpHosts.add(acc.smtp_host)
+      else if (acc.provider) providers.add(String(acc.provider))
     }
 
-    // Generate simple DNS records for the domain
-    const dkimSelector = domainAuth.dkim_selector || 'coldreach2024'
+    let spfRecord
+    const meta: any = { providers: Array.from(providers), smtpHosts: Array.from(smtpHosts), smtpIps: [] as string[] }
+    if (providers.size > 0) {
+      spfRecord = SPFGenerator.generateForProviders(domain, Array.from(providers))
+    } else if (smtpHosts.size > 0) {
+      // Try to build SPF from SMTP host IPs or include if the host itself publishes SPF
+      const ipAddresses: string[] = []
+      for (const host of smtpHosts) {
+        try {
+          // If the host publishes an SPF record, prefer include:host
+          // (will be captured by generateRecord via includeProviders if we pass as a provider-like token)
+          // Fallback to resolving A/AAAA records and using ip4/ip6
+          const a = await dns.resolve4(host).catch(() => [])
+          const aaaa = await dns.resolve6(host).catch(() => [])
+          ipAddresses.push(...(a as string[]), ...(aaaa as string[]))
+          meta.smtpIps.push(...(a as string[]), ...(aaaa as string[]))
+        } catch {}
+      }
+      spfRecord = SPFGenerator.generateRecord({ domain, includeProviders: [], ipAddresses, mechanism: 'softfail' })
+    } else {
+      // Conservative default if we cannot infer anything
+      spfRecord = SPFGenerator.generateRecord({ domain, includeProviders: [], ipAddresses: [], mechanism: 'softfail' })
+    }
+
+    // Generate DKIM keys/record (selector is generated inside)
+    const dkim = DKIMGenerator.generateForDomain(domain)
+
+    // Generate DMARC (monitoring to start)
+    const dmarc = DMARCGenerator.generateProgressiveRecords(domain)
 
     const records = [
-      {
-        type: 'SPF',
-        name: domain,
-        value: 'v=spf1 include:_spf.google.com include:mailgun.org ~all',
-        description: 'SPF record to authorize email servers',
-        recordType: 'spf',
-        status: domainAuth.spf_verified ? 'verified' : 'pending',
-        instructions: [
-          'Add this TXT record to your DNS settings',
-          'Host/Name: @ (or your domain name)',
-          'Value: Copy the entire SPF record above',
-          'TTL: 3600 (or default)'
-        ]
-      },
-      {
-        type: 'DKIM',
-        name: `${dkimSelector}._domainkey.${domain}`,
-        value: 'v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC7vKqvK8nKtKjKtKjKtKjKtKjKtKjKtKjKtKjKtKjKtKjKtKjKtKjKtKj...',
-        description: 'DKIM public key for email authentication',
-        recordType: 'dkim',
-        selector: dkimSelector,
-        status: domainAuth.dkim_verified ? 'verified' : 'pending',
-        instructions: [
-          'Add this TXT record to your DNS settings',
-          `Host/Name: ${dkimSelector}._domainkey`,
-          'Value: Copy the entire DKIM record above',
-          'TTL: 3600 (or default)',
-          'Note: This is a development placeholder key'
-        ]
-      },
-      {
-        type: 'DMARC',
-        name: `_dmarc.${domain}`,
-        value: `v=DMARC1; p=none; rua=mailto:dmarc-reports@${domain}; ruf=mailto:dmarc-failures@${domain}; sp=none; adkim=r; aspf=r`,
-        description: 'DMARC policy for email authentication',
-        recordType: 'dmarc',
-        status: domainAuth.dmarc_verified ? 'verified' : 'pending',
-        instructions: [
-          'Add this TXT record to your DNS settings',
-          'Host/Name: _dmarc',
-          'Value: Copy the entire DMARC record above',
-          'TTL: 3600 (or default)',
-          'Start with policy "none" for monitoring'
-        ]
-      }
+      { type: 'SPF' as const, name: domain, value: spfRecord.record.value, status: 'pending' as const },
+      { type: 'DKIM' as const, name: dkim.record.name, value: dkim.record.value, status: 'pending' as const },
+      { type: 'DMARC' as const, name: `_dmarc.${domain}`, value: dmarc.monitoring.record.value, status: 'pending' as const },
     ]
 
-    return NextResponse.json({
-      success: true,
-      domain,
-      records,
-      developmentMode: true,
-      developmentNotice: 'You are in development mode. These records are for demonstration purposes. In production, you would add these to your actual DNS provider.',
-      instructions: {
-        general: [
-          'Add these DNS TXT records to your domain registrar or DNS provider',
-          'DNS changes can take up to 48 hours to propagate worldwide',
-          'Verify the records after adding them using the verification button'
-        ],
-        spf: [
-          'SPF records specify which servers are allowed to send email for your domain',
-          'Only add one SPF record per domain',
-          'Test your SPF record before going live'
-        ],
-        dkim: [
-          'DKIM adds a digital signature to your emails',
-          'The selector helps identify which key to use for verification',
-          'Keep your private key secure and never share it'
-        ],
-        dmarc: [
-          'DMARC builds on SPF and DKIM to provide email authentication',
-          'Start with policy "none" to monitor without blocking emails',
-          'Gradually move to "quarantine" then "reject" as you gain confidence'
-        ]
-      }
-    })
-  } catch (error) {
-    console.error('Error generating DNS records:', error)
-    return NextResponse.json({
-      error: 'Failed to generate DNS records',
-      code: 'GENERATION_ERROR',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    return NextResponse.json({ success: true, records, selector: dkim.config.selector, meta })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message || 'Failed to generate records' }, { status: 500 })
   }
 })

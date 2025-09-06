@@ -1,80 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { withAuth } from '@/lib/auth-middleware'
 import { DomainAuthService } from '@/lib/domain-auth'
 
-// POST /api/domains/[domain]/verify - Verify domain authentication records
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ domain: string }> }
-) {
+export const POST = withAuth(async (request: NextRequest, { user }, { params }: { params: { domain: string } }) => {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const service = new DomainAuthService()
+    const domain = decodeURIComponent(params.domain).toLowerCase()
+
+    // Ensure a domain_auth record exists
+    const existing = await service.getDomain(user.id, domain)
+    if (!existing) {
+      await service.createDomain(user.id, { domain, dns_provider: 'manual', auto_configure: false } as any)
     }
 
-    const resolvedParams = await params
-    const domain = decodeURIComponent(resolvedParams.domain)
-    const domainAuthService = new DomainAuthService()
-
-    // Get or create domain auth record
-    let domainAuth = await domainAuthService.getDomain(user.id, domain)
-    
-    if (!domainAuth) {
-      domainAuth = await domainAuthService.createDomain(user.id, {
-        domain,
-        dns_provider: 'manual',
-        auto_configure: false
-      })
-    }
-
-    // For now, we'll do a simplified verification that just checks if records exist
-    // In production, you would implement actual DNS lookups
-    
-    // Simulate verification results (replace with actual DNS verification)
-    const mockVerification = {
-      spf: { verified: false, error: 'SPF record not found or invalid' },
-      dkim: { verified: false, error: 'DKIM record not found or invalid' },
-      dmarc: { verified: false, error: 'DMARC record not found or invalid' }
-    }
-
-    // Update verification status in database
-    await domainAuthService.updateVerificationStatus(user.id, domain, 'spf', mockVerification.spf.verified, undefined, mockVerification.spf.error)
-    await domainAuthService.updateVerificationStatus(user.id, domain, 'dkim', mockVerification.dkim.verified, undefined, mockVerification.dkim.error)
-    await domainAuthService.updateVerificationStatus(user.id, domain, 'dmarc', mockVerification.dmarc.verified, undefined, mockVerification.dmarc.error)
-
-    // Format response to match the expected structure
-    const status = {
+    const status = await service.verifyDomain(user.id, domain)
+    // Map to UI shape
+    const mapped = {
       domain,
-      spf: {
-        verified: mockVerification.spf.verified,
-        error: mockVerification.spf.error
-      },
-      dkim: {
-        verified: mockVerification.dkim.verified,
-        selector: domainAuth.dkim_selector || 'coldreach2024',
-        error: mockVerification.dkim.error
-      },
-      dmarc: {
-        verified: mockVerification.dmarc.verified,
-        error: mockVerification.dmarc.error
-      },
-      overallStatus: 'unverified',
-      lastChecked: new Date().toISOString()
+      spf: { verified: !!status.spf?.success, record: status.spf?.record?.raw, error: status.spf?.validation.errors.join('; ') || undefined },
+      dkim: { verified: !!status.dkim?.success, record: status.dkim?.record?.raw, selector: status.dkim?.record?.selector, error: status.dkim?.validation.errors.join('; ') || undefined },
+      dmarc: { verified: !!status.dmarc?.success, record: status.dmarc?.record?.raw, error: status.dmarc?.validation.errors.join('; ') || undefined },
+      overallStatus: status.overallStatus,
+      lastChecked: status.lastChecked
     }
 
-    return NextResponse.json({
-      success: true,
-      status,
-      message: 'Domain verification completed (Note: This is currently a simplified verification. In production, this would perform actual DNS lookups.)'
-    })
-  } catch (error) {
-    console.error('Error verifying domain:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: true, status: mapped })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message || 'Failed to verify domain' }, { status: 500 })
   }
-}
+})
+
