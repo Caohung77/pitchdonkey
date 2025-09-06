@@ -56,10 +56,33 @@ export const GET = withAuth(async (request: NextRequest, { user }, { params }: {
     // Generate DMARC (monitoring to start)
     const dmarc = DMARCGenerator.generateProgressiveRecords(domain)
 
+    // Helper function to extract prefix from FQDN
+    const extractPrefix = (fqdn: string, domain: string): string => {
+      return fqdn.replace(`.${domain}`, '')
+    }
+
     const records = [
-      { type: 'SPF' as const, name: domain, value: spfRecord.record.value, status: 'pending' as const },
-      { type: 'DKIM' as const, name: dkim.record.name, value: dkim.record.value, status: 'pending' as const },
-      { type: 'DMARC' as const, name: `_dmarc.${domain}`, value: dmarc.monitoring.record.value, status: 'pending' as const },
+      { 
+        type: 'SPF' as const, 
+        name: domain,  // FQDN format
+        prefix: '@',   // Prefix format for German providers
+        value: spfRecord.record.value, 
+        status: 'pending' as const 
+      },
+      { 
+        type: 'DKIM' as const, 
+        name: dkim.record.name,  // FQDN format
+        prefix: extractPrefix(dkim.record.name, domain),  // Prefix format
+        value: dkim.record.value, 
+        status: 'pending' as const 
+      },
+      { 
+        type: 'DMARC' as const, 
+        name: `_dmarc.${domain}`,  // FQDN format
+        prefix: '_dmarc',  // Prefix format
+        value: dmarc.monitoring.record.value, 
+        status: 'pending' as const 
+      },
     ]
 
     return NextResponse.json({ success: true, records, selector: dkim.config.selector, meta })

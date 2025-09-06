@@ -23,6 +23,7 @@ interface DomainAuthDialogProps {
 interface DNSRecord {
   type: string
   name: string
+  prefix?: string  // Prefix format for German providers
   value: string
   status: 'verified' | 'pending' | 'missing' | 'error'
 }
@@ -270,7 +271,13 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
                         <div className="font-medium">Type:</div>
                         <div className="col-span-3">TXT</div>
                         <div className="font-medium">Name:</div>
-                        <div className="col-span-3">@ (or leave blank)</div>
+                        <div className="col-span-3">
+                          <div className="font-mono text-xs">@</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            German providers: Use "@"<br/>
+                            Some providers: Leave blank or use root domain
+                          </div>
+                        </div>
                         <div className="font-medium">Value:</div>
                         <div className="col-span-3 font-mono text-xs bg-gray-50 p-2 rounded border break-all">
                           {record.value}
@@ -314,7 +321,13 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
                         <div className="font-medium">Type:</div>
                         <div className="col-span-3">TXT</div>
                         <div className="font-medium">Name:</div>
-                        <div className="col-span-3 font-mono text-xs">{record.name}</div>
+                        <div className="col-span-3">
+                          <div className="font-mono text-xs">{record.prefix || record.name}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            German providers (Strato, 1&1): Use prefix "{record.prefix}"<br/>
+                            Other providers: Use full name "{record.name}"
+                          </div>
+                        </div>
                         <div className="font-medium">Value:</div>
                         <div className="col-span-3 font-mono text-xs bg-gray-50 p-2 rounded border break-all max-h-32 overflow-y-auto">
                           {record.value}
@@ -362,7 +375,12 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
                         <div className="font-medium">Type:</div>
                         <div className="col-span-3">TXT</div>
                         <div className="font-medium">Name:</div>
-                        <div className="col-span-3">_dmarc</div>
+                        <div className="col-span-3">
+                          <div className="font-mono text-xs">_dmarc</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            All providers: Use "_dmarc" as prefix/name
+                          </div>
+                        </div>
                         <div className="font-medium">Value:</div>
                         <div className="col-span-3 font-mono text-xs bg-gray-50 p-2 rounded border break-all">
                           {record.value}
