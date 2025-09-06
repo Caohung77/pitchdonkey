@@ -30,11 +30,28 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       }, { status: 500 })
     }
 
-    console.log('Successfully fetched email accounts, returning response')
+    // Add domain field to each account by extracting from email
+    const accountsWithDomain = (accounts || []).map(account => {
+      try {
+        const domain = extractDomainFromEmail(account.email)
+        return {
+          ...account,
+          domain
+        }
+      } catch (error) {
+        console.warn(`Failed to extract domain from email ${account.email}:`, error)
+        return {
+          ...account,
+          domain: null
+        }
+      }
+    })
+
+    console.log('Successfully fetched email accounts with domains, returning response')
 
     const response = NextResponse.json({
       success: true,
-      data: accounts || [],
+      data: accountsWithDomain,
     })
     
     return addSecurityHeaders(response)
