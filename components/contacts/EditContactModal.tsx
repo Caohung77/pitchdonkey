@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { AlertCircle, AlertTriangle, X, Sparkles, Eye, EyeOff } from 'lucide-react'
 import { EnrichmentDisplay } from './EnrichmentDisplay'
@@ -27,6 +28,7 @@ interface Contact {
   country?: string
   city?: string
   timezone?: string
+  sex?: string
   status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
   tags: string[]
   created_at: string
@@ -66,6 +68,7 @@ interface ContactFormData {
   country: string
   city: string
   timezone: string
+  sex: string
   // Enrichment fields (company is merged with normal company field)
   enriched_industry: string
   enriched_products_services: string
@@ -94,6 +97,7 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
     country: '',
     city: '',
     timezone: '',
+    sex: '',
     // Enrichment fields (company is merged with normal company field)
     enriched_industry: '',
     enriched_products_services: '',
@@ -130,6 +134,7 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         country: contact.country || '',
         city: contact.city || '',
         timezone: contact.timezone || '',
+        sex: contact.sex || '',
         // Populate enrichment fields if available (company overwrites normal company field)
         enriched_industry: enrichmentData?.industry || '',
         enriched_products_services: enrichmentData?.products_services?.join(', ') || '',
@@ -146,6 +151,10 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
@@ -186,11 +195,23 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         body: JSON.stringify(formData),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        const errorMessage = data.error?.message || data.error || 'Failed to update contact'
+        let errorMessage = 'Failed to update contact'
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error?.message || errorData.error || errorMessage
+        } catch {
+          // If response body can't be parsed, use default message
+        }
         throw new Error(errorMessage)
+      }
+
+      let data
+      try {
+        data = await response.json()
+      } catch {
+        // Handle empty response - success case
+        data = { success: true, message: 'Contact updated successfully' }
       }
 
       console.log('EditContactModal: Contact updated successfully:', data)
@@ -409,6 +430,21 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
                   onChange={handleInputChange}
                   placeholder="America/New_York"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="sex">Sex/Gender</Label>
+                <Select value={formData.sex} onValueChange={(value) => handleSelectChange('sex', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Not specified" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="m">Male</SelectItem>
+                    <SelectItem value="f">Female</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

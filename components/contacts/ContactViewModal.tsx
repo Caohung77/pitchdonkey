@@ -143,6 +143,17 @@ export function ContactViewModal({
                     </div>
                   </div>
                 )}
+                {'sex' in contact && contact.sex && (
+                  <div className="flex items-center gap-3">
+                    <User className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Gender</p>
+                      <p className="text-sm text-gray-600">
+                        {contact.sex === 'm' ? 'Male' : contact.sex === 'f' ? 'Female' : 'Not specified'}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {contact.website && (
                   <div className="flex items-center gap-3">

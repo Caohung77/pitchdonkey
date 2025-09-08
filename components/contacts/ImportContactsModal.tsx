@@ -119,13 +119,16 @@ export function ImportContactsModal({ onImportComplete }: ImportContactsModalPro
   }
 
   const handleMappingChange = (csvField: string, contactField: string) => {
-    setCustomFieldMappings(prev => 
-      prev.map(mapping => 
+    console.log(`ImportContactsModal: Mapping ${csvField} to ${contactField}`)
+    setCustomFieldMappings(prev => {
+      const updated = prev.map(mapping => 
         mapping.csvField === csvField 
           ? { ...mapping, contactField }
           : mapping
       )
-    )
+      console.log('ImportContactsModal: Updated mappings:', updated)
+      return updated
+    })
   }
 
   const proceedToImport = () => {

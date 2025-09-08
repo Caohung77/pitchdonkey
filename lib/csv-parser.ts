@@ -41,13 +41,14 @@ export class CSVParser {
     country: { required: false, label: 'Country' },
     city: { required: false, label: 'City' },
     timezone: { required: false, label: 'Timezone' },
+    sex: { required: false, label: 'Sex/Gender' },
     source: { required: false, label: 'Source' }
   }
 
   private static readonly FIELD_ALIASES = {
     email: ['email', 'email_address', 'e-mail', 'mail', 'contact_email'],
-    first_name: ['first_name', 'firstname', 'first', 'fname', 'given_name'],
-    last_name: ['last_name', 'lastname', 'last', 'lname', 'surname', 'family_name'],
+    first_name: ['first_name', 'firstname', 'first', 'fname', 'given_name', 'vorname'],
+    last_name: ['last_name', 'lastname', 'last', 'lname', 'surname', 'family_name', 'nachname'],
     company: ['company', 'company_name', 'organization', 'org', 'business'],
     position: ['position', 'job_title', 'title', 'role', 'job'],
     website: ['website', 'url', 'web', 'site', 'homepage'],
@@ -59,6 +60,7 @@ export class CSVParser {
     country: ['country', 'nation', 'location_country'],
     city: ['city', 'location', 'location_city'],
     timezone: ['timezone', 'tz', 'time_zone'],
+    sex: ['sex', 'gender', 'geschlecht', 'm_f', 'male_female'],
     source: ['source', 'import_source', 'data_source']
   }
 

@@ -38,6 +38,7 @@ const CONTACT_FIELD_OPTIONS = {
   'country': { label: 'Country', required: false },
   'city': { label: 'City', required: false },
   'timezone': { label: 'Timezone', required: false },
+  'sex': { label: 'Sex/Gender', required: false },
   'source': { label: 'Source', required: false }
 }
 
@@ -212,23 +213,38 @@ export function FieldMappingPreview({
                   {/* Contact Field Selection */}
                   <div className="w-64">
                     <Select
-                      value={currentMapping}
-                      onValueChange={(value) => onMappingChange(header, value)}
+                      value={currentMapping || ""}
+                      onValueChange={(value) => {
+                        console.log(`Mapping ${header} to ${value}`)
+                        onMappingChange(header, value)
+                      }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="border-2">
                         <SelectValue placeholder="Select field..." />
                       </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(CONTACT_FIELD_OPTIONS).map(([value, config]) => (
-                          <SelectItem key={value} value={value}>
-                            <div className="flex items-center justify-between w-full">
-                              <span>{config.label}</span>
-                              {config.required && (
-                                <Badge variant="outline" className="ml-2 text-xs">Required</Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
+                      <SelectContent className="z-50">
+                        {Object.entries(CONTACT_FIELD_OPTIONS).map(([value, config]) => {
+                          // Check if this field is already mapped to prevent duplicates
+                          const isAlreadyMapped = Array.from(mappingLookup.values()).includes(value) && mappingLookup.get(header) !== value
+                          
+                          return (
+                            <SelectItem 
+                              key={value} 
+                              value={value}
+                              disabled={isAlreadyMapped && value !== '__skip__'}
+                            >
+                              <div className="flex items-center justify-between w-full">
+                                <span className={isAlreadyMapped ? 'text-gray-400' : ''}>
+                                  {config.label}
+                                  {isAlreadyMapped && ' (Already mapped)'}
+                                </span>
+                                {config.required && (
+                                  <Badge variant="outline" className="ml-2 text-xs">Required</Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          )
+                        })}
                       </SelectContent>
                     </Select>
                   </div>

@@ -482,6 +482,8 @@ export type Database = {
           enrichment_data: Json | null
           enrichment_status: string | null
           enrichment_updated_at: string | null
+          enrichment_sources: string[] | null
+          enrichment_priority: string | null
           first_name: string | null
           id: string
           last_clicked_at: string | null
@@ -490,10 +492,14 @@ export type Database = {
           last_opened_at: string | null
           last_replied_at: string | null
           linkedin_url: string | null
+          linkedin_profile_data: Json | null
+          linkedin_extraction_status: string | null
+          linkedin_extracted_at: string | null
           phone: string | null
           position: string | null
           postcode: string | null
           segments: string[] | null
+          sex: string | null
           source: string | null
           status: string | null
           tags: string[] | null
@@ -517,6 +523,8 @@ export type Database = {
           enrichment_data?: Json | null
           enrichment_status?: string | null
           enrichment_updated_at?: string | null
+          enrichment_sources?: string[] | null
+          enrichment_priority?: string | null
           first_name?: string | null
           id?: string
           last_clicked_at?: string | null
@@ -525,10 +533,14 @@ export type Database = {
           last_opened_at?: string | null
           last_replied_at?: string | null
           linkedin_url?: string | null
+          linkedin_profile_data?: Json | null
+          linkedin_extraction_status?: string | null
+          linkedin_extracted_at?: string | null
           phone?: string | null
           position?: string | null
           postcode?: string | null
           segments?: string[] | null
+          sex?: string | null
           source?: string | null
           status?: string | null
           tags?: string[] | null
@@ -552,6 +564,8 @@ export type Database = {
           enrichment_data?: Json | null
           enrichment_status?: string | null
           enrichment_updated_at?: string | null
+          enrichment_sources?: string[] | null
+          enrichment_priority?: string | null
           first_name?: string | null
           id?: string
           last_clicked_at?: string | null
@@ -560,10 +574,14 @@ export type Database = {
           last_opened_at?: string | null
           last_replied_at?: string | null
           linkedin_url?: string | null
+          linkedin_profile_data?: Json | null
+          linkedin_extraction_status?: string | null
+          linkedin_extracted_at?: string | null
           phone?: string | null
           position?: string | null
           postcode?: string | null
           segments?: string[] | null
+          sex?: string | null
           source?: string | null
           status?: string | null
           tags?: string[] | null

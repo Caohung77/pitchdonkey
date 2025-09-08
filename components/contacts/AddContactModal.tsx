@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertCircle, Plus, X } from 'lucide-react'
 import { EnrichmentButton } from './EnrichmentButton'
 
@@ -32,6 +33,7 @@ interface ContactFormData {
   country: string
   city: string
   timezone: string
+  sex: string
   source: string
 }
 
@@ -85,6 +87,7 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: 
         country: '',
         city: '',
         timezone: '',
+        sex: '',
         source: 'manual'
       })
     }
@@ -92,6 +95,10 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
@@ -203,6 +210,7 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: 
         country: '',
         city: '',
         timezone: '',
+        sex: '',
         source: 'manual'
       })
     }
@@ -422,6 +430,21 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: 
                   onChange={handleInputChange}
                   placeholder="America/New_York"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="sex">Sex/Gender</Label>
+                <Select value={formData.sex} onValueChange={(value) => handleSelectChange('sex', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Not specified" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="m">Male</SelectItem>
+                    <SelectItem value="f">Female</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

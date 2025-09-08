@@ -368,7 +368,7 @@ export default function InboxPage() {
   }
 
   // Component for contact action buttons
-  const ContactActionButtons = ({ fromAddress }: { fromAddress: string }) => {
+  const ContactActionButtons = ({ fromAddress, email }: { fromAddress: string, email: IncomingEmail }) => {
     const emailAddress = extractEmailAddress(fromAddress)
     const [isLoading, setIsLoading] = useState(false)
     const [contactExists, setContactExists] = useState<boolean | null>(null)
@@ -376,22 +376,43 @@ export default function InboxPage() {
     // Check if contact exists when component mounts
     useEffect(() => {
       const checkContact = async () => {
-        // Check if already cached first (to prevent flashing)
+        // First check if contact exists in email_replies (most accurate for campaign-related emails)
+        const existingContact = email.email_replies.find(reply => 
+          reply.contact_id && reply.contacts && reply.contacts.email === emailAddress
+        )
+        
+        if (existingContact) {
+          setContactExists(true)
+          return
+        }
+
+        // Check if already cached (includes both positive and negative results)
         if (contactsData.has(emailAddress)) {
           const cachedContact = contactsData.get(emailAddress)
           setContactExists(!!cachedContact)
           return
         }
 
-        // Only show loading if not cached
+        // Database lookup for uncached contacts
         setIsLoading(true)
-        const contact = await lookupContactByEmail(emailAddress)
-        setContactExists(!!contact)
-        setIsLoading(false)
+        try {
+          const contact = await lookupContactByEmail(emailAddress)
+          setContactExists(!!contact)
+          
+          // Cache both positive and negative results to avoid repeated lookups
+          contactsData.set(emailAddress, contact)
+        } catch (error) {
+          console.error('Error looking up contact:', error)
+          setContactExists(false)
+          // Cache negative result
+          contactsData.set(emailAddress, null)
+        } finally {
+          setIsLoading(false)
+        }
       }
       
       checkContact()
-    }, [emailAddress, contactsData])
+    }, [emailAddress, email.email_replies, contactsData])
 
     if (isLoading) {
       return (
@@ -419,7 +440,16 @@ export default function InboxPage() {
           variant="outline"
           onClick={(e) => {
             e.stopPropagation()
-            handleViewContact(emailAddress)
+            // Use contact from email_replies if available, otherwise lookup
+            const existingContact = email.email_replies.find(reply => 
+              reply.contact_id && reply.contacts && reply.contacts.email === emailAddress
+            )
+            if (existingContact && existingContact.contacts) {
+              setSelectedContact(existingContact.contacts)
+              setContactViewModalOpen(true)
+            } else {
+              handleViewContact(emailAddress)
+            }
           }}
           className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
         >
@@ -623,7 +653,7 @@ export default function InboxPage() {
                           {formatDate(email.date_received)}
                         </p>
                         <div className="flex gap-2 flex-col">
-                          <ContactActionButtons fromAddress={email.from_address} />
+                          <ContactActionButtons fromAddress={email.from_address} email={email} />
                           <Button
                             size="sm"
                             variant="outline"
