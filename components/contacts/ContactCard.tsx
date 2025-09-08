@@ -4,6 +4,7 @@ import { Contact } from '@/lib/contacts'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { parseCompanyName } from '@/lib/contact-utils'
 import { 
   Mail, 
   Building,
@@ -67,8 +68,9 @@ export function ContactCard({
     }
     
     // Priority 2: Company Name
-    if (contact.company && contact.company.trim()) {
-      return contact.company.trim()
+    const companyName = parseCompanyName(contact.company)
+    if (companyName && companyName.trim()) {
+      return companyName.trim()
     }
     
     // Priority 3: Email (fallback)
@@ -119,17 +121,18 @@ export function ContactCard({
               
               {/* Company/Position */}
               {(() => {
-                const isCompanyAsTitle = !contact.first_name && !contact.last_name && contact.company
+                const companyName = parseCompanyName(contact.company)
+                const isCompanyAsTitle = !contact.first_name && !contact.last_name && companyName
                 
                 let displayText = ''
                 if (isCompanyAsTitle && contact.position) {
                   displayText = contact.position
-                } else if (contact.position && contact.company) {
-                  displayText = `${contact.position} at ${contact.company}`
+                } else if (contact.position && companyName) {
+                  displayText = `${contact.position} at ${companyName}`
                 } else if (contact.position) {
                   displayText = contact.position
-                } else if (contact.company && !isCompanyAsTitle) {
-                  displayText = contact.company
+                } else if (companyName && !isCompanyAsTitle) {
+                  displayText = companyName
                 }
 
                 return displayText ? (

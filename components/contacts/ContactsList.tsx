@@ -5,6 +5,7 @@ import { Users, AlertCircle, Edit, Trash2, Tag, List, MoreVertical, Sparkles } f
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { parseCompanyName } from '@/lib/contact-utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -469,7 +470,8 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
             const fullName = `${firstName} ${lastName}`.trim()
             
             if (fullName) return fullName
-            if (contact.company && contact.company.trim()) return contact.company.trim()
+            const companyName = parseCompanyName(contact.company)
+            if (companyName && companyName.trim()) return companyName.trim()
             return contact.email
           }
 
@@ -477,12 +479,13 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
             const firstName = contact.first_name || ''
             const lastName = contact.last_name || ''
             const fullName = `${firstName} ${lastName}`.trim()
-            const isCompanyAsTitle = !fullName && contact.company && contact.company.trim()
+            const companyName = parseCompanyName(contact.company)
+            const isCompanyAsTitle = !fullName && companyName && companyName.trim()
             
             if (isCompanyAsTitle && contact.position) return contact.position
-            if (contact.position && contact.company) return `${contact.position} at ${contact.company}`
+            if (contact.position && companyName) return `${contact.position} at ${companyName}`
             if (contact.position) return contact.position
-            if (contact.company && !isCompanyAsTitle) return contact.company
+            if (companyName && !isCompanyAsTitle) return companyName
             return null
           }
 

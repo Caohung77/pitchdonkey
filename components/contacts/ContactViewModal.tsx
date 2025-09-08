@@ -24,6 +24,7 @@ import {
   Clock4
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { parseCompanyName } from '@/lib/contact-utils'
 
 interface ContactViewModalProps {
   contact: Contact | null
@@ -51,8 +52,9 @@ export function ContactViewModal({
     }
     
     // Priority 2: Company Name
-    if (contact.company && contact.company.trim()) {
-      return contact.company.trim()
+    const companyName = parseCompanyName(contact.company)
+    if (companyName && companyName.trim()) {
+      return companyName.trim()
     }
     
     // Priority 3: Email (fallback)
@@ -84,6 +86,7 @@ export function ContactViewModal({
       minute: '2-digit'
     })
   }
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -117,11 +120,17 @@ export function ContactViewModal({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsList className={`grid w-full mb-6 ${contact.linkedin_profile_data ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <TabsTrigger value="details" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Contact Details
             </TabsTrigger>
+            {contact.linkedin_profile_data && (
+              <TabsTrigger value="linkedin" className="flex items-center gap-2">
+                <Linkedin className="h-4 w-4" />
+                LinkedIn Profile
+              </TabsTrigger>
+            )}
             <TabsTrigger value="activity" className="flex items-center gap-2">
               <Send className="h-4 w-4" />
               Campaigns & Lists
@@ -243,12 +252,12 @@ export function ContactViewModal({
               <h3 className="text-lg font-medium text-gray-900">Professional</h3>
               
               <div className="space-y-3">
-                {contact.company && (
+                {parseCompanyName(contact.company) && (
                   <div className="flex items-center gap-3">
                     <Building className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Company</p>
-                      <p className="text-sm text-gray-600">{contact.company}</p>
+                      <p className="text-sm text-gray-600">{parseCompanyName(contact.company)}</p>
                     </div>
                   </div>
                 )}
@@ -323,55 +332,6 @@ export function ContactViewModal({
             </div>
           )}
 
-          {/* LinkedIn Profile Data */}
-          {'linkedin_profile_data' in contact && contact.linkedin_profile_data && (
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-3">
-                <Linkedin className="h-4 w-4 text-blue-600" />
-                <h3 className="text-lg font-medium text-blue-900">LinkedIn Profile Data</h3>
-                {'linkedin_extracted_at' in contact && contact.linkedin_extracted_at && (
-                  <span className="text-xs text-blue-600 ml-auto">
-                    Extracted {formatDate(contact.linkedin_extracted_at as string)}
-                  </span>
-                )}
-              </div>
-              
-              <div className="space-y-3">
-                {typeof contact.linkedin_profile_data === 'object' && contact.linkedin_profile_data && (
-                  <>
-                    {(contact.linkedin_profile_data as any).headline && (
-                      <div>
-                        <p className="text-sm font-medium text-blue-800">Headline</p>
-                        <p className="text-sm text-blue-700">{(contact.linkedin_profile_data as any).headline}</p>
-                      </div>
-                    )}
-                    
-                    {(contact.linkedin_profile_data as any).summary && (
-                      <div>
-                        <p className="text-sm font-medium text-blue-800">Summary</p>
-                        <p className="text-sm text-blue-700">{(contact.linkedin_profile_data as any).summary}</p>
-                      </div>
-                    )}
-                    
-                    {(contact.linkedin_profile_data as any).experience && Array.isArray((contact.linkedin_profile_data as any).experience) && (contact.linkedin_profile_data as any).experience.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-blue-800">Recent Experience</p>
-                        <div className="space-y-2 mt-1">
-                          {(contact.linkedin_profile_data as any).experience.slice(0, 2).map((exp: any, index: number) => (
-                            <div key={index} className="bg-blue-100 p-2 rounded text-xs">
-                              <div className="font-medium text-blue-900">{exp.title}</div>
-                              <div className="text-blue-700">{exp.company}</div>
-                              {exp.duration && <div className="text-blue-600">{exp.duration}</div>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* AI Enrichment Data */}
           {contact.enrichment_data && contact.enrichment_status === 'completed' && (
@@ -475,6 +435,316 @@ export function ContactViewModal({
             </div>
           </div>
           </TabsContent>
+
+          {/* LinkedIn Profile Tab */}
+          {contact.linkedin_profile_data && (
+            <TabsContent value="linkedin" className="space-y-4">
+              {/* Header Section */}
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-blue-600 p-2 rounded-lg">
+                      <Linkedin className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-blue-900">LinkedIn Profile</h2>
+                      {'linkedin_extracted_at' in contact && contact.linkedin_extracted_at && (
+                        <p className="text-xs text-blue-600">
+                          Extracted {formatDate(contact.linkedin_extracted_at as string)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Badge className="bg-green-100 text-green-800 border-green-200">
+                    ✓ Data Available
+                  </Badge>
+                </div>
+              </div>
+
+              {typeof contact.linkedin_profile_data === 'object' && contact.linkedin_profile_data && (
+                <div className="grid gap-4">
+                  
+                  {/* Professional Summary Card */}
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Building className="h-4 w-4 text-gray-600" />
+                      <h3 className="font-semibold text-gray-900">Professional Summary</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Company & Position */}
+                      <div className="space-y-3">
+                        {(contact.linkedin_profile_data as any).current_company && (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Company</span>
+                            <span className="text-sm font-medium text-gray-900">
+                              {typeof (contact.linkedin_profile_data as any).current_company === 'object' 
+                                ? (contact.linkedin_profile_data as any).current_company.name 
+                                : (contact.linkedin_profile_data as any).current_company}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {(contact.linkedin_profile_data as any).position && (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Position</span>
+                            <span className="text-sm text-gray-800">{(contact.linkedin_profile_data as any).position}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Location & Industry */}
+                      <div className="space-y-3">
+                        {(contact.linkedin_profile_data as any).city && (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location</span>
+                            <span className="text-sm text-gray-800">
+                              {(contact.linkedin_profile_data as any).city}
+                              {(contact.linkedin_profile_data as any).country && `, ${(contact.linkedin_profile_data as any).country}`}
+                            </span>
+                          </div>
+                        )}
+
+                        {(contact.linkedin_profile_data as any).industry && (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Industry</span>
+                            <span className="text-sm text-gray-800">{(contact.linkedin_profile_data as any).industry}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* About Section - CRITICAL for personalization */}
+                  {(contact.linkedin_profile_data as any).about && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <User className="h-4 w-4 text-gray-600" />
+                        <h3 className="font-semibold text-gray-900">About</h3>
+                        <Badge variant="outline" className="text-xs">Personalization Key</Badge>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg border-l-4 border-blue-400">
+                        <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+                          {(contact.linkedin_profile_data as any).about}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Network Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(contact.linkedin_profile_data as any).followers && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {(contact.linkedin_profile_data as any).followers?.toLocaleString()}
+                        </div>
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Followers</div>
+                      </div>
+                    )}
+                    
+                    {(contact.linkedin_profile_data as any).connections && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {(contact.linkedin_profile_data as any).connections}+
+                        </div>
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Connections</div>
+                      </div>
+                    )}
+
+                    {(contact.linkedin_profile_data as any).recommendations_count && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {(contact.linkedin_profile_data as any).recommendations_count}
+                        </div>
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recommendations</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Languages */}
+                  {(contact.linkedin_profile_data as any).languages && Array.isArray((contact.linkedin_profile_data as any).languages) && (contact.linkedin_profile_data as any).languages.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Globe className="h-4 w-4 text-gray-600" />
+                        <h3 className="font-semibold text-gray-900">Languages</h3>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {(contact.linkedin_profile_data as any).languages.map((lang: any, index: number) => (
+                          <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                            <p className="font-medium text-gray-900 text-sm">{lang.title}</p>
+                            {lang.subtitle && lang.subtitle !== '-' && (
+                              <p className="text-xs text-gray-600 mt-1">{lang.subtitle}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Services (Serviceleistungen) - CRITICAL for German profiles */}
+                  {(contact.linkedin_profile_data as any).services && Array.isArray((contact.linkedin_profile_data as any).services) && (contact.linkedin_profile_data as any).services.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Building className="h-4 w-4 text-gray-600" />
+                        <h3 className="font-semibold text-gray-900">Services</h3>
+                        <Badge variant="outline" className="text-xs">Serviceleistungen</Badge>
+                      </div>
+                      <div className="space-y-3">
+                        {(contact.linkedin_profile_data as any).services.map((service: any, index: number) => (
+                          <div key={index} className="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg border-l-4 border-blue-500">
+                            <p className="font-medium text-gray-900">{service.name || service}</p>
+                            {service.description && (
+                              <p className="text-sm text-gray-700 mt-1">{service.description}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Education */}
+                  {(contact.linkedin_profile_data as any).education && Array.isArray((contact.linkedin_profile_data as any).education) && (contact.linkedin_profile_data as any).education.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-4 text-gray-600">🎓</div>
+                        <h3 className="font-semibold text-gray-900">Education</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {(contact.linkedin_profile_data as any).education.map((edu: any, index: number) => (
+                          <div key={index} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{edu.title || edu.school}</p>
+                                {edu.degree && <p className="text-sm text-gray-700">{edu.degree}</p>}
+                                {edu.field && <p className="text-sm text-gray-600">{edu.field}</p>}
+                              </div>
+                              {(edu.start_year || edu.end_year) && (
+                                <div className="text-xs text-gray-500 text-right bg-white px-2 py-1 rounded">
+                                  {edu.start_year} - {edu.end_year}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Experience */}
+                  {(contact.linkedin_profile_data as any).experience && Array.isArray((contact.linkedin_profile_data as any).experience) && (contact.linkedin_profile_data as any).experience.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-4 text-gray-600">💼</div>
+                        <h3 className="font-semibold text-gray-900">Professional Experience</h3>
+                      </div>
+                      <div className="space-y-4">
+                        {(contact.linkedin_profile_data as any).experience.slice(0, 3).map((exp: any, index: number) => (
+                          <div key={index} className="border border-gray-100 rounded-lg p-3 bg-gray-50 relative">
+                            {/* Timeline indicator */}
+                            {index < (contact.linkedin_profile_data as any).experience.length - 1 && (
+                              <div className="absolute left-4 top-16 w-px h-8 bg-gray-300"></div>
+                            )}
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
+                              <div className="flex-1">
+                                <div className="flex justify-between items-start mb-1">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">{exp.title}</p>
+                                    <p className="text-sm text-gray-700">{exp.company}</p>
+                                    {exp.location && <p className="text-xs text-gray-600">{exp.location}</p>}
+                                  </div>
+                                  <div className="text-xs text-gray-500 bg-white px-2 py-1 rounded text-right">
+                                    {exp.start_date && (
+                                      <div>{exp.start_date} - {exp.end_date || 'Present'}</div>
+                                    )}
+                                    {exp.duration && <div className="text-gray-400">{exp.duration}</div>}
+                                  </div>
+                                </div>
+                                
+                                {/* Nested positions */}
+                                {exp.positions && Array.isArray(exp.positions) && exp.positions.length > 0 && (
+                                  <div className="mt-2 ml-4 space-y-1">
+                                    {exp.positions.map((pos: any, posIndex: number) => (
+                                      <div key={posIndex} className="bg-white p-2 rounded border-l-2 border-blue-200 text-xs">
+                                        <p className="font-medium text-gray-800">{pos.title}</p>
+                                        <p className="text-gray-600">{pos.start_date} - {pos.end_date}</p>
+                                        {pos.location && <p className="text-gray-500">{pos.location}</p>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {(contact.linkedin_profile_data as any).experience.length > 3 && (
+                          <div className="text-center">
+                            <Badge variant="outline" className="text-xs">
+                              +{(contact.linkedin_profile_data as any).experience.length - 3} more positions
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Additional Data Sections (Only if Available) */}
+                  
+                  {/* Recommendations */}
+                  {(contact.linkedin_profile_data as any).recommendations && Array.isArray((contact.linkedin_profile_data as any).recommendations) && (contact.linkedin_profile_data as any).recommendations.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-4 text-gray-600">⭐</div>
+                        <h3 className="font-semibold text-gray-900">Recommendations</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {(contact.linkedin_profile_data as any).recommendations.slice(0, 2).map((rec: string, index: number) => (
+                          <div key={index} className="bg-gradient-to-r from-yellow-50 to-orange-50 p-3 rounded-lg border-l-4 border-orange-400">
+                            <p className="text-sm text-gray-800 italic leading-relaxed">"{rec}"</p>
+                          </div>
+                        ))}
+                        {(contact.linkedin_profile_data as any).recommendations.length > 2 && (
+                          <div className="text-center">
+                            <Badge variant="outline" className="text-xs">
+                              +{(contact.linkedin_profile_data as any).recommendations.length - 2} more recommendations
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recent Posts - CRITICAL for personalization */}
+                  {(contact.linkedin_profile_data as any).posts && Array.isArray((contact.linkedin_profile_data as any).posts) && (contact.linkedin_profile_data as any).posts.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-4 text-gray-600">📱</div>
+                        <h3 className="font-semibold text-gray-900">Recent Posts</h3>
+                        <Badge variant="outline" className="text-xs">Personalization</Badge>
+                      </div>
+                      <div className="space-y-3">
+                        {(contact.linkedin_profile_data as any).posts.slice(0, 2).map((post: any, index: number) => (
+                          <div key={index} className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border-l-4 border-green-400">
+                            <p className="text-sm text-gray-800 leading-relaxed">{post.text}</p>
+                            <div className="flex justify-between items-center mt-2">
+                              {post.date && <p className="text-xs text-gray-500">{post.date}</p>}
+                              {post.engagement && (
+                                <div className="flex gap-2 text-xs text-gray-600">
+                                  {post.engagement.likes && <span>👍 {post.engagement.likes}</span>}
+                                  {post.engagement.comments && <span>💬 {post.engagement.comments}</span>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </TabsContent>
+          )}
 
           <TabsContent value="activity" className="space-y-6">
             {/* Lists Section */}
