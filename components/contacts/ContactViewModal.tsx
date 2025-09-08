@@ -17,7 +17,11 @@ import {
   Tag,
   Send,
   List,
-  Clock
+  Clock,
+  Linkedin,
+  Twitter,
+  Hash,
+  Clock4
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -91,11 +95,17 @@ export function ContactViewModal({
               {formatName(contact)}
             </DialogTitle>
             <div className="flex items-center gap-2">
-              {/* AI Enriched indicator */}
+              {/* AI Enriched indicators */}
               {'enrichment_status' in contact && contact.enrichment_status === 'completed' && (
-                <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200 flex items-center gap-1">
+                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200 flex items-center gap-1">
                   <Sparkles className="h-3 w-3" />
-                  AI Enriched
+                  Website Enriched
+                </Badge>
+              )}
+              {'linkedin_extraction_status' in contact && contact.linkedin_extraction_status === 'completed' && (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200 flex items-center gap-1">
+                  <Linkedin className="h-3 w-3" />
+                  LinkedIn Extracted
                 </Badge>
               )}
               {/* Status badge */}
@@ -171,6 +181,60 @@ export function ContactViewModal({
                     </div>
                   </div>
                 )}
+
+                {contact.linkedin_url && (
+                  <div className="flex items-center gap-3">
+                    <Linkedin className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">LinkedIn</p>
+                      <a 
+                        href={contact.linkedin_url.startsWith('http') ? contact.linkedin_url : `https://${contact.linkedin_url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 underline"
+                      >
+                        {contact.linkedin_url}
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {contact.twitter_url && (
+                  <div className="flex items-center gap-3">
+                    <Twitter className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Twitter</p>
+                      <a 
+                        href={contact.twitter_url.startsWith('http') ? contact.twitter_url : `https://${contact.twitter_url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 underline"
+                      >
+                        {contact.twitter_url}
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {contact.timezone && (
+                  <div className="flex items-center gap-3">
+                    <Clock4 className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Timezone</p>
+                      <p className="text-sm text-gray-600">{contact.timezone}</p>
+                    </div>
+                  </div>
+                )}
+
+                {contact.source && (
+                  <div className="flex items-center gap-3">
+                    <Hash className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Source</p>
+                      <p className="text-sm text-gray-600">{contact.source}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -199,25 +263,42 @@ export function ContactViewModal({
                   </div>
                 )}
 
-                {(('address' in contact && contact.address) || ('city' in contact && contact.city) || ('state' in contact && contact.state) || ('zip_code' in contact && contact.zip_code)) && (
+                {contact.address && (
                   <div className="flex items-start gap-3">
                     <MapPin className="h-4 w-4 text-gray-500 mt-0.5" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Address</p>
-                      <div className="text-sm text-gray-600">
-                        {'address' in contact && contact.address && <p>{contact.address as string}</p>}
-                        {(('city' in contact && contact.city) || ('state' in contact && contact.state) || ('zip_code' in contact && contact.zip_code)) && (
-                          <p>
-                            {[
-                              'city' in contact ? contact.city : undefined,
-                              'state' in contact ? contact.state : undefined, 
-                              'zip_code' in contact ? contact.zip_code : undefined
-                            ]
-                              .filter(Boolean)
-                              .join(', ')}
-                          </p>
-                        )}
-                      </div>
+                      <p className="text-sm text-gray-600">{contact.address}</p>
+                    </div>
+                  </div>
+                )}
+
+                {contact.city && (
+                  <div className="flex items-center gap-3">
+                    <MapPin className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">City</p>
+                      <p className="text-sm text-gray-600">{contact.city}</p>
+                    </div>
+                  </div>
+                )}
+
+                {contact.postcode && (
+                  <div className="flex items-center gap-3">
+                    <Hash className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Postcode</p>
+                      <p className="text-sm text-gray-600">{contact.postcode}</p>
+                    </div>
+                  </div>
+                )}
+
+                {contact.country && (
+                  <div className="flex items-center gap-3">
+                    <Globe className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Country</p>
+                      <p className="text-sm text-gray-600">{contact.country}</p>
                     </div>
                   </div>
                 )}
@@ -242,28 +323,83 @@ export function ContactViewModal({
             </div>
           )}
 
-          {/* AI Enrichment Data */}
-          {contact.enrichment_data && contact.enrichment_status === 'completed' && (
+          {/* LinkedIn Profile Data */}
+          {'linkedin_profile_data' in contact && contact.linkedin_profile_data && (
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-4 w-4 text-blue-600" />
-                <h3 className="text-lg font-medium text-blue-900">AI Enrichment Data</h3>
+                <Linkedin className="h-4 w-4 text-blue-600" />
+                <h3 className="text-lg font-medium text-blue-900">LinkedIn Profile Data</h3>
+                {'linkedin_extracted_at' in contact && contact.linkedin_extracted_at && (
+                  <span className="text-xs text-blue-600 ml-auto">
+                    Extracted {formatDate(contact.linkedin_extracted_at as string)}
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                {typeof contact.linkedin_profile_data === 'object' && contact.linkedin_profile_data && (
+                  <>
+                    {(contact.linkedin_profile_data as any).headline && (
+                      <div>
+                        <p className="text-sm font-medium text-blue-800">Headline</p>
+                        <p className="text-sm text-blue-700">{(contact.linkedin_profile_data as any).headline}</p>
+                      </div>
+                    )}
+                    
+                    {(contact.linkedin_profile_data as any).summary && (
+                      <div>
+                        <p className="text-sm font-medium text-blue-800">Summary</p>
+                        <p className="text-sm text-blue-700">{(contact.linkedin_profile_data as any).summary}</p>
+                      </div>
+                    )}
+                    
+                    {(contact.linkedin_profile_data as any).experience && Array.isArray((contact.linkedin_profile_data as any).experience) && (contact.linkedin_profile_data as any).experience.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-blue-800">Recent Experience</p>
+                        <div className="space-y-2 mt-1">
+                          {(contact.linkedin_profile_data as any).experience.slice(0, 2).map((exp: any, index: number) => (
+                            <div key={index} className="bg-blue-100 p-2 rounded text-xs">
+                              <div className="font-medium text-blue-900">{exp.title}</div>
+                              <div className="text-blue-700">{exp.company}</div>
+                              {exp.duration && <div className="text-blue-600">{exp.duration}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* AI Enrichment Data */}
+          {contact.enrichment_data && contact.enrichment_status === 'completed' && (
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-green-600" />
+                <h3 className="text-lg font-medium text-green-900">AI Website Enrichment Data</h3>
+                {'enrichment_updated_at' in contact && contact.enrichment_updated_at && (
+                  <span className="text-xs text-green-600 ml-auto">
+                    Enriched {formatDate(contact.enrichment_updated_at as string)}
+                  </span>
+                )}
               </div>
               
               <div className="space-y-3">
                 {contact.enrichment_data.industry && (
                   <div>
-                    <p className="text-sm font-medium text-blue-800">Industry</p>
-                    <p className="text-sm text-blue-700">{contact.enrichment_data.industry}</p>
+                    <p className="text-sm font-medium text-green-800">Industry</p>
+                    <p className="text-sm text-green-700">{contact.enrichment_data.industry}</p>
                   </div>
                 )}
                 
                 {contact.enrichment_data.products_services && contact.enrichment_data.products_services.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium text-blue-800">Products & Services</p>
+                    <p className="text-sm font-medium text-green-800">Products & Services</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {contact.enrichment_data.products_services.map((service, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs bg-blue-100 text-blue-800">
+                        <Badge key={index} variant="secondary" className="text-xs bg-green-100 text-green-800">
                           {service}
                         </Badge>
                       ))}
@@ -273,10 +409,10 @@ export function ContactViewModal({
                 
                 {contact.enrichment_data.target_audience && contact.enrichment_data.target_audience.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium text-blue-800">Target Audience</p>
+                    <p className="text-sm font-medium text-green-800">Target Audience</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {contact.enrichment_data.target_audience.map((audience, index) => (
-                        <Badge key={index} variant="outline" className="text-xs border-blue-300 text-blue-700">
+                        <Badge key={index} variant="outline" className="text-xs border-green-300 text-green-700">
                           {audience}
                         </Badge>
                       ))}
@@ -286,11 +422,11 @@ export function ContactViewModal({
                 
                 {contact.enrichment_data.unique_points && contact.enrichment_data.unique_points.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium text-blue-800">Unique Points</p>
-                    <ul className="text-sm text-blue-700 mt-1 space-y-1">
+                    <p className="text-sm font-medium text-green-800">Unique Points</p>
+                    <ul className="text-sm text-green-700 mt-1 space-y-1">
                       {contact.enrichment_data.unique_points.map((point, index) => (
                         <li key={index} className="flex items-start gap-2">
-                          <span className="text-blue-500 mt-1">•</span>
+                          <span className="text-green-500 mt-1">•</span>
                           <span>{point}</span>
                         </li>
                       ))}
@@ -300,8 +436,8 @@ export function ContactViewModal({
                 
                 {contact.enrichment_data.tone_style && (
                   <div>
-                    <p className="text-sm font-medium text-blue-800">Communication Style</p>
-                    <p className="text-sm text-blue-700">{contact.enrichment_data.tone_style}</p>
+                    <p className="text-sm font-medium text-green-800">Communication Style</p>
+                    <p className="text-sm text-green-700">{contact.enrichment_data.tone_style}</p>
                   </div>
                 )}
               </div>
@@ -325,9 +461,15 @@ export function ContactViewModal({
                 <p className="text-gray-600">{formatDate(contact.updated_at)}</p>
               </div>
               {'enrichment_updated_at' in contact && contact.enrichment_updated_at && (
-                <div className="md:col-span-2">
-                  <p className="font-medium text-gray-700">AI Enriched</p>
+                <div>
+                  <p className="font-medium text-gray-700">Website Enriched</p>
                   <p className="text-gray-600">{formatDate(contact.enrichment_updated_at as string)}</p>
+                </div>
+              )}
+              {'linkedin_extracted_at' in contact && contact.linkedin_extracted_at && (
+                <div>
+                  <p className="font-medium text-gray-700">LinkedIn Extracted</p>
+                  <p className="text-gray-600">{formatDate(contact.linkedin_extracted_at as string)}</p>
                 </div>
               )}
             </div>
