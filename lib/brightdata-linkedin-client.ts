@@ -9,45 +9,80 @@ interface LinkedInProfileRequest {
 }
 
 interface LinkedInProfileResponse {
-  // Basic Profile Information
-  linkedin_id?: string
-  name?: string
+  // Core Profile Fields (Bright Data Schema)
+  id?: string                           // Unique identifier for the person's LinkedIn profile
+  linkedin_id?: string                  // Alternative LinkedIn ID format
+  linkedin_num_id?: string             // Numeric LinkedIn ID
+  name?: string                        // Profile name (97.39% coverage)
   first_name?: string
   last_name?: string
   headline?: string
-  summary?: string
+  about?: string                       // Concise profile summary (18.96% coverage)
   
-  // Location
-  city?: string
+  // Location Information (High Coverage)
+  city?: string                        // Geographical location (96.08% coverage)
   state?: string
   country?: string
-  country_code?: string
+  country_code?: string                // Geographical location (96.94% coverage)
   
   // Professional Information
-  position?: string
-  current_company?: string
+  position?: string                    // Current job title (91.70% coverage)
+  current_company?: string             // Legacy format
+  current_company_name?: string        // Company name from current_company object
+  current_company_company_id?: string  // Company ID from current_company object
   industry?: string
   
-  // Profile URLs and Media
-  profile_url?: string
-  avatar_url?: string
-  banner_url?: string
+  // Current Company Object (100% coverage)
+  current_company?: {
+    name?: string
+    company_id?: string
+    industry?: string
+    job_title?: string
+    location?: string
+    start_date?: string
+  }
   
-  // Experience and Education
+  // Media and URLs
+  url?: string                         // LinkedIn profile URL
+  input_url?: string                   // Original input URL
+  profile_url?: string                 // Alternative URL format
+  avatar?: string                      // Profile picture URL
+  avatar_url?: string                  // Alternative avatar format
+  banner_image?: string                // Banner image URL
+  banner_url?: string                  // Alternative banner format
+  timestamp?: string                   // Data extraction timestamp
+  
+  // Professional History (65.24% coverage)
   experience?: Array<{
     title?: string
     company?: string
+    company_id?: string
+    company_url?: string
     location?: string
     start_date?: string
     end_date?: string
     description?: string
     duration?: string
+    industry?: string
   }>
   
+  // Education Details
   education?: Array<{
     school?: string
     degree?: string
     field_of_study?: string
+    start_year?: string
+    end_year?: string
+    start_date?: string
+    end_date?: string
+    description?: string
+    school_url?: string
+  }>
+  
+  educations_details?: Array<{
+    institution?: string
+    degree?: string
+    field?: string
     start_year?: string
     end_year?: string
     description?: string
@@ -58,25 +93,37 @@ interface LinkedInProfileResponse {
   certifications?: Array<{
     name?: string
     organization?: string
+    organization_url?: string
     issue_date?: string
     expiration_date?: string
     credential_id?: string
     credential_url?: string
+    description?: string
   }>
   
-  // Additional Information
+  // Languages and International
   languages?: Array<{
     name?: string
     proficiency?: string
   }>
   
-  honors_awards?: Array<{
+  // Recognition and Awards
+  honors_and_awards?: Array<{
+    title?: string
+    issuer?: string
+    issue_date?: string
+    description?: string
+    url?: string
+  }>
+  
+  honors_awards?: Array<{  // Legacy format compatibility
     title?: string
     issuer?: string
     issue_date?: string
     description?: string
   }>
   
+  // Professional Activities
   volunteer_experience?: Array<{
     organization?: string
     role?: string
@@ -84,6 +131,7 @@ interface LinkedInProfileResponse {
     start_date?: string
     end_date?: string
     description?: string
+    url?: string
   }>
   
   projects?: Array<{
@@ -92,25 +140,105 @@ interface LinkedInProfileResponse {
     url?: string
     start_date?: string
     end_date?: string
+    associated_with?: string
   }>
   
-  // Social and Contact
+  courses?: Array<{
+    name?: string
+    institution?: string
+    completion_date?: string
+    url?: string
+    description?: string
+  }>
+  
+  publications?: Array<{
+    title?: string
+    publisher?: string
+    publication_date?: string
+    url?: string
+    description?: string
+    authors?: string[]
+  }>
+  
+  patents?: Array<{
+    title?: string
+    patent_office?: string
+    patent_number?: string
+    issue_date?: string
+    inventors?: string[]
+    description?: string
+    url?: string
+  }>
+  
+  organizations?: Array<{
+    name?: string
+    position?: string
+    start_date?: string
+    end_date?: string
+    description?: string
+  }>
+  
+  // Social Activity (2.43% coverage)
+  posts?: Array<{
+    title?: string
+    content?: string
+    created_date?: string
+    url?: string
+    likes_count?: number
+    comments_count?: number
+    shares_count?: number
+    media_type?: string
+  }>
+  
+  activity?: Array<{
+    type?: string
+    title?: string
+    date?: string
+    url?: string
+    engagement?: {
+      likes?: number
+      comments?: number
+      shares?: number
+    }
+  }>
+  
+  // Social Metrics
+  followers?: number                   // Alternative to follower_count
+  follower_count?: number
+  connections?: number                 // Alternative to connection_count  
+  connection_count?: number
+  recommendations_count?: number
+  
+  // Recommendations
   recommendations?: Array<{
     text?: string
     recommender?: string
+    recommender_profile?: string
     relationship?: string
+    date?: string
   }>
   
+  // Related Profiles
+  people_also_viewed?: Array<{
+    name?: string
+    profile_url?: string
+    headline?: string
+    current_company?: string
+  }>
+  
+  // Contact Information
   contact_info?: {
     websites?: string[]
     phone?: string
     email?: string
+    twitter?: string
+    address?: string
   }
   
-  // Metadata
-  follower_count?: number
-  connection_count?: number
+  // Metadata and Quality
   profile_completeness?: number
+  data_quality_score?: number
+  extraction_confidence?: number
   
   // Error handling
   error?: string
@@ -143,8 +271,9 @@ export class BrightDataLinkedInClient {
   constructor() {
     this.config = {
       apiKey: process.env.BRIGHTDATA_API_KEY!,
+      // LinkedIn Profiles API dataset ID (working one)
       datasetId: process.env.BRIGHTDATA_DATASET_ID || 'gd_l1viktl72bvl7bjuj0',
-      baseUrl: process.env.BRIGHTDATA_API_URL || 'https://api.brightdata.com/datasets/v3/trigger'
+      baseUrl: process.env.BRIGHTDATA_API_URL || 'https://api.brightdata.com/datasets/v3'
     }
 
     if (!this.config.apiKey) {
@@ -182,10 +311,15 @@ export class BrightDataLinkedInClient {
     console.log(`🔍 Extracting ${validUrls.length} LinkedIn profiles via Bright Data...`)
 
     try {
-      // Prepare request payload (convert Java format to TypeScript)
-      const requestPayload = validUrls.map(url => ({ url }))
+      // Prepare request payload for LinkedIn Profiles API
+      // According to Bright Data docs, LinkedIn profiles need specific format
+      const requestPayload = validUrls.map(url => ({ 
+        url: this.normalizeLinkedInUrl(url)
+      }))
 
-      const response = await fetch(`${this.config.baseUrl}?dataset_id=${this.config.datasetId}&include_errors=true`, {
+      console.log('📤 Request payload:', JSON.stringify(requestPayload, null, 2))
+
+      const response = await fetch(`${this.config.baseUrl}/trigger?dataset_id=${this.config.datasetId}&include_errors=true&format=json`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,
@@ -280,12 +414,21 @@ export class BrightDataLinkedInClient {
         throw new Error('Invalid LinkedIn profile URL')
       }
       
-      // Preserve the original hostname (including international domains)
-      // but clean up the URL (remove tracking parameters, etc.)
-      return `https://${urlObj.hostname}${urlObj.pathname}`.replace(/\/$/, '')
+      // Normalize to www.linkedin.com for consistent processing
+      // Remove query parameters and fragments
+      let cleanPath = urlObj.pathname
+      if (cleanPath.endsWith('/')) {
+        cleanPath = cleanPath.slice(0, -1)
+      }
       
-    } catch {
-      throw new Error('Invalid LinkedIn URL format')
+      const normalizedUrl = `https://www.linkedin.com${cleanPath}`
+      console.log(`🔗 Normalized URL: ${url} → ${normalizedUrl}`)
+      
+      return normalizedUrl
+      
+    } catch (error) {
+      console.error('❌ URL normalization error:', error)
+      throw new Error(`Invalid LinkedIn URL format: ${url}`)
     }
   }
 
@@ -293,8 +436,49 @@ export class BrightDataLinkedInClient {
    * Normalize profile data structure
    */
   private normalizeProfile(profile: LinkedInProfileResponse): LinkedInProfileResponse {
+    // Log the raw profile data structure for debugging
+    console.log('🔧 BrightData profile normalization - Raw arrays:', {
+      experience_raw: {
+        type: typeof profile.experience,
+        is_array: Array.isArray(profile.experience),
+        length: Array.isArray(profile.experience) ? profile.experience.length : 'N/A',
+        sample: Array.isArray(profile.experience) && profile.experience.length > 0 ? profile.experience[0] : null
+      },
+      education_raw: {
+        type: typeof profile.education,
+        is_array: Array.isArray(profile.education),
+        length: Array.isArray(profile.education) ? profile.education.length : 'N/A',
+        sample: Array.isArray(profile.education) && profile.education.length > 0 ? profile.education[0] : null
+      },
+      educations_details_raw: {
+        type: typeof profile.educations_details,
+        is_array: Array.isArray(profile.educations_details),
+        length: Array.isArray(profile.educations_details) ? profile.educations_details.length : 'N/A'
+      }
+    })
+
+    // Clean arrays with logging
+    const cleanedExperience = Array.isArray(profile.experience) 
+      ? profile.experience.filter(exp => exp && (exp.title || exp.company))
+      : []
+    
+    // Education can come in multiple shapes. BrightData sometimes returns
+    // entries with only a title or institution name. Accept those as valid.
+    const cleanedEducation = Array.isArray(profile.education)
+      ? profile.education.filter(edu =>
+          edu && (edu.school || edu.degree || (edu as any).title || (edu as any).institution)
+        )
+      : []
+
+    console.log('🔧 BrightData profile normalization - Cleaned arrays:', {
+      original_experience_count: Array.isArray(profile.experience) ? profile.experience.length : 0,
+      cleaned_experience_count: cleanedExperience.length,
+      original_education_count: Array.isArray(profile.education) ? profile.education.length : 0,
+      cleaned_education_count: cleanedEducation.length
+    })
+
     // Clean and normalize the profile data
-    return {
+    const normalized: LinkedInProfileResponse = {
       ...profile,
       // Ensure consistent name fields
       first_name: profile.first_name || profile.name?.split(' ')[0] || '',
@@ -305,20 +489,40 @@ export class BrightDataLinkedInClient {
       
       // Clean arrays
       skills: Array.isArray(profile.skills) ? profile.skills.filter(Boolean) : [],
-      experience: Array.isArray(profile.experience) ? profile.experience.filter(exp => exp.title || exp.company) : [],
-      education: Array.isArray(profile.education) ? profile.education.filter(edu => edu.school || edu.degree) : [],
+      experience: cleanedExperience,
+      education: cleanedEducation,
       certifications: Array.isArray(profile.certifications) ? profile.certifications.filter(cert => cert.name) : [],
       
       // Set status
       status: profile.error ? 'error' : 'success'
     }
+
+    // Fallback: some profiles only include `educations_details` (strings/loose objects)
+    if ((!normalized.education || normalized.education.length === 0) && Array.isArray(profile.educations_details)) {
+      normalized.education = profile.educations_details
+        .filter(Boolean)
+        .map((e: any) => ({
+          school: e?.institution || e?.institute || e?.title || e?.school || undefined,
+          degree: e?.degree || undefined,
+          field_of_study: e?.field || undefined,
+          start_year: e?.start_year || e?.start_date || undefined,
+          end_year: e?.end_year || e?.end_date || undefined,
+          description: e?.description || undefined,
+          school_url: e?.url || undefined
+        }))
+        .filter(edu => edu.school || edu.degree || edu.field_of_study)
+    }
+
+    return normalized
   }
 
   /**
    * Poll snapshot results until completion
    */
-  async pollSnapshotResults(snapshotId: string, maxWaitTime = 120000, pollInterval = 5000): Promise<LinkedInProfileResponse[]> {
+  async pollSnapshotResults(snapshotId: string, maxWaitTime = 180000, pollInterval = 10000): Promise<LinkedInProfileResponse[]> {
     console.log(`📊 Polling snapshot results for: ${snapshotId} (max wait: ${maxWaitTime}ms)`)
+    console.log(`📡 Progress endpoint: ${this.config.baseUrl}/progress/${snapshotId}`)
+    console.log(`📥 Data endpoint: ${this.config.baseUrl}/snapshot/${snapshotId}`)
     
     const startTime = Date.now()
     let attempts = 0
@@ -330,7 +534,7 @@ export class BrightDataLinkedInClient {
       try {
         console.log(`📊 Polling attempt ${attempts}/${maxAttempts}...`)
         
-        const response = await fetch(`${this.config.baseUrl.replace('/trigger', '')}/snapshots/${snapshotId}`, {
+        const response = await fetch(`${this.config.baseUrl}/progress/${snapshotId}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${this.config.apiKey}`,
@@ -344,16 +548,41 @@ export class BrightDataLinkedInClient {
             throw new Error(`Snapshot polling failed after ${attempts} attempts: ${response.status}`)
           }
         } else {
-          const snapshotData: BrightDataSnapshotResponse = await response.json()
-          console.log(`📊 Snapshot status: ${snapshotData.status} (${snapshotData.rows_collected || 0}/${snapshotData.total_rows || 0} rows)`)
+          const progressData = await response.json()
+          console.log(`📊 Snapshot status: ${progressData.status} (${progressData.rows_collected || 0}/${progressData.total_rows || 0} rows)`)
 
-          if (snapshotData.status === 'completed' && snapshotData.data) {
-            console.log(`✅ Snapshot completed with ${snapshotData.data.length} results`)
-            return snapshotData.data
-          } else if (snapshotData.status === 'failed') {
-            throw new Error(`Snapshot processing failed: ${snapshotData.error || 'Unknown error'}`)
+          if (progressData.status === 'completed' || (progressData.status === 'ready' && (progressData.records > 0 || progressData.rows_collected > 0))) {
+            // Job is completed, now download the actual data
+            console.log(`✅ Snapshot completed, downloading data...`)
+            const dataResponse = await fetch(`${this.config.baseUrl}/snapshot/${snapshotId}?format=json`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${this.config.apiKey}`,
+                'Content-Type': 'application/json',
+              }
+            })
+            
+            if (!dataResponse.ok) {
+              const errorText = await dataResponse.text()
+              console.error('❌ Data download error:', errorText)
+              throw new Error(`Failed to download snapshot data: ${dataResponse.status} - ${errorText}`)
+            }
+            
+            const actualData = await dataResponse.json()
+            console.log(`✅ Downloaded data:`, JSON.stringify(actualData, null, 2))
+            
+            if (!actualData || (Array.isArray(actualData) && actualData.length === 0)) {
+              console.warn('⚠️ No data in completed snapshot')
+              return []
+            }
+            
+            return Array.isArray(actualData) ? actualData : [actualData]
+            
+          } else if (progressData.status === 'failed') {
+            throw new Error(`Snapshot processing failed: ${progressData.error || 'Unknown error'}`)
           }
-          // Status is 'running', continue polling
+          
+          // Status is 'running' or 'ready' (without data), continue polling
         }
 
         // Wait before next poll
@@ -379,7 +608,7 @@ export class BrightDataLinkedInClient {
    * Get snapshot status without polling
    */
   async getSnapshotStatus(snapshotId: string): Promise<BrightDataSnapshotResponse> {
-    const response = await fetch(`${this.config.baseUrl.replace('/trigger', '')}/snapshots/${snapshotId}`, {
+    const response = await fetch(`${this.config.baseUrl}/progress/${snapshotId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${this.config.apiKey}`,
@@ -401,7 +630,7 @@ export class BrightDataLinkedInClient {
     try {
       // This is a placeholder - Bright Data may have specific endpoints for quota checking
       // For now, we'll do a basic connectivity test
-      const response = await fetch(`${this.config.baseUrl}?dataset_id=${this.config.datasetId}&include_errors=true`, {
+      const response = await fetch(`${this.config.baseUrl}/trigger?dataset_id=${this.config.datasetId}&include_errors=true`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,

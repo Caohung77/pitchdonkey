@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from './supabase-server'
 import { ContactEnrichmentService } from './contact-enrichment'
+import { SmartEnrichmentOrchestrator } from './smart-enrichment-orchestrator'
 
 interface BulkEnrichmentJob {
   id: string
@@ -50,13 +51,19 @@ interface EnrichmentEligibility {
     company?: string
     website: string
   }>
+  linkedin_only: Array<{
+    id: string
+    email: string
+    company?: string
+    linkedin_url: string
+  }>
   already_enriched: Array<{
     id: string
     email: string
     company?: string
     last_enriched: string
   }>
-  no_website: Array<{
+  no_sources: Array<{
     id: string
     email: string
     company?: string
@@ -70,9 +77,11 @@ interface EnrichmentEligibility {
 
 export class BulkContactEnrichmentService {
   private enrichmentService: ContactEnrichmentService
+  private smartOrchestrator: SmartEnrichmentOrchestrator
 
   constructor() {
     this.enrichmentService = new ContactEnrichmentService()
+    this.smartOrchestrator = new SmartEnrichmentOrchestrator()
   }
 
   /**
@@ -99,8 +108,8 @@ export class BulkContactEnrichmentService {
       const eligibility = await this.getEnrichmentEligibility(contactIds, userId)
       
       const eligibleContactIds = jobOptions.force_refresh
-        ? [...eligibility.eligible.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
-        : eligibility.eligible.map(c => c.id)
+        ? [...eligibility.eligible.map(c => c.id), ...eligibility.linkedin_only.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
+        : [...eligibility.eligible.map(c => c.id), ...eligibility.linkedin_only.map(c => c.id)]
 
       if (eligibleContactIds.length === 0) {
         return {
@@ -108,9 +117,11 @@ export class BulkContactEnrichmentService {
           error: 'No contacts eligible for enrichment',
           summary: {
             total_requested: contactIds.length,
-            eligible_contacts: eligibility.eligible.length,
-            ineligible_contacts: eligibility.no_website.length + eligibility.processing.length,
-            already_processing: eligibility.processing.length
+            eligible_contacts: eligibility.eligible.length + eligibility.linkedin_only.length,
+            ineligible_contacts: eligibility.no_sources.length + eligibility.processing.length,
+            already_processing: eligibility.processing.length,
+            linkedin_only: eligibility.linkedin_only.length,
+            website_eligible: eligibility.eligible.length
           }
         }
       }
@@ -270,16 +281,53 @@ export class BulkContactEnrichmentService {
         // Update contact result to 'running'
         await this.updateContactResult(jobId, contactId, 'running')
 
-        // Perform enrichment using existing service
-        const result = await this.enrichmentService.enrichContact(contactId, userId)
+        // Get contact details to determine enrichment strategy
+        const supabase = await createServerSupabaseClient()
+        const { data: contact } = await supabase
+          .from('contacts')
+          .select('id, website, linkedin_url')
+          .eq('id', contactId)
+          .eq('user_id', userId)
+          .single()
+
+        if (!contact) {
+          throw new Error('Contact not found')
+        }
+
+        // Determine enrichment strategy based on available sources
+        let result
+        if (contact.website) {
+          // Has website - use traditional enrichment or smart enrichment
+          console.log(`🌐 Using website enrichment for contact ${contactId}`)
+          result = await this.enrichmentService.enrichContact(contactId, userId)
+        } else if (contact.linkedin_url) {
+          // LinkedIn-only - use smart enrichment orchestrator
+          console.log(`🔗 Using LinkedIn-only enrichment for contact ${contactId}`)
+          result = await this.smartOrchestrator.enrichContact(contactId, userId)
+        } else {
+          throw new Error('Contact has no website or LinkedIn URL for enrichment')
+        }
 
         if (result.success) {
           console.log(`✅ Contact ${contactId} enriched successfully`)
-          await this.updateContactResult(jobId, contactId, 'completed', {
-            enrichment_data: result.data,
-            website_url: result.website_url,
-            scraped_at: new Date().toISOString()
-          })
+          
+          // Handle different result structures
+          const enrichmentData = contact.website 
+            ? {
+                enrichment_data: result.data,
+                website_url: result.website_url,
+                scraped_at: new Date().toISOString()
+              }
+            : {
+                enrichment_sources: result.sources_used,
+                linkedin_data: result.linkedin_data,
+                enrichment_data: result.enrichment_data,
+                primary_source: result.primary_source,
+                secondary_source: result.secondary_source,
+                scraped_at: new Date().toISOString()
+              }
+          
+          await this.updateContactResult(jobId, contactId, 'completed', enrichmentData)
           results.push({ contact_id: contactId, success: true })
           
           // Update job progress after each successful contact
@@ -352,41 +400,61 @@ export class BulkContactEnrichmentService {
 
     const { data: contacts, error } = await supabase
       .from('contacts')
-      .select('id, email, company, website, enrichment_status, enrichment_updated_at')
+      .select(`
+        id, email, company, website, linkedin_url,
+        enrichment_status, enrichment_updated_at,
+        linkedin_extraction_status, linkedin_extracted_at
+      `)
       .in('id', contactIds)
       .eq('user_id', userId)
 
     if (error) {
       console.error('Failed to get contact eligibility:', error)
-      return { eligible: [], already_enriched: [], no_website: [], processing: [] }
+      return { eligible: [], linkedin_only: [], already_enriched: [], no_sources: [], processing: [] }
     }
 
     const eligible: any[] = []
+    const linkedin_only: any[] = []
     const already_enriched: any[] = []
-    const no_website: any[] = []
+    const no_sources: any[] = []
     const processing: any[] = []
 
     contacts?.forEach(contact => {
-      if (!contact.website) {
-        no_website.push({
-          id: contact.id,
-          email: contact.email,
-          company: contact.company
-        })
-      } else if (contact.enrichment_status === 'pending') {
+      const hasWebsite = !!contact.website
+      const hasLinkedIn = !!contact.linkedin_url
+      const isWebsiteEnriched = contact.enrichment_status === 'completed' && this.isRecentlyEnriched(contact.enrichment_updated_at)
+      const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed' && this.isRecentlyEnriched(contact.linkedin_extracted_at)
+      const isProcessing = contact.enrichment_status === 'pending' || contact.linkedin_extraction_status === 'pending'
+
+      if (isProcessing) {
         processing.push({
           id: contact.id,
           email: contact.email,
-          status: contact.enrichment_status
+          status: contact.enrichment_status || contact.linkedin_extraction_status
         })
-      } else if (contact.enrichment_status === 'completed' && this.isRecentlyEnriched(contact.enrichment_updated_at)) {
+      } else if (isWebsiteEnriched || isLinkedInEnriched) {
         already_enriched.push({
           id: contact.id,
           email: contact.email,
           company: contact.company,
-          last_enriched: contact.enrichment_updated_at
+          last_enriched: contact.enrichment_updated_at || contact.linkedin_extracted_at
+        })
+      } else if (!hasWebsite && !hasLinkedIn) {
+        no_sources.push({
+          id: contact.id,
+          email: contact.email,
+          company: contact.company
+        })
+      } else if (!hasWebsite && hasLinkedIn) {
+        // Has LinkedIn but no website - can use LinkedIn-only enrichment
+        linkedin_only.push({
+          id: contact.id,
+          email: contact.email,
+          company: contact.company,
+          linkedin_url: contact.linkedin_url
         })
       } else {
+        // Has website (and maybe LinkedIn) - can use standard or smart enrichment
         eligible.push({
           id: contact.id,
           email: contact.email,
@@ -396,7 +464,7 @@ export class BulkContactEnrichmentService {
       }
     })
 
-    return { eligible, already_enriched, no_website, processing }
+    return { eligible, linkedin_only, already_enriched, no_sources, processing }
   }
 
   /**

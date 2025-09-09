@@ -47,12 +47,27 @@ export const updateEmailAccountSchema = z.object({
   is_active: z.boolean().optional(),
 })
 
-// Helper function to validate URL or empty string
+// Helper function to validate URL or empty string - more lenient for updates
 const urlOrEmpty = z.union([
   z.string().url(),
+  z.string().refine(
+    (val) => {
+      if (!val || val === '') return true
+      // Allow any string that looks like it could be a domain or URL
+      return val.includes('.') && val.length > 2
+    },
+    { message: "Invalid URL format" }
+  ),
   z.literal(''),
   z.undefined()
-]).optional()
+]).optional().transform((val) => {
+  if (!val || val === '') return undefined
+  // Basic cleanup - ensure it has a protocol for valid URLs
+  if (val.includes('.') && !val.startsWith('http')) {
+    return `https://${val}`
+  }
+  return val
+})
 
 // More lenient URL validation for CSV imports
 const lenientUrlOrEmpty = z.union([
@@ -76,33 +91,43 @@ const lenientUrlOrEmpty = z.union([
   return val
 })
 
+// Helper to handle empty strings for optional fields
+const optionalString = z.string().optional().transform(val => val === '' ? undefined : val)
+
 // Base contact schema without refinement
 const baseContactSchema = z.object({
   email: z.string().email(),
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  company: z.string().optional(),
-  position: z.string().optional(),
+  first_name: optionalString,
+  last_name: optionalString,
+  company: optionalString,
+  position: optionalString,
   website: urlOrEmpty,
-  phone: z.string().optional(),
+  phone: optionalString,
   linkedin_url: urlOrEmpty,
   twitter_url: urlOrEmpty,
-  address: z.string().optional(),
-  postcode: z.string().optional(),
-  city: z.string().optional(),
-  country: z.string().optional(),
-  city: z.string().optional(),
-  timezone: z.string().optional(),
-  sex: z.enum(['m', 'f']).nullable().optional(),
+  address: optionalString,
+  postcode: optionalString,
+  city: optionalString,
+  country: optionalString,
+  timezone: optionalString,
+  sex: z.union([
+    z.enum(['m', 'f']),
+    z.literal(''),
+    z.undefined(),
+    z.null()
+  ]).optional().transform((val) => {
+    if (!val || val === '') return undefined
+    return val as 'm' | 'f'
+  }),
   custom_fields: z.record(z.any()).default({}),
   tags: z.array(z.string()).default([]),
-  source: z.string().optional(),
+  source: optionalString,
   // Enrichment fields - optional for manual editing (company overwrites normal company field)
-  enriched_industry: z.string().optional(),
-  enriched_products_services: z.string().optional(),
-  enriched_target_audience: z.string().optional(),
-  enriched_unique_points: z.string().optional(),
-  enriched_tone_style: z.string().optional(),
+  enriched_industry: optionalString,
+  enriched_products_services: optionalString,
+  enriched_target_audience: optionalString,
+  enriched_unique_points: optionalString,
+  enriched_tone_style: optionalString,
 })
 
 // Contact validation schema - only email is required
@@ -123,9 +148,16 @@ export const csvContactSchema = z.object({
   postcode: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
-  city: z.string().optional(),
   timezone: z.string().optional(),
-  sex: z.enum(['m', 'f']).nullable().optional(),
+  sex: z.union([
+    z.enum(['m', 'f']),
+    z.literal(''),
+    z.undefined(),
+    z.null()
+  ]).optional().transform((val) => {
+    if (!val || val === '') return undefined
+    return val as 'm' | 'f'
+  }),
   custom_fields: z.record(z.any()).default({}),
   tags: z.array(z.string()).default([]),
   source: z.string().optional(),

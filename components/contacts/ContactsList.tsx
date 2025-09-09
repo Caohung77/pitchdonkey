@@ -80,9 +80,22 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
   const { addToast } = useToast()
 
   // Contact action handlers
-  const handleView = (contact: Contact) => {
-    setViewingContact(contact)
-    setIsViewModalOpen(true)
+  const handleView = async (contact: Contact) => {
+    try {
+      // Fetch the freshest version from Supabase via our API
+      const resp = await fetch(`/api/contacts?ids=${contact.id}`)
+      if (resp.ok) {
+        const json = await resp.json()
+        const updated = json?.data?.contacts?.[0]
+        setViewingContact(updated || contact)
+      } else {
+        setViewingContact(contact)
+      }
+    } catch {
+      setViewingContact(contact)
+    } finally {
+      setIsViewModalOpen(true)
+    }
   }
 
   const handleEdit = (contact: Contact) => {
@@ -217,9 +230,20 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
     console.log('ContactsList: State updates called - jobData set to:', jobData, 'isProgressModalOpen:', isProgressModalOpen || 'set to true')
   }
 
-  const handleProgressComplete = () => {
+  const handleProgressComplete = async () => {
     console.log('ContactsList: Bulk enrichment completed, refreshing contacts')
     fetchContacts(state.pagination.page) // Refresh contacts to show updated data
+    // If viewing a contact, refresh it as well so LinkedIn data appears immediately
+    if (isViewModalOpen && viewingContact) {
+      try {
+        const resp = await fetch(`/api/contacts?ids=${viewingContact.id}`)
+        if (resp.ok) {
+          const json = await resp.json()
+          const updated = json?.data?.contacts?.[0]
+          if (updated) setViewingContact(updated)
+        }
+      } catch {}
+    }
   }
 
   // Bulk action handlers

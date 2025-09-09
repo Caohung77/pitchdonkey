@@ -25,6 +25,8 @@ import {
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseCompanyName } from '@/lib/contact-utils'
+import { EnrichmentButton } from './EnrichmentButton'
+import { useEffect, useState } from 'react'
 
 interface ContactViewModalProps {
   contact: Contact | null
@@ -40,6 +42,29 @@ export function ContactViewModal({
   onEdit
 }: ContactViewModalProps) {
   if (!contact) return null
+
+  // Always display freshest data from Supabase
+  const [latestContact, setLatestContact] = useState<Contact | null>(contact)
+
+  useEffect(() => {
+    const fetchLatest = async () => {
+      try {
+        if (!isOpen || !contact?.id) return
+        const resp = await fetch(`/api/contacts?ids=${contact.id}`)
+        if (resp.ok) {
+          const json = await resp.json()
+          const updated = json?.data?.contacts?.[0]
+          if (updated) setLatestContact(updated)
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    fetchLatest()
+  }, [isOpen, contact?.id])
+
+  const hydratedContact: Contact = latestContact || contact
+  const lp: any = (hydratedContact as any).linkedin_profile_data
 
   const formatName = (contact: Contact) => {
     // Priority 1: First Name + Last Name
@@ -95,37 +120,37 @@ export function ContactViewModal({
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
               <User className="h-5 w-5 text-gray-600" />
-              {formatName(contact)}
+              {formatName(hydratedContact)}
             </DialogTitle>
             <div className="flex items-center gap-2">
               {/* AI Enriched indicators */}
-              {'enrichment_status' in contact && contact.enrichment_status === 'completed' && (
+              {'enrichment_status' in hydratedContact && hydratedContact.enrichment_status === 'completed' && (
                 <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200 flex items-center gap-1">
                   <Sparkles className="h-3 w-3" />
                   Website Enriched
                 </Badge>
               )}
-              {'linkedin_extraction_status' in contact && contact.linkedin_extraction_status === 'completed' && (
+              {'linkedin_extraction_status' in hydratedContact && hydratedContact.linkedin_extraction_status === 'completed' && (
                 <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200 flex items-center gap-1">
                   <Linkedin className="h-3 w-3" />
                   LinkedIn Extracted
                 </Badge>
               )}
               {/* Status badge */}
-              <Badge className={getStatusColor(contact.status)}>
-                {contact.status}
+              <Badge className={getStatusColor(hydratedContact.status)}>
+                {hydratedContact.status}
               </Badge>
             </div>
           </div>
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className={`grid w-full mb-6 ${contact.linkedin_profile_data ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <TabsList className={`grid w-full mb-6 ${lp ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <TabsTrigger value="details" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Contact Details
             </TabsTrigger>
-            {contact.linkedin_profile_data && (
+            {lp && (
               <TabsTrigger value="linkedin" className="flex items-center gap-2">
                 <Linkedin className="h-4 w-4" />
                 LinkedIn Profile
@@ -149,98 +174,98 @@ export function ContactViewModal({
                   <Mail className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-sm font-medium text-gray-700">Email</p>
-                    <p className="text-sm text-gray-600">{contact.email}</p>
+                    <p className="text-sm text-gray-600">{hydratedContact.email}</p>
                   </div>
                 </div>
 
-                {contact.phone && (
+                {hydratedContact.phone && (
                   <div className="flex items-center gap-3">
                     <Phone className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Phone</p>
-                      <p className="text-sm text-gray-600">{contact.phone}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.phone}</p>
                     </div>
                   </div>
                 )}
-                {'sex' in contact && contact.sex && (
+                {'sex' in hydratedContact && hydratedContact.sex && (
                   <div className="flex items-center gap-3">
                     <User className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Gender</p>
                       <p className="text-sm text-gray-600">
-                        {contact.sex === 'm' ? 'Male' : contact.sex === 'f' ? 'Female' : 'Not specified'}
+                        {hydratedContact.sex === 'm' ? 'Male' : hydratedContact.sex === 'f' ? 'Female' : 'Not specified'}
                       </p>
                     </div>
                   </div>
                 )}
 
-                {contact.website && (
+                {hydratedContact.website && (
                   <div className="flex items-center gap-3">
                     <Globe className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Website</p>
                       <a 
-                        href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`}
+                        href={hydratedContact.website.startsWith('http') ? hydratedContact.website : `https://${hydratedContact.website}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-blue-600 hover:text-blue-800 underline"
                       >
-                        {contact.website}
+                        {hydratedContact.website}
                       </a>
                     </div>
                   </div>
                 )}
 
-                {contact.linkedin_url && (
+                {hydratedContact.linkedin_url && (
                   <div className="flex items-center gap-3">
                     <Linkedin className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">LinkedIn</p>
                       <a 
-                        href={contact.linkedin_url.startsWith('http') ? contact.linkedin_url : `https://${contact.linkedin_url}`}
+                        href={hydratedContact.linkedin_url.startsWith('http') ? hydratedContact.linkedin_url : `https://${hydratedContact.linkedin_url}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-blue-600 hover:text-blue-800 underline"
                       >
-                        {contact.linkedin_url}
+                        {hydratedContact.linkedin_url}
                       </a>
                     </div>
                   </div>
                 )}
 
-                {contact.twitter_url && (
+                {hydratedContact.twitter_url && (
                   <div className="flex items-center gap-3">
                     <Twitter className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Twitter</p>
                       <a 
-                        href={contact.twitter_url.startsWith('http') ? contact.twitter_url : `https://${contact.twitter_url}`}
+                        href={hydratedContact.twitter_url.startsWith('http') ? hydratedContact.twitter_url : `https://${hydratedContact.twitter_url}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-blue-600 hover:text-blue-800 underline"
                       >
-                        {contact.twitter_url}
+                        {hydratedContact.twitter_url}
                       </a>
                     </div>
                   </div>
                 )}
 
-                {contact.timezone && (
+                {hydratedContact.timezone && (
                   <div className="flex items-center gap-3">
                     <Clock4 className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Timezone</p>
-                      <p className="text-sm text-gray-600">{contact.timezone}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.timezone}</p>
                     </div>
                   </div>
                 )}
 
-                {contact.source && (
+                {hydratedContact.source && (
                   <div className="flex items-center gap-3">
                     <Hash className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Source</p>
-                      <p className="text-sm text-gray-600">{contact.source}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.source}</p>
                     </div>
                   </div>
                 )}
@@ -252,62 +277,62 @@ export function ContactViewModal({
               <h3 className="text-lg font-medium text-gray-900">Professional</h3>
               
               <div className="space-y-3">
-                {parseCompanyName(contact.company) && (
+                {parseCompanyName(hydratedContact.company) && (
                   <div className="flex items-center gap-3">
                     <Building className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Company</p>
-                      <p className="text-sm text-gray-600">{parseCompanyName(contact.company)}</p>
+                      <p className="text-sm text-gray-600">{parseCompanyName(hydratedContact.company)}</p>
                     </div>
                   </div>
                 )}
 
-                {contact.position && (
+                {hydratedContact.position && (
                   <div className="flex items-center gap-3">
                     <User className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Position</p>
-                      <p className="text-sm text-gray-600">{contact.position}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.position}</p>
                     </div>
                   </div>
                 )}
 
-                {contact.address && (
+                {hydratedContact.address && (
                   <div className="flex items-start gap-3">
                     <MapPin className="h-4 w-4 text-gray-500 mt-0.5" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Address</p>
-                      <p className="text-sm text-gray-600">{contact.address}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.address}</p>
                     </div>
                   </div>
                 )}
 
-                {contact.city && (
+                {hydratedContact.city && (
                   <div className="flex items-center gap-3">
                     <MapPin className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">City</p>
-                      <p className="text-sm text-gray-600">{contact.city}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.city}</p>
                     </div>
                   </div>
                 )}
 
-                {contact.postcode && (
+                {hydratedContact.postcode && (
                   <div className="flex items-center gap-3">
                     <Hash className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Postcode</p>
-                      <p className="text-sm text-gray-600">{contact.postcode}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.postcode}</p>
                     </div>
                   </div>
                 )}
 
-                {contact.country && (
+                {hydratedContact.country && (
                   <div className="flex items-center gap-3">
                     <Globe className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Country</p>
-                      <p className="text-sm text-gray-600">{contact.country}</p>
+                      <p className="text-sm text-gray-600">{hydratedContact.country}</p>
                     </div>
                   </div>
                 )}
@@ -332,6 +357,35 @@ export function ContactViewModal({
             </div>
           )}
 
+          {/* Enrichment Actions */}
+          <div className="bg-gray-50 p-4 rounded-lg border">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">AI Enrichment</h3>
+            </div>
+            <EnrichmentButton
+              contactId={hydratedContact.id}
+              hasWebsite={!!hydratedContact.website}
+              hasLinkedIn={!!hydratedContact.linkedin_url}
+              linkedInUrl={hydratedContact.linkedin_url}
+              currentStatus={hydratedContact.enrichment_status}
+              linkedInStatus={hydratedContact.linkedin_extraction_status || ('linkedin_extraction_status' in hydratedContact ? hydratedContact.linkedin_extraction_status as any : null)}
+              onEnrichmentComplete={() => {
+                // Pull fresh data after enrichment completes
+                ;(async () => {
+                  try {
+                    const resp = await fetch(`/api/contacts?ids=${hydratedContact.id}`)
+                    if (resp.ok) {
+                      const json = await resp.json()
+                      const updated = json?.data?.contacts?.[0]
+                      if (updated) setLatestContact(updated)
+                    }
+                  } catch {}
+                })()
+              }}
+              size="sm"
+              className="w-full"
+            />
+          </div>
 
           {/* AI Enrichment Data */}
           {contact.enrichment_data && contact.enrichment_status === 'completed' && (
@@ -420,16 +474,16 @@ export function ContactViewModal({
                 <p className="font-medium text-gray-700">Last Updated</p>
                 <p className="text-gray-600">{formatDate(contact.updated_at)}</p>
               </div>
-              {'enrichment_updated_at' in contact && contact.enrichment_updated_at && (
+              {'enrichment_updated_at' in hydratedContact && hydratedContact.enrichment_updated_at && (
                 <div>
                   <p className="font-medium text-gray-700">Website Enriched</p>
-                  <p className="text-gray-600">{formatDate(contact.enrichment_updated_at as string)}</p>
+                  <p className="text-gray-600">{formatDate(hydratedContact.enrichment_updated_at as string)}</p>
                 </div>
               )}
-              {'linkedin_extracted_at' in contact && contact.linkedin_extracted_at && (
+              {'linkedin_extracted_at' in hydratedContact && hydratedContact.linkedin_extracted_at && (
                 <div>
                   <p className="font-medium text-gray-700">LinkedIn Extracted</p>
-                  <p className="text-gray-600">{formatDate(contact.linkedin_extracted_at as string)}</p>
+                  <p className="text-gray-600">{formatDate(hydratedContact.linkedin_extracted_at as string)}</p>
                 </div>
               )}
             </div>
@@ -437,7 +491,7 @@ export function ContactViewModal({
           </TabsContent>
 
           {/* LinkedIn Profile Tab */}
-          {contact.linkedin_profile_data && (
+          {lp && (
             <TabsContent value="linkedin" className="space-y-4">
               {/* Header Section */}
               <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
@@ -448,9 +502,9 @@ export function ContactViewModal({
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-blue-900">LinkedIn Profile</h2>
-                      {'linkedin_extracted_at' in contact && contact.linkedin_extracted_at && (
+                      {'linkedin_extracted_at' in hydratedContact && hydratedContact.linkedin_extracted_at && (
                         <p className="text-xs text-blue-600">
-                          Extracted {formatDate(contact.linkedin_extracted_at as string)}
+                          Extracted {formatDate(hydratedContact.linkedin_extracted_at as string)}
                         </p>
                       )}
                     </div>
@@ -461,7 +515,7 @@ export function ContactViewModal({
                 </div>
               </div>
 
-              {typeof contact.linkedin_profile_data === 'object' && contact.linkedin_profile_data && (
+              {typeof lp === 'object' && lp && (
                 <div className="grid gap-4">
                   
                   {/* Professional Summary Card */}
@@ -474,41 +528,41 @@ export function ContactViewModal({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Company & Position */}
                       <div className="space-y-3">
-                        {(contact.linkedin_profile_data as any).current_company && (
+                        {lp.current_company && (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Company</span>
                             <span className="text-sm font-medium text-gray-900">
-                              {typeof (contact.linkedin_profile_data as any).current_company === 'object' 
-                                ? (contact.linkedin_profile_data as any).current_company.name 
-                                : (contact.linkedin_profile_data as any).current_company}
+                              {typeof lp.current_company === 'object' 
+                                ? lp.current_company.name 
+                                : lp.current_company}
                             </span>
                           </div>
                         )}
                         
-                        {(contact.linkedin_profile_data as any).position && (
+                        {lp.position && (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Position</span>
-                            <span className="text-sm text-gray-800">{(contact.linkedin_profile_data as any).position}</span>
+                            <span className="text-sm text-gray-800">{lp.position}</span>
                           </div>
                         )}
                       </div>
 
                       {/* Location & Industry */}
                       <div className="space-y-3">
-                        {(contact.linkedin_profile_data as any).city && (
+                        {lp.city && (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location</span>
                             <span className="text-sm text-gray-800">
-                              {(contact.linkedin_profile_data as any).city}
-                              {(contact.linkedin_profile_data as any).country && `, ${(contact.linkedin_profile_data as any).country}`}
+                              {lp.city}
+                              {lp.country && `, ${lp.country}`}
                             </span>
                           </div>
                         )}
 
-                        {(contact.linkedin_profile_data as any).industry && (
+                        {lp.industry && (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Industry</span>
-                            <span className="text-sm text-gray-800">{(contact.linkedin_profile_data as any).industry}</span>
+                            <span className="text-sm text-gray-800">{lp.industry}</span>
                           </div>
                         )}
                       </div>
@@ -516,7 +570,7 @@ export function ContactViewModal({
                   </div>
 
                   {/* About Section - CRITICAL for personalization */}
-                  {(contact.linkedin_profile_data as any).about && (
+                  {lp.about && (
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <User className="h-4 w-4 text-gray-600" />
@@ -525,55 +579,57 @@ export function ContactViewModal({
                       </div>
                       <div className="bg-gray-50 p-3 rounded-lg border-l-4 border-blue-400">
                         <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
-                          {(contact.linkedin_profile_data as any).about}
+                          {lp.about}
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* Network Stats */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {(contact.linkedin_profile_data as any).followers && (
-                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {(contact.linkedin_profile_data as any).followers?.toLocaleString()}
+                  {/* Network Stats - Use BrightData field names */}
+                  {(lp.followers || lp.connections || lp.follower_count || lp.connection_count) && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {(lp.followers || lp.follower_count) && (
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                          <div className="text-2xl font-bold text-blue-600">
+                            {(lp.followers || lp.follower_count)?.toLocaleString()}
+                          </div>
+                          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Followers</div>
                         </div>
-                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Followers</div>
-                      </div>
-                    )}
-                    
-                    {(contact.linkedin_profile_data as any).connections && (
-                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
-                        <div className="text-2xl font-bold text-green-600">
-                          {(contact.linkedin_profile_data as any).connections}+
+                      )}
+                      
+                      {(lp.connections || lp.connection_count) && (
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                          <div className="text-2xl font-bold text-green-600">
+                            {(lp.connections || lp.connection_count)}+
+                          </div>
+                          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Connections</div>
                         </div>
-                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Connections</div>
-                      </div>
-                    )}
+                      )}
 
-                    {(contact.linkedin_profile_data as any).recommendations_count && (
-                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
-                        <div className="text-2xl font-bold text-purple-600">
-                          {(contact.linkedin_profile_data as any).recommendations_count}
+                      {lp.recommendations_count && (
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                          <div className="text-2xl font-bold text-purple-600">
+                            {lp.recommendations_count}
+                          </div>
+                          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recommendations</div>
                         </div>
-                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recommendations</div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Languages */}
-                  {(contact.linkedin_profile_data as any).languages && Array.isArray((contact.linkedin_profile_data as any).languages) && (contact.linkedin_profile_data as any).languages.length > 0 && (
+                  {lp.languages && Array.isArray(lp.languages) && lp.languages.length > 0 && (
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <Globe className="h-4 w-4 text-gray-600" />
                         <h3 className="font-semibold text-gray-900">Languages</h3>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {(contact.linkedin_profile_data as any).languages.map((lang: any, index: number) => (
+                        {lp.languages.map((lang: any, index: number) => (
                           <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
-                            <p className="font-medium text-gray-900 text-sm">{lang.title}</p>
-                            {lang.subtitle && lang.subtitle !== '-' && (
-                              <p className="text-xs text-gray-600 mt-1">{lang.subtitle}</p>
+                            <p className="font-medium text-gray-900 text-sm">{lang.title || lang.name || lang}</p>
+                            {(lang.subtitle || lang.proficiency) && (lang.subtitle || lang.proficiency) !== '-' && (
+                              <p className="text-xs text-gray-600 mt-1">{lang.subtitle || lang.proficiency}</p>
                             )}
                           </div>
                         ))}
@@ -582,7 +638,7 @@ export function ContactViewModal({
                   )}
 
                   {/* Services (Serviceleistungen) - CRITICAL for German profiles */}
-                  {(contact.linkedin_profile_data as any).services && Array.isArray((contact.linkedin_profile_data as any).services) && (contact.linkedin_profile_data as any).services.length > 0 && (
+                  {lp.services && Array.isArray(lp.services) && lp.services.length > 0 && (
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <Building className="h-4 w-4 text-gray-600" />
@@ -590,7 +646,7 @@ export function ContactViewModal({
                         <Badge variant="outline" className="text-xs">Serviceleistungen</Badge>
                       </div>
                       <div className="space-y-3">
-                        {(contact.linkedin_profile_data as any).services.map((service: any, index: number) => (
+                        {lp.services.map((service: any, index: number) => (
                           <div key={index} className="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg border-l-4 border-blue-500">
                             <p className="font-medium text-gray-900">{service.name || service}</p>
                             {service.description && (
@@ -603,24 +659,39 @@ export function ContactViewModal({
                   )}
 
                   {/* Education */}
-                  {(contact.linkedin_profile_data as any).education && Array.isArray((contact.linkedin_profile_data as any).education) && (contact.linkedin_profile_data as any).education.length > 0 && (
+                  {(((lp.education && Array.isArray(lp.education) && lp.education.length > 0) || 
+                    (lp.educations_details && Array.isArray(lp.educations_details) && lp.educations_details.length > 0))) && (
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="h-4 w-4 text-gray-600">🎓</div>
                         <h3 className="font-semibold text-gray-900">Education</h3>
                       </div>
                       <div className="space-y-3">
-                        {(contact.linkedin_profile_data as any).education.map((edu: any, index: number) => (
+                        {/* Combine both education fields safely */}
+                        {(Array.isArray(lp.education) ? lp.education : (Array.isArray(lp.educations_details) ? lp.educations_details : [])).map((edu: any, index: number) => (
                           <div key={index} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
-                                <p className="font-medium text-gray-900">{edu.title || edu.school}</p>
+                                <p className="font-medium text-gray-900">
+                                  {edu.title || edu.school || edu.institute || edu.institution || (typeof edu === 'string' ? edu : `Education ${index + 1}`)}
+                                </p>
                                 {edu.degree && <p className="text-sm text-gray-700">{edu.degree}</p>}
-                                {edu.field && <p className="text-sm text-gray-600">{edu.field}</p>}
+                                {(edu.field_of_study || edu.field) && <p className="text-sm text-gray-600">{edu.field_of_study || edu.field}</p>}
+                                {edu.description && <p className="text-sm text-gray-600">{edu.description}</p>}
+                                {(edu.url || edu.school_url) && (
+                                  <a 
+                                    href={edu.url || edu.school_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="text-xs text-blue-600 hover:text-blue-800"
+                                  >
+                                    Visit Institution
+                                  </a>
+                                )}
                               </div>
-                              {(edu.start_year || edu.end_year) && (
+                              {(edu.start_year || edu.end_year || edu.start_date || edu.end_date) && (
                                 <div className="text-xs text-gray-500 text-right bg-white px-2 py-1 rounded">
-                                  {edu.start_year} - {edu.end_year}
+                                  {(edu.start_year || edu.start_date) && (edu.start_year || edu.start_date).toString().replace(':', '')} {(edu.start_year || edu.start_date) && (edu.end_year || edu.end_date) ? '–' : ''} {(edu.end_year || edu.end_date) && (edu.end_year || edu.end_date).toString().replace(':', '')}
                                 </div>
                               )}
                             </div>
@@ -630,18 +701,58 @@ export function ContactViewModal({
                     </div>
                   )}
 
-                  {/* Experience */}
-                  {(contact.linkedin_profile_data as any).experience && Array.isArray((contact.linkedin_profile_data as any).experience) && (contact.linkedin_profile_data as any).experience.length > 0 && (
+                  {/* Volunteer Experience */}
+                  {lp.volunteer_experience && Array.isArray(lp.volunteer_experience) && lp.volunteer_experience.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-4 text-gray-600">🤝</div>
+                        <h3 className="font-semibold text-gray-900">Volunteer Experience</h3>
+                        <Badge variant="outline" className="text-xs">Community Involvement</Badge>
+                      </div>
+                      <div className="space-y-3">
+                        {lp.volunteer_experience.map((vol: any, index: number) => (
+                          <div key={index} className="border border-gray-100 rounded-lg p-4 bg-gradient-to-r from-green-50 to-blue-50">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{vol.title || vol.role}</p>
+                                {(vol.subtitle || vol.organization) && <p className="text-sm text-blue-700 font-medium">{vol.subtitle || vol.organization}</p>}
+                                {vol.cause && (
+                                  <span className="inline-block mt-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                    {vol.cause}
+                                  </span>
+                                )}
+                              </div>
+                              {(vol.duration || vol.start_date || vol.end_date) && (
+                                <div className="text-xs text-gray-500 text-right bg-white px-2 py-1 rounded">
+                                  {vol.duration_short || vol.duration || `${vol.start_date || ''} - ${vol.end_date || 'Present'}`}
+                                </div>
+                              )}
+                            </div>
+                            {(vol.info || vol.description) && (
+                              <div className="mt-3 p-3 bg-white bg-opacity-50 rounded border-l-4 border-green-400">
+                                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+                                  {vol.info || vol.description}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Experience - Handle null values from BrightData */}
+                  {(lp.experience && Array.isArray(lp.experience) && lp.experience.length > 0) ? (
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="h-4 w-4 text-gray-600">💼</div>
                         <h3 className="font-semibold text-gray-900">Professional Experience</h3>
                       </div>
                       <div className="space-y-4">
-                        {(contact.linkedin_profile_data as any).experience.slice(0, 3).map((exp: any, index: number) => (
+                        {lp.experience.slice(0, 3).map((exp: any, index: number) => (
                           <div key={index} className="border border-gray-100 rounded-lg p-3 bg-gray-50 relative">
                             {/* Timeline indicator */}
-                            {index < (contact.linkedin_profile_data as any).experience.length - 1 && (
+                            {index < lp.experience.length - 1 && (
                               <div className="absolute left-4 top-16 w-px h-8 bg-gray-300"></div>
                             )}
                             <div className="flex items-start gap-3">
@@ -677,36 +788,136 @@ export function ContactViewModal({
                             </div>
                           </div>
                         ))}
-                        {(contact.linkedin_profile_data as any).experience.length > 3 && (
+                        {lp.experience.length > 3 && (
                           <div className="text-center">
                             <Badge variant="outline" className="text-xs">
-                              +{(contact.linkedin_profile_data as any).experience.length - 3} more positions
+                              +{lp.experience.length - 3} more positions
                             </Badge>
                           </div>
                         )}
                       </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-4 text-gray-600">💼</div>
+                        <h3 className="font-semibold text-gray-900">Professional Experience</h3>
+                      </div>
+                      <div className="text-center py-4">
+                        <div className="text-gray-500 text-sm">
+                          <div className="mb-2">📍 Professional experience not available on LinkedIn profile</div>
+                          <div className="text-xs text-gray-400">
+                            This contact may have their experience section set to private or not filled out
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Contact Links */}
+                  {(((lp.bio_links && Array.isArray(lp.bio_links) && lp.bio_links.length > 0) ||
+                    (lp.contact_info?.websites && Array.isArray(lp.contact_info?.websites) && lp.contact_info.websites.length > 0))) && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Globe className="h-4 w-4 text-gray-600" />
+                        <h3 className="font-semibold text-gray-900">Contact Links</h3>
+                      </div>
+                      <div className="space-y-2">
+                        {/* Handle bio_links format */}
+                        {lp.bio_links && Array.isArray(lp.bio_links) &&
+                          lp.bio_links.map((link: any, index: number) => (
+                            <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg border">
+                              <div className="text-blue-600">🔗</div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">{link.title || 'Website'}</p>
+                                <a 
+                                  href={link.link || link} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-sm text-blue-600 hover:text-blue-800 break-all"
+                                >
+                                  {link.link || link}
+                                </a>
+                              </div>
+                            </div>
+                          ))
+                        }
+                        {/* Handle contact_info.websites format */}
+                        {lp.contact_info?.websites && Array.isArray(lp.contact_info?.websites) &&
+                          lp.contact_info.websites.map((website: string, index: number) => (
+                            <div key={`website-${index}`} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg border">
+                              <div className="text-blue-600">🌐</div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">Company Website</p>
+                                <a 
+                                  href={website.startsWith('http') ? website : `https://${website}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-sm text-blue-600 hover:text-blue-800 break-all"
+                                >
+                                  {website}
+                                </a>
+                              </div>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  )}
+
+                  {/* People Also Viewed - Networking Opportunities */}
+                  {lp.people_also_viewed && Array.isArray(lp.people_also_viewed) && lp.people_also_viewed.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-4 text-gray-600">👥</div>
+                        <h3 className="font-semibold text-gray-900">People Also Viewed</h3>
+                        <Badge variant="outline" className="text-xs">Networking</Badge>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {lp.people_also_viewed.slice(0, 6).map((person: any, index: number) => (
+                          <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                              <span className="text-xs font-bold text-blue-600">{person.name?.charAt(0)}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{person.name}</p>
+                              <p className="text-xs text-gray-600 truncate">{person.about}</p>
+                              {person.location && (
+                                <p className="text-xs text-gray-500">{person.location}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {lp.people_also_viewed.length > 6 && (
+                        <div className="text-center mt-3">
+                          <Badge variant="outline" className="text-xs">
+                            +{lp.people_also_viewed.length - 6} more connections
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {/* Additional Data Sections (Only if Available) */}
                   
                   {/* Recommendations */}
-                  {(contact.linkedin_profile_data as any).recommendations && Array.isArray((contact.linkedin_profile_data as any).recommendations) && (contact.linkedin_profile_data as any).recommendations.length > 0 && (
+                  {lp.recommendations && Array.isArray(lp.recommendations) && lp.recommendations.length > 0 && (
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="h-4 w-4 text-gray-600">⭐</div>
                         <h3 className="font-semibold text-gray-900">Recommendations</h3>
                       </div>
                       <div className="space-y-3">
-                        {(contact.linkedin_profile_data as any).recommendations.slice(0, 2).map((rec: string, index: number) => (
+                        {lp.recommendations.slice(0, 2).map((rec: string, index: number) => (
                           <div key={index} className="bg-gradient-to-r from-yellow-50 to-orange-50 p-3 rounded-lg border-l-4 border-orange-400">
                             <p className="text-sm text-gray-800 italic leading-relaxed">"{rec}"</p>
                           </div>
                         ))}
-                        {(contact.linkedin_profile_data as any).recommendations.length > 2 && (
+                        {lp.recommendations.length > 2 && (
                           <div className="text-center">
                             <Badge variant="outline" className="text-xs">
-                              +{(contact.linkedin_profile_data as any).recommendations.length - 2} more recommendations
+                              +{lp.recommendations.length - 2} more recommendations
                             </Badge>
                           </div>
                         )}
@@ -715,7 +926,7 @@ export function ContactViewModal({
                   )}
 
                   {/* Recent Posts - CRITICAL for personalization */}
-                  {(contact.linkedin_profile_data as any).posts && Array.isArray((contact.linkedin_profile_data as any).posts) && (contact.linkedin_profile_data as any).posts.length > 0 && (
+                  {lp.posts && Array.isArray(lp.posts) && lp.posts.length > 0 && (
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="h-4 w-4 text-gray-600">📱</div>
@@ -723,7 +934,7 @@ export function ContactViewModal({
                         <Badge variant="outline" className="text-xs">Personalization</Badge>
                       </div>
                       <div className="space-y-3">
-                        {(contact.linkedin_profile_data as any).posts.slice(0, 2).map((post: any, index: number) => (
+                        {lp.posts.slice(0, 2).map((post: any, index: number) => (
                           <div key={index} className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border-l-4 border-green-400">
                             <p className="text-sm text-gray-800 leading-relaxed">{post.text}</p>
                             <div className="flex justify-between items-center mt-2">
@@ -842,13 +1053,13 @@ export function ContactViewModal({
         {/* Footer Actions */}
         <div className="flex justify-between items-center pt-6 border-t">
           <div className="text-xs text-gray-500">
-            Contact ID: {contact.id}
+            Contact ID: {hydratedContact.id}
           </div>
           <div className="flex gap-2">
             {onEdit && (
               <Button
                 onClick={() => {
-                  onEdit(contact)
+                  onEdit(hydratedContact)
                   onClose()
                 }}
                 className="flex items-center gap-2"

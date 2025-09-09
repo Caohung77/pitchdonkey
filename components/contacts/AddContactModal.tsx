@@ -461,17 +461,27 @@ export function AddContactModal({ onContactAdded, onNavigateToContacts, isOpen: 
                     </div>
                   </div>
                   
-                  {formData.website && (
+                  {(formData.website || formData.linkedin_url) && (
                     <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md">
                       <div>
-                        <p className="text-blue-800 text-sm font-medium">Website Analysis Available</p>
+                        <p className="text-blue-800 text-sm font-medium">
+                          {formData.website && formData.linkedin_url ? 'Smart Enrichment Available' :
+                           formData.website ? 'Website Analysis Available' : 
+                           'LinkedIn Extraction Available'}
+                        </p>
                         <p className="text-blue-700 text-xs mt-1">
-                          Get AI insights from their website for better email personalization.
+                          {formData.website && formData.linkedin_url ? 
+                            'Get comprehensive insights from both website and LinkedIn profile.' :
+                            formData.website ? 
+                            'Get AI insights from their website for better email personalization.' :
+                            'Extract professional profile data from LinkedIn for personalization.'}
                         </p>
                       </div>
                       <EnrichmentButton
                         contactId={createdContactId}
-                        hasWebsite={true}
+                        hasWebsite={!!formData.website}
+                        hasLinkedIn={!!formData.linkedin_url}
+                        linkedInUrl={formData.linkedin_url}
                         size="sm"
                         onEnrichmentComplete={() => {
                           console.log('Enrichment completed for new contact')

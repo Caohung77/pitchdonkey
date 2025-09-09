@@ -51,7 +51,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Define signOut function early so it can be used in useEffect hooks
   const signOut = useCallback(async () => {
     try {
-      console.log('AuthProvider: Signing out...')
       const { error } = await supabase.auth.signOut()
       
       if (error) {
@@ -61,7 +60,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null)
         setError(null)
-        console.log('AuthProvider: Sign out successful')
         router.push('/auth/signin')
       }
     } catch (error) {
@@ -78,7 +76,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Initialize authentication state
   const initializeAuth = useCallback(async () => {
     try {
-      console.log('AuthProvider: Initializing authentication...')
       
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
@@ -91,14 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!session?.user) {
-        console.log('AuthProvider: No session found')
         setUser(null)
         setLoading(false)
         setError(null)
         return
       }
 
-      console.log('AuthProvider: Session found for user:', session.user.email)
       
       // Set user from Supabase session data only - no API calls
       const fallbackUser = createFallbackUser(session.user)
@@ -106,7 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
       setError(null)
       
-      console.log('AuthProvider: User set from session data, no API calls made')
 
     } catch (error) {
       console.error('AuthProvider: Error initializing auth:', error)
@@ -117,23 +111,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [createFallbackUser])
 
   useEffect(() => {
-    console.log('AuthProvider: Setting up auth state listener')
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('AuthProvider: Auth state changed:', event)
         
         if (event === 'SIGNED_IN' && session?.user) {
           const fallbackUser = createFallbackUser(session.user)
           setUser(fallbackUser)
           setLoading(false)
           setError(null)
-          console.log('AuthProvider: User signed in, using session data only')
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
           setLoading(false)
           setError(null)
-          console.log('AuthProvider: User signed out')
           // Clear any stored auth data
           localStorage.removeItem('supabase.auth.token')
           sessionStorage.clear()
@@ -141,7 +131,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Update user data on token refresh
           const fallbackUser = createFallbackUser(session.user)
           setUser(fallbackUser)
-          console.log('AuthProvider: Token refreshed, user data updated')
         }
       }
     )
@@ -150,7 +139,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth()
 
     return () => {
-      console.log('AuthProvider: Cleaning up auth state listener')
       subscription.unsubscribe()
     }
   }, [initializeAuth, createFallbackUser])
@@ -164,7 +152,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (error || !session) {
-          console.log('AuthProvider: Session invalid, signing out')
           await signOut()
           return
         }
@@ -176,7 +163,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const fiveMinutes = 5 * 60 * 1000
 
           if (expiresAt - now < fiveMinutes) {
-            console.log('AuthProvider: Session expiring soon, refreshing token')
             const { error: refreshError } = await supabase.auth.refreshSession()
             
             if (refreshError) {
@@ -215,7 +201,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // If no activity for 30 minutes, warn user
       if (now - lastActivity > thirtyMinutes) {
-        console.log('AuthProvider: User inactive, refreshing session')
         
         try {
           const { error } = await supabase.auth.refreshSession()
@@ -256,7 +241,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         const refreshedUser = createFallbackUser(session.user)
         setUser(refreshedUser)
-        console.log('AuthProvider: User refreshed from session data')
       }
     } catch (error) {
       console.error('AuthProvider: Error refreshing user:', error)

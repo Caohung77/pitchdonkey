@@ -65,9 +65,6 @@ export function BulkEnrichmentProgressModal({
     failed: 0, 
     total: 0
   })
-  const [simulationActive, setSimulationActive] = useState(false)
-  const [simulationStartTime, setSimulationStartTime] = useState<number>(0)
-  const [checkingCompletion, setCheckingCompletion] = useState(false)
 
   // Calculate progress with proper logic
   const calculateProgress = (completed: number, failed: number, total: number) => {
@@ -76,211 +73,30 @@ export function BulkEnrichmentProgressModal({
     return Math.min(Math.round((processed / total) * 100), 100)
   }
 
-  // Update local progress state
+  // Update local progress state - SIMPLIFIED
   const updateProgress = (status: JobStatus) => {
     if (!status.progress) {
       console.warn('⚠️ Progress Update: No progress data in status')
       return
     }
     
-    const percentage = calculateProgress(status.progress.completed || 0, status.progress.failed || 0, status.progress.total || 0)
+    // Use the server-calculated percentage directly
     const newProgress = {
-      percentage,
+      percentage: status.progress.percentage || 0,
       completed: status.progress.completed || 0,
       failed: status.progress.failed || 0,
       total: status.progress.total || 0
     }
     
-    console.log('📊 Progress Update:', {
+    console.log('📊 Real-time Progress Update:', {
       status: status.status,
-      raw: status.progress,
-      calculated: newProgress
+      progress: newProgress
     })
     
     setLocalProgress(newProgress)
   }
 
-  // Active Job Discovery - Look for recently completed jobs
-  const pollRecentJobs = async () => {
-    console.log('🔍 Active Job Discovery: Searching for recent completed jobs...')
-    
-    try {
-      // First, try to get any recent bulk enrichment jobs by making a generic API call
-      // and checking the browser's network tab or console logs
-      const recentJobIds = [
-        '4bda2a77-b72d-4f9a-b7c8-6d63f44640e5', // From current logs
-        '36d02405-c7f2-471f-b807-282a207c8e4b', // From previous logs
-      ]
-      
-      // Try each potential job ID
-      for (const jobId of recentJobIds) {
-        try {
-          console.log(`🎯 Testing job ID: ${jobId}`)
-          const response = await fetch(`/api/contacts/bulk-enrich/${jobId}/status`)
-          
-          if (response.ok) {
-            const data = await response.json()
-            console.log('✅ Found real job data!', data)
-            
-            // Force transition to real job
-            setJobStatus(data)
-            updateProgress(data)
-            setSimulationActive(false) // Stop simulation
-            
-            // If job is completed, show 100%
-            if (data.status === 'completed') {
-              console.log('🎉 Job completed! Setting 100% progress')
-              const completionProgress = {
-                percentage: 100,
-                completed: data.progress?.total || localProgress.total,
-                failed: data.progress?.failed || 0,
-                total: data.progress?.total || localProgress.total
-              }
-              setLocalProgress(completionProgress)
-            }
-            
-            return true
-          }
-        } catch (error) {
-          console.log(`❌ Job ${jobId} not accessible`)
-        }
-      }
-      
-      console.log('❌ No recent jobs found')
-      return false
-      
-    } catch (error) {
-      console.error('❌ Error in job discovery:', error)
-      return false
-    }
-  }
-
-  // Smart Progress Simulation - Based on typical enrichment timing
-  const startProgressSimulation = (total: number) => {
-    console.log('🎯 Starting smart progress simulation for', total, 'contacts')
-    setSimulationActive(true)
-    setSimulationStartTime(Date.now())
-    
-    // Estimated 20-30 seconds per contact for enrichment
-    const estimatedTimePerContact = 25000 // 25 seconds
-    const totalEstimatedTime = total * estimatedTimePerContact
-    
-    const simulationInterval = setInterval(() => {
-      const elapsed = Date.now() - simulationStartTime
-      const progressPercent = Math.min((elapsed / totalEstimatedTime) * 100, 95) // Stop at 95% until real data
-      
-      const completed = Math.floor((progressPercent / 100) * total)
-      const failed = 0 // Assume success during simulation
-      
-      console.log(`📈 Simulation Progress: ${progressPercent.toFixed(1)}% (${completed}/${total})`)
-      
-      setLocalProgress({
-        percentage: Math.round(progressPercent),
-        completed,
-        failed,
-        total
-      })
-      
-      // Update job status to show as "running" during simulation
-      if (jobStatus) {
-        setJobStatus({
-          ...jobStatus,
-          status: 'running',
-          progress: {
-            total,
-            completed,
-            failed,
-            current_batch: Math.ceil(completed / Math.max(1, Math.floor(total / 3))), // Estimate batch
-            percentage: Math.round(progressPercent),
-            estimated_remaining: total > completed ? `${Math.ceil((total - completed) * 0.5)} minutes` : undefined
-          }
-        })
-      }
-      
-      // At 95%, aggressively look for job completion
-      if (progressPercent >= 95) {
-        console.log('🏁 Simulation reached 95%, actively checking for completion...')
-        clearInterval(simulationInterval)
-        
-        // Try to find real job every 2 seconds until found
-        const completionCheck = setInterval(async () => {
-          console.log('🔍 Checking for job completion...')
-          const found = await pollRecentJobs()
-          if (found) {
-            clearInterval(completionCheck)
-          }
-        }, 2000)
-        
-        // Stop checking after 30 seconds and force 100%
-        setTimeout(() => {
-          clearInterval(completionCheck)
-          console.log('⏰ Timeout reached, forcing 100% completion')
-          setLocalProgress({
-            percentage: 100,
-            completed: total,
-            failed: 0,
-            total
-          })
-          if (jobStatus) {
-            setJobStatus({
-              ...jobStatus,
-              status: 'completed',
-              progress: {
-                ...jobStatus.progress,
-                percentage: 100,
-                completed: total,
-                failed: 0,
-                total
-              }
-            })
-          }
-        }, 30000)
-      }
-    }, 1000) // Update every second
-    
-    // Store interval for cleanup
-    return () => clearInterval(simulationInterval)
-  }
-
-  // Manual completion check for user-triggered refresh
-  const manualCompletionCheck = async () => {
-    setCheckingCompletion(true)
-    console.log('👤 Manual completion check triggered')
-    
-    try {
-      const found = await pollRecentJobs()
-      if (!found) {
-        console.log('🔍 Manual check: No completed job found, trying additional patterns...')
-        
-        // Try more aggressive search patterns
-        const timestamp = Date.now()
-        const possibleIds = [
-          // Recent timestamp-based attempts
-          `job-${timestamp.toString().slice(-8)}`,
-          `${timestamp.toString().slice(-12)}-job`,
-        ]
-        
-        for (const testId of possibleIds) {
-          try {
-            const response = await fetch(`/api/contacts/bulk-enrich/${testId}/status`)
-            if (response.ok) {
-              const data = await response.json()
-              console.log('🎯 Found job with pattern matching!', data)
-              setJobStatus(data)
-              updateProgress(data)
-              break
-            }
-          } catch (error) {
-            // Continue trying
-          }
-        }
-      }
-    } finally {
-      setCheckingCompletion(false)
-    }
-  }
-
-  // Poll job status every 1 second for better responsiveness
+  // SIMPLIFIED polling - just poll the real job ID
   useEffect(() => {
     if (!isOpen || !jobId) return
     
@@ -291,20 +107,24 @@ export function BulkEnrichmentProgressModal({
                          ('totalContacts' in jobId ? jobId.totalContacts : 
                           jobId.summary.eligible_contacts) : 0
     
-    console.log('🔍 Progress Modal: Job data received:', {
+    console.log('🔄 Progress Modal Starting:', {
       jobId: actualJobId,
       totalContacts,
-      isTemp: actualJobId.startsWith('temp-'),
-      rawJobData: jobId
+      isTemp: actualJobId.startsWith('temp-')
     })
     
-    // Force reset polling state when job ID changes
     setIsPolling(true)
     setError(null)
     
-    // Skip polling if this is a temporary ID (starts with "temp-")
+    // Initialize progress for temp IDs
     if (actualJobId.startsWith('temp-')) {
-      console.log('Progress modal: Using temporary ID, showing loading state')
+      setLocalProgress({
+        percentage: 0,
+        completed: 0,
+        failed: 0,
+        total: totalContacts
+      })
+      
       const tempStatus = {
         job_id: actualJobId,
         status: 'pending' as const,
@@ -319,58 +139,15 @@ export function BulkEnrichmentProgressModal({
         created_at: new Date().toISOString()
       }
       setJobStatus(tempStatus)
-      
-      // Initialize local progress for temp state
-      setLocalProgress({
-        percentage: 0,
-        completed: 0,
-        failed: 0,
-        total: totalContacts
-      })
-      
-      setIsPolling(true) // Enable polling for when we get the real ID
-      
-      // ENHANCED FALLBACK: After 2 seconds, start simulation mode
-      setTimeout(() => {
-        console.log('⚠️ Progress Modal: Fallback - still on temp ID after 2s, starting smart simulation')
-        if (actualJobId.startsWith('temp-')) {
-          startProgressSimulation(totalContacts)
-        }
-      }, 2000)
-      
-      return
+      return // Don't poll temp IDs
     }
 
-    // Real job ID - start polling immediately
-    console.log('🔄 Progress Modal: Real job detected, preparing to poll:', actualJobId)
-    if (!isPolling) {
-      console.log('Progress modal: Switching to real job ID, starting polling')
-      setIsPolling(true)
-    }
-    
-    // Update job status with the total from real job data
-    if (totalContacts > 0 && (!jobStatus || jobStatus.job_id.startsWith('temp-'))) {
-      console.log('🔄 Progress Modal: Updating job status with real total:', totalContacts)
-      const initialRealStatus = {
-        job_id: actualJobId,
-        status: 'running' as const,
-        progress: {
-          total: totalContacts,
-          completed: 0,
-          failed: 0,
-          current_batch: 1,
-          percentage: 0
-        },
-        results: [],
-        created_at: new Date().toISOString()
-      }
-      setJobStatus(initialRealStatus)
-      updateProgress(initialRealStatus)
-    }
-
+    // Polling function for real job IDs
     const pollStatus = async () => {
+      if (actualJobId.startsWith('temp-')) return
+      
       try {
-        console.log('Progress modal: Polling job status for:', actualJobId)
+        console.log('📡 Polling job:', actualJobId)
         const response = await fetch(`/api/contacts/bulk-enrich/${actualJobId}/status`)
         
         if (!response.ok) {
@@ -378,63 +155,39 @@ export function BulkEnrichmentProgressModal({
         }
 
         const data = await response.json()
-        console.log('Progress modal: Received job status:', data)
+        console.log('📊 Job status update:', {
+          status: data.status,
+          progress: data.progress?.percentage + '%'
+        })
+        
         setJobStatus(data)
-        updateProgress(data) // Update our local progress calculation
+        updateProgress(data)
         setError(null)
         
+        // Stop polling when done
         if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
-          console.log('Progress modal: Job completed, stopping polling')
+          console.log('✅ Job finished, stopping polling')
           setIsPolling(false)
         }
       } catch (error) {
-        console.error('Failed to fetch job status:', error)
+        console.error('❌ Polling error:', error)
         setError(error instanceof Error ? error.message : 'Failed to fetch job status')
       }
     }
 
-    // Start aggressive polling for real job IDs
-    if (!actualJobId.startsWith('temp-')) {
-      console.log('🚀 Progress Modal: Starting aggressive polling for real job:', actualJobId)
-      
-      // Initial fetch immediately
-      pollStatus()
-      
-      // Set up faster polling (every 1 second)
-      const interval = setInterval(() => {
-        console.log('📡 Polling job status...')
-        pollStatus()
-      }, 1000)
-      
-      // Cleanup interval
-      return () => {
-        console.log('🛑 Progress Modal: Cleaning up polling interval')
-        clearInterval(interval)
-      }
-    }
-  }, [jobId, isOpen, isPolling])
-
-  // Periodic completion check when progress is high
-  useEffect(() => {
-    if (!isOpen || jobStatus?.status === 'completed') return
+    // Start polling immediately for real jobs
+    pollStatus()
     
-    // Start periodic checking when progress is high
-    if (localProgress.percentage >= 90) {
-      console.log('📅 Setting up periodic completion checks at', localProgress.percentage, '%')
-      
-      const periodicCheck = setInterval(async () => {
-        if (localProgress.percentage >= 90 && jobStatus?.status !== 'completed') {
-          console.log('🔄 Periodic check: Looking for job completion...')
-          await pollRecentJobs()
-        }
-      }, 15000) // Check every 15 seconds
-      
-      return () => {
-        console.log('🛑 Cleaning up periodic completion check')
-        clearInterval(periodicCheck)
-      }
+    // Poll every 2 seconds (more reasonable than every 1 second)
+    const interval = setInterval(pollStatus, 2000)
+    
+    return () => {
+      console.log('🛑 Cleaning up polling')
+      clearInterval(interval)
     }
-  }, [isOpen, localProgress.percentage, jobStatus?.status])
+  }, [jobId, isOpen])
+
+  // No more periodic checking - simple polling handles everything
 
   const handleCancelJob = async () => {
     const actualJobId = typeof jobId === 'string' ? jobId : 
@@ -568,24 +321,60 @@ export function BulkEnrichmentProgressModal({
           jobStatus.status === 'completed' ? 'animate-pulse bg-green-50 p-4 rounded-lg border border-green-200' : ''
         }`}>
           {/* Enhanced Progress Bar with Animation */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex justify-between text-sm font-medium text-gray-700">
-              <span>Progress: <span className="text-blue-600">{localProgress.percentage}%</span></span>
-              <span><span className="text-green-600">{localProgress.completed + localProgress.failed}</span> of {localProgress.total} contacts</span>
+              <span>Progress: <span className="text-blue-600 font-bold">{localProgress.percentage}%</span></span>
+              <span><span className="text-green-600 font-bold">{localProgress.completed + localProgress.failed}</span> of <span className="font-bold">{localProgress.total}</span> contacts</span>
             </div>
-            <div className="relative">
-              <Progress 
-                value={localProgress.percentage} 
-                className="w-full h-4 transition-all duration-700 ease-out bg-gray-100 shadow-sm rounded-full overflow-hidden" 
-              />
-              {localProgress.percentage > 0 && (
-                <div 
-                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-700 ease-out rounded-full"
-                  style={{ width: `${localProgress.percentage}%` }}
-                >
-                  <div className="h-full w-full bg-white/20 animate-pulse rounded-full"></div>
+            
+            {/* Main Progress Bar */}
+            <div className="relative w-full h-6 bg-gray-200 rounded-full shadow-inner overflow-hidden">
+              {/* Background pattern for better visibility */}
+              <div className="absolute inset-0 bg-gradient-to-r from-gray-100 to-gray-200"></div>
+              
+              {/* Progress fill */}
+              <div 
+                className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 via-blue-600 to-green-500 rounded-full transition-all duration-700 ease-out shadow-sm"
+                style={{ width: `${localProgress.percentage}%` }}
+              >
+                {/* Shimmer effect for active progress */}
+                {jobStatus.status === 'running' && localProgress.percentage > 0 && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
+                )}
+              </div>
+              
+              {/* Animated loading bar for preparation phase */}
+              {jobStatus.status === 'pending' && (
+                <div className="absolute inset-0">
+                  <div className="h-full bg-gradient-to-r from-blue-400 to-purple-400 rounded-full animate-pulse opacity-50"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-ping"></div>
                 </div>
               )}
+              
+              {/* Progress text overlay */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xs font-bold text-white drop-shadow-sm">
+                  {localProgress.percentage}%
+                </span>
+              </div>
+            </div>
+            
+            {/* Status indicator bar */}
+            <div className="flex gap-1 h-1">
+              {Array.from({ length: Math.max(1, localProgress.total) }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`flex-1 h-full rounded-full transition-all duration-500 ${
+                    i < localProgress.completed 
+                      ? 'bg-green-500' 
+                      : i < localProgress.completed + localProgress.failed
+                      ? 'bg-red-500'
+                      : jobStatus.status === 'running'
+                      ? 'bg-blue-300 animate-pulse'
+                      : 'bg-gray-300'
+                  }`}
+                />
+              ))}
             </div>
           </div>
           
@@ -638,30 +427,146 @@ export function BulkEnrichmentProgressModal({
           )}
 
           {jobStatus.status === 'running' && (
-            <div className="text-center text-sm text-blue-600 flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {simulationActive ? (
-                <>
-                  Enriching contacts... 
-                  <span className="font-semibold">{localProgress.percentage}% complete</span>
-                  <span className="text-xs opacity-75">(estimated)</span>
-                </>
-              ) : (
-                <>
-                  Processing batch {jobStatus.progress?.current_batch || 1}... 
-                  <span className="font-semibold">{localProgress.percentage}% complete</span>
-                </>
-              )}
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 text-sm text-blue-600 mb-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="font-medium">Processing enrichment...</span>
+                <span className="font-bold">{localProgress.percentage}% complete</span>
+                {jobStatus.progress?.current_batch && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                    Batch {jobStatus.progress.current_batch}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-gray-500">
+                🔄 Analyzing websites and extracting data...
+              </div>
             </div>
           )}
           
           {jobStatus.status === 'pending' && (
-            <div className="text-center text-sm text-gray-600 flex items-center justify-center gap-2">
-              <Clock className="h-4 w-4" />
-              Preparing to start enrichment...
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-600 mb-2">
+                <div className="relative">
+                  <Clock className="h-5 w-5 animate-pulse" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
+                </div>
+                <span className="font-medium animate-pulse">Preparing to start enrichment...</span>
+              </div>
+              <div className="text-xs text-gray-500 space-y-1">
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce"></div>
+                  <span>Initializing AI enrichment engine</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 animation-delay-150">
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce"></div>
+                  <span>Queuing {localProgress.total} contacts for processing</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 animation-delay-300">
+                  <div className="w-1 h-1 bg-green-400 rounded-full animate-bounce"></div>
+                  <span>Starting batch processing...</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {jobStatus.status === 'completed' && (
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 text-sm text-green-600 mb-2">
+                <CheckCircle className="h-5 w-5 animate-bounce" />
+                <span className="font-bold">🎉 Enrichment Complete!</span>
+              </div>
+              <div className="text-xs text-green-700">
+                Successfully processed {localProgress.completed} contacts with AI-powered data extraction
+              </div>
+            </div>
+          )}
+          
+          {jobStatus.status === 'failed' && (
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 text-sm text-red-600 mb-2">
+                <XCircle className="h-5 w-5" />
+                <span className="font-bold">❌ Enrichment Failed</span>
+              </div>
+              <div className="text-xs text-red-700">
+                Check individual contact results below for error details
+              </div>
             </div>
           )}
         </div>
+
+        {/* Live Activity Log */}
+        {(jobStatus.status === 'running' || jobStatus.status === 'pending') && (
+          <div className="mb-6 border rounded-lg bg-gray-50">
+            <div className="p-3 border-b bg-gray-100 rounded-t-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium text-gray-700">Live Activity Log</span>
+                <span className="text-xs text-gray-500 ml-auto">Real-time updates</span>
+              </div>
+            </div>
+            <div className="p-4 max-h-32 overflow-y-auto font-mono text-xs text-gray-600 space-y-1">
+              {jobStatus.status === 'pending' && (
+                <>
+                  <div className="flex items-center gap-2 opacity-75">
+                    <span className="text-blue-500">●</span>
+                    <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                    <span>Initializing bulk enrichment job...</span>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-60 animation-delay-500">
+                    <span className="text-purple-500">●</span>
+                    <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                    <span>Loading {localProgress.total} contacts for processing...</span>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-45 animation-delay-1000">
+                    <span className="text-orange-500">●</span>
+                    <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                    <span>Preparing AI enrichment pipeline...</span>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-30 animate-pulse">
+                    <span className="text-green-500">●</span>
+                    <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                    <span>Starting batch processing...</span>
+                  </div>
+                </>
+              )}
+              
+              {jobStatus.status === 'running' && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-500">●</span>
+                    <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                    <span>Job started - Processing batch {jobStatus.progress?.current_batch || 1}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-500">●</span>
+                    <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                    <span>Analyzing {localProgress.total} websites with AI...</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-purple-500">●</span>
+                    <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                    <span>Progress: {localProgress.completed} completed, {localProgress.failed} failed</span>
+                  </div>
+                  {localProgress.percentage > 50 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-yellow-500">●</span>
+                      <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                      <span>Over halfway complete - extracting remaining data...</span>
+                    </div>
+                  )}
+                  {localProgress.percentage > 80 && (
+                    <div className="flex items-center gap-2 animate-pulse">
+                      <span className="text-green-500">●</span>
+                      <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
+                      <span>Nearly finished - finalizing enrichment data...</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Individual Contact Results */}
         {jobStatus.results && jobStatus.results.length > 0 && (
@@ -730,21 +635,39 @@ export function BulkEnrichmentProgressModal({
 
         {/* Job Summary (shown when completed) */}
         {jobStatus.status === 'completed' && jobStatus.summary && (
-          <div className="bg-green-50 p-4 rounded-lg mb-4">
-            <h4 className="font-medium text-green-900 mb-2">🎉 Enrichment Complete!</h4>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-green-700">Successful:</span>
-                <div className="font-medium">{jobStatus.summary.successful_scrapes}</div>
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg mb-4 border-2 border-green-200 shadow-lg animate-pulse">
+            <div className="text-center mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-3 animate-bounce">
+                <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
-              <div>
-                <span className="text-green-700">Failed:</span>
-                <div className="font-medium">{jobStatus.summary.failed_scrapes}</div>
+              <h4 className="text-xl font-bold text-green-900 mb-1">🎉 Enrichment Complete!</h4>
+              <p className="text-sm text-green-700">All contacts have been successfully processed</p>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="bg-white p-3 rounded-lg shadow-sm">
+                <div className="text-2xl font-bold text-green-600">{jobStatus.summary.successful_scrapes}</div>
+                <div className="text-sm text-green-700 font-medium">Successful</div>
               </div>
-              <div>
-                <span className="text-green-700">Data Points:</span>
-                <div className="font-medium">{jobStatus.summary.data_points_extracted}</div>
+              <div className="bg-white p-3 rounded-lg shadow-sm">
+                <div className="text-2xl font-bold text-red-600">{jobStatus.summary.failed_scrapes}</div>
+                <div className="text-sm text-red-700 font-medium">Failed</div>
               </div>
+              <div className="bg-white p-3 rounded-lg shadow-sm">
+                <div className="text-2xl font-bold text-blue-600">{jobStatus.summary.data_points_extracted}</div>
+                <div className="text-sm text-blue-700 font-medium">Data Points</div>
+              </div>
+            </div>
+            
+            {/* Success celebration animation */}
+            <div className="flex justify-center mt-4 space-x-1">
+              {[...Array(5)].map((_, i) => (
+                <div
+                  key={i}
+                  className="w-2 h-2 bg-green-500 rounded-full animate-bounce"
+                  style={{ animationDelay: `${i * 0.1}s` }}
+                ></div>
+              ))}
             </div>
           </div>
         )}
@@ -769,28 +692,6 @@ export function BulkEnrichmentProgressModal({
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
                   Cancel Job
-                </Button>
-              )}
-              
-              {/* Manual Completion Check Button */}
-              {(simulationActive || localProgress.percentage >= 90) && jobStatus.status !== 'completed' && (
-                <Button
-                  variant="outline"
-                  onClick={manualCompletionCheck}
-                  disabled={checkingCompletion}
-                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                >
-                  {checkingCompletion ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Checking...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Check if Complete
-                    </>
-                  )}
                 </Button>
               )}
             </div>

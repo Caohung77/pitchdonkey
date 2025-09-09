@@ -310,6 +310,13 @@ export class SmartEnrichmentOrchestrator {
     try {
       const result = await this.linkedinExtractorService.extractContactLinkedIn(contactId, userId)
       
+      if (result.success && result.data) {
+        // Perform smart merge even for LinkedIn-only to save enrichment metadata
+        console.log('🔄 Saving LinkedIn enrichment metadata')
+        const mergedData = this.smartMergeData(contact, null, result.data)
+        await this.saveMergedData(contactId, userId, mergedData)
+      }
+      
       return {
         success: result.success,
         sources_used: result.success ? ['linkedin'] : [],
@@ -420,6 +427,11 @@ export class SmartEnrichmentOrchestrator {
       // Add enrichment metadata
       updateData.enrichment_sources = mergedData.enrichment_sources
       updateData.enrichment_priority = mergedData.enrichment_priority
+      
+      // Add LinkedIn profile data if available
+      if (mergedData.linkedin_profile_data) {
+        updateData.linkedin_profile_data = mergedData.linkedin_profile_data
+      }
       
       const { error } = await supabase
         .from('contacts')

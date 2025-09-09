@@ -185,14 +185,43 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
     setError(null)
 
     try {
-      console.log('EditContactModal: Updating contact:', contact.id, formData)
+      // Clean and prepare data for the API
+      const cleanedData = {
+        ...formData,
+        // Convert empty strings to undefined for URL fields
+        website: formData.website?.trim() || undefined,
+        linkedin_url: formData.linkedin_url?.trim() || undefined,
+        twitter_url: formData.twitter_url?.trim() || undefined,
+        // Convert empty sex field to undefined
+        sex: formData.sex?.trim() || undefined,
+        // Clean other optional string fields
+        first_name: formData.first_name?.trim() || undefined,
+        last_name: formData.last_name?.trim() || undefined,
+        company: formData.company?.trim() || undefined,
+        position: formData.position?.trim() || undefined,
+        phone: formData.phone?.trim() || undefined,
+        address: formData.address?.trim() || undefined,
+        postcode: formData.postcode?.trim() || undefined,
+        country: formData.country?.trim() || undefined,
+        city: formData.city?.trim() || undefined,
+        timezone: formData.timezone?.trim() || undefined,
+        source: formData.source?.trim() || undefined,
+        // Clean enrichment fields
+        enriched_industry: formData.enriched_industry?.trim() || undefined,
+        enriched_products_services: formData.enriched_products_services?.trim() || undefined,
+        enriched_target_audience: formData.enriched_target_audience?.trim() || undefined,
+        enriched_unique_points: formData.enriched_unique_points?.trim() || undefined,
+        enriched_tone_style: formData.enriched_tone_style?.trim() || undefined,
+      }
+      
+      console.log('Sending contact data:', cleanedData)
       
       const response = await fetch(`/api/contacts/${contact.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(cleanedData),
       })
 
       if (!response.ok) {
@@ -200,7 +229,16 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         try {
           const errorData = await response.json()
           errorMessage = errorData.error?.message || errorData.error || errorMessage
-        } catch {
+          
+          // If there are validation details, show them
+          if (errorData.details && Array.isArray(errorData.details)) {
+            const validationErrors = errorData.details.map((err: any) => 
+              `${err.path?.join('.')}: ${err.message}`
+            ).join('; ')
+            errorMessage = `Validation error: ${validationErrors}`
+          }
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError)
           // If response body can't be parsed, use default message
         }
         throw new Error(errorMessage)
@@ -214,7 +252,6 @@ export function EditContactModal({ contact, isOpen, onClose, onContactUpdated }:
         data = { success: true, message: 'Contact updated successfully' }
       }
 
-      console.log('EditContactModal: Contact updated successfully:', data)
       
       onClose()
       onContactUpdated()

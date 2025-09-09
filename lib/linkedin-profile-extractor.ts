@@ -8,6 +8,7 @@ interface LinkedInEnrichmentData {
   last_name: string
   headline: string
   summary: string
+  about: string  // Added: "Info" section for personalization
   
   // Location
   city: string
@@ -51,9 +52,78 @@ interface LinkedInEnrichmentData {
     proficiency?: string
   }>
   
-  // Social proof
+  // Social proof and Network
   follower_count?: number
   connection_count?: number
+  recommendations_count?: number
+  recommendations?: string[]
+  
+  // Professional Content
+  posts?: Array<{
+    text?: string
+    date?: string
+    engagement?: {
+      likes?: number
+      comments?: number
+      shares?: number
+    }
+  }>
+  
+  // Services (Serviceleistungen)
+  services?: Array<{
+    name?: string
+    description?: string
+  }>
+  
+  // Additional Professional Info
+  volunteer_experience?: Array<{
+    title?: string
+    organization?: string
+    cause?: string
+    start_date?: string
+    end_date?: string
+  }>
+  
+  organizations?: Array<{
+    name?: string
+    position?: string
+    start_date?: string
+    end_date?: string
+  }>
+  
+  honors_and_awards?: Array<{
+    title?: string
+    issuer?: string
+    date?: string
+    description?: string
+  }>
+  
+  projects?: Array<{
+    title?: string
+    description?: string
+    start_date?: string
+    end_date?: string
+  }>
+  
+  courses?: Array<{
+    name?: string
+    institution?: string
+    completion_date?: string
+  }>
+  
+  patents?: Array<{
+    title?: string
+    patent_office?: string
+    patent_number?: string
+    date?: string
+  }>
+  
+  publications?: Array<{
+    title?: string
+    publisher?: string
+    date?: string
+    description?: string
+  }>
   
   // Contact info
   contact_info?: {
@@ -170,6 +240,14 @@ export class LinkedInProfileExtractorService {
         // 7. Process and save the data
         const enrichmentData = this.processLinkedInData(profileData)
         
+        console.log('💾 Saving LinkedIn data to database:', {
+          contact_id: contactId,
+          experience_count: enrichmentData.experience?.length || 0,
+          education_count: enrichmentData.education?.length || 0,
+          has_about: !!enrichmentData.about,
+          has_current_company: !!enrichmentData.current_company
+        })
+        
         // 8. Update contact with LinkedIn data
         const { error: updateError } = await supabase
           .from('contacts')
@@ -200,6 +278,21 @@ export class LinkedInProfileExtractorService {
             linkedin_url: linkedinUrl,
             status: 'failed'
           }
+        }
+
+        // Verify the data was saved correctly
+        const { data: verificationContact } = await supabase
+          .from('contacts')
+          .select('linkedin_profile_data, linkedin_extraction_status')
+          .eq('id', contactId)
+          .single()
+
+        if (verificationContact) {
+          console.log('✅ Database verification:', {
+            stored_experience_count: verificationContact.linkedin_profile_data?.experience?.length || 0,
+            stored_education_count: verificationContact.linkedin_profile_data?.education?.length || 0,
+            extraction_status: verificationContact.linkedin_extraction_status
+          })
         }
 
         console.log('✅ LinkedIn extraction completed successfully')
@@ -347,6 +440,35 @@ export class LinkedInProfileExtractorService {
    * Process raw LinkedIn data into structured enrichment format
    */
   private processLinkedInData(rawData: LinkedInProfileResponse): LinkedInEnrichmentData {
+    // DEBUGGING: Log raw LinkedIn data structure
+    console.log('🔍 Processing LinkedIn data - Raw experience field:', {
+      experience_type: typeof rawData.experience,
+      experience_is_array: Array.isArray(rawData.experience),
+      experience_length: Array.isArray(rawData.experience) ? rawData.experience.length : 'N/A',
+      experience_sample: Array.isArray(rawData.experience) && rawData.experience.length > 0 ? rawData.experience[0] : null
+    })
+    
+    console.log('🔍 Processing LinkedIn data - Raw education field:', {
+      education_type: typeof rawData.education,
+      education_is_array: Array.isArray(rawData.education),
+      education_length: Array.isArray(rawData.education) ? rawData.education.length : 'N/A',
+      education_sample: Array.isArray(rawData.education) && rawData.education.length > 0 ? rawData.education[0] : null,
+      educations_details_type: typeof rawData.educations_details,
+      educations_details_is_array: Array.isArray(rawData.educations_details),
+      educations_details_length: Array.isArray(rawData.educations_details) ? rawData.educations_details.length : 'N/A'
+    })
+
+    // Process experience data with validation
+    const processedExperience = this.processExperienceData(rawData)
+    const processedEducation = this.processEducationData(rawData)
+
+    console.log('✅ Processed LinkedIn arrays:', {
+      final_experience_count: processedExperience.length,
+      final_education_count: processedEducation.length,
+      experience_titles: processedExperience.map(exp => exp.title).filter(Boolean).slice(0, 3),
+      education_schools: processedEducation.map(edu => edu.school).filter(Boolean).slice(0, 3)
+    })
+
     return {
       // Personal Information
       name: rawData.name || '',
@@ -354,6 +476,7 @@ export class LinkedInProfileExtractorService {
       last_name: rawData.last_name || rawData.name?.split(' ').slice(1).join(' ') || '',
       headline: rawData.headline || '',
       summary: rawData.summary || '',
+      about: rawData.about || '',  // CRITICAL: "Info" section for personalization
       
       // Location
       city: rawData.city || '',
@@ -362,21 +485,38 @@ export class LinkedInProfileExtractorService {
       
       // Professional Information
       position: rawData.position || rawData.headline || '',
-      current_company: rawData.current_company || '',
+      current_company: typeof rawData.current_company === 'object' && rawData.current_company?.name ? rawData.current_company.name : rawData.current_company || '',
       industry: rawData.industry || '',
       
-      // Experience and Education
-      experience: Array.isArray(rawData.experience) ? rawData.experience.slice(0, 5) : [], // Limit to top 5
-      education: Array.isArray(rawData.education) ? rawData.education.slice(0, 3) : [], // Limit to top 3
+      // Experience and Education (with comprehensive processing)
+      experience: processedExperience,
+      education: processedEducation,
       
       // Skills and Additional Info
-      skills: Array.isArray(rawData.skills) ? rawData.skills.slice(0, 10) : [], // Limit to top 10
-      certifications: Array.isArray(rawData.certifications) ? rawData.certifications.slice(0, 5) : [],
+      skills: Array.isArray(rawData.skills) ? rawData.skills : [], // Keep all skills
+      certifications: Array.isArray(rawData.certifications) ? rawData.certifications : [],
       languages: Array.isArray(rawData.languages) ? rawData.languages : [],
       
-      // Social proof
-      follower_count: rawData.follower_count || 0,
-      connection_count: rawData.connection_count || 0,
+      // Social proof and Network (CRITICAL for outreach context)
+      follower_count: rawData.followers || rawData.follower_count || 0,
+      connection_count: rawData.connections || rawData.connection_count || 0,
+      recommendations_count: rawData.recommendations_count || 0,
+      recommendations: Array.isArray(rawData.recommendations) ? rawData.recommendations : [],
+      
+      // Professional Content (for engagement insights)
+      posts: Array.isArray(rawData.posts) ? rawData.posts.slice(0, 10) : [], // Recent posts for personalization
+      
+      // Services (Serviceleistungen) - CRITICAL for German LinkedIn profiles
+      services: Array.isArray(rawData.services) ? rawData.services : [],
+      
+      // Additional Professional Info (rich context for outreach)
+      volunteer_experience: Array.isArray(rawData.volunteer_experience) ? rawData.volunteer_experience : [],
+      organizations: Array.isArray(rawData.organizations) ? rawData.organizations : [],
+      honors_and_awards: Array.isArray(rawData.honors_and_awards) ? rawData.honors_and_awards : [],
+      projects: Array.isArray(rawData.projects) ? rawData.projects : [],
+      courses: Array.isArray(rawData.courses) ? rawData.courses : [],
+      patents: Array.isArray(rawData.patents) ? rawData.patents : [],
+      publications: Array.isArray(rawData.publications) ? rawData.publications : [],
       
       // Contact info
       contact_info: rawData.contact_info || { websites: [], phone: '', email: '' }
@@ -413,6 +553,86 @@ export class LinkedInProfileExtractorService {
     } catch (error) {
       console.error('❌ Failed to update LinkedIn status:', error)
     }
+  }
+
+  /**
+   * Process experience data with comprehensive validation
+   */
+  private processExperienceData(rawData: LinkedInProfileResponse): Array<{
+    title?: string
+    company?: string
+    location?: string
+    start_date?: string
+    end_date?: string
+    description?: string
+    duration?: string
+  }> {
+    // Handle multiple possible experience data sources
+    const experienceData = rawData.experience;
+    
+    if (!experienceData) {
+      console.log('⚠️ No experience data found in LinkedIn profile');
+      return [];
+    }
+
+    if (!Array.isArray(experienceData)) {
+      console.log('⚠️ Experience data is not an array:', typeof experienceData);
+      return [];
+    }
+
+    // Filter out null/empty entries and ensure required fields
+    const validExperience = experienceData
+      .filter(exp => exp && (exp.title || exp.company))
+      .map(exp => ({
+        title: exp.title || '',
+        company: exp.company || '',
+        location: exp.location || '',
+        start_date: exp.start_date || '',
+        end_date: exp.end_date || '',
+        description: exp.description || '',
+        duration: exp.duration || ''
+      }));
+
+    console.log(`📊 Processed ${validExperience.length} valid experience entries from ${experienceData.length} raw entries`);
+    return validExperience;
+  }
+
+  /**
+   * Process education data with comprehensive validation
+   */
+  private processEducationData(rawData: LinkedInProfileResponse): Array<{
+    school?: string
+    degree?: string
+    field_of_study?: string
+    start_year?: string
+    end_year?: string
+  }> {
+    // Handle multiple possible education data sources
+    const educationData = rawData.education || rawData.educations_details;
+    
+    if (!educationData) {
+      console.log('⚠️ No education data found in LinkedIn profile');
+      return [];
+    }
+
+    if (!Array.isArray(educationData)) {
+      console.log('⚠️ Education data is not an array:', typeof educationData);
+      return [];
+    }
+
+    // Filter out null/empty entries and ensure required fields
+    const validEducation = educationData
+      .filter(edu => edu && (edu.school || edu.institution || edu.degree || edu.title))
+      .map(edu => ({
+        school: edu.school || edu.institution || edu.title || '',
+        degree: edu.degree || '',
+        field_of_study: edu.field_of_study || edu.field || '',
+        start_year: edu.start_year || edu.start_date || '',
+        end_year: edu.end_year || edu.end_date || ''
+      }));
+
+    console.log(`📊 Processed ${validEducation.length} valid education entries from ${educationData.length} raw entries`);
+    return validEducation;
   }
 
   /**

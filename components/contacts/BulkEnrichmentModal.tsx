@@ -8,15 +8,18 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Globe, CheckCircle, AlertTriangle, Clock, XCircle, Loader2 } from 'lucide-react'
+import { Globe, CheckCircle, AlertTriangle, Clock, XCircle, Loader2, Linkedin } from 'lucide-react'
 
 interface Contact {
   id: string
   email: string
   company?: string
   website?: string
+  linkedin_url?: string
   enrichment_status?: string
   enrichment_updated_at?: string
+  linkedin_extraction_status?: string
+  linkedin_extracted_at?: string
 }
 
 interface BulkEnrichmentModalProps {
@@ -27,10 +30,11 @@ interface BulkEnrichmentModalProps {
 }
 
 interface EnrichmentEligibility {
-  eligible: Contact[]
-  already_enriched: Contact[]
-  no_website: Contact[]
-  processing: Contact[]
+  eligible: Contact[]            // Can be enriched (website or LinkedIn available)
+  already_enriched: Contact[]    // Recently enriched
+  no_sources: Contact[]          // No website AND no LinkedIn
+  processing: Contact[]          // Currently being processed
+  linkedin_only: Contact[]       // No website but has LinkedIn (can use LinkedIn enrichment)
 }
 
 export function BulkEnrichmentModal({
@@ -55,22 +59,33 @@ export function BulkEnrichmentModal({
   const analyzeEligibility = () => {
     const eligible: Contact[] = []
     const already_enriched: Contact[] = []
-    const no_website: Contact[] = []
+    const no_sources: Contact[] = []
     const processing: Contact[] = []
+    const linkedin_only: Contact[] = []
 
     selectedContacts.forEach(contact => {
-      if (!contact.website) {
-        no_website.push(contact)
-      } else if (contact.enrichment_status === 'pending') {
+      const hasWebsite = !!contact.website
+      const hasLinkedIn = !!contact.linkedin_url
+      const isWebsiteEnriched = contact.enrichment_status === 'completed' && isRecentlyEnriched(contact.enrichment_updated_at)
+      const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed' && isRecentlyEnriched(contact.linkedin_extracted_at)
+      const isProcessing = contact.enrichment_status === 'pending' || contact.linkedin_extraction_status === 'pending'
+      
+      if (isProcessing) {
         processing.push(contact)
-      } else if (contact.enrichment_status === 'completed' && isRecentlyEnriched(contact.enrichment_updated_at)) {
+      } else if ((isWebsiteEnriched || isLinkedInEnriched)) {
         already_enriched.push(contact)
+      } else if (!hasWebsite && !hasLinkedIn) {
+        no_sources.push(contact)
+      } else if (!hasWebsite && hasLinkedIn) {
+        // Has LinkedIn but no website - can use LinkedIn-only enrichment
+        linkedin_only.push(contact)
       } else {
+        // Has website (and maybe LinkedIn) - can use standard or smart enrichment
         eligible.push(contact)
       }
     })
 
-    setEligibility({ eligible, already_enriched, no_website, processing })
+    setEligibility({ eligible, already_enriched, no_sources, processing, linkedin_only })
   }
 
   const isRecentlyEnriched = (lastEnriched: string | undefined): boolean => {
@@ -81,22 +96,25 @@ export function BulkEnrichmentModal({
   }
 
   const handleStartEnrichment = async () => {
-    if (!eligibility || (eligibility.eligible.length === 0 && (!forceRefresh || eligibility.already_enriched.length === 0))) return
+    const totalEligible = eligibility.eligible.length + eligibility.linkedin_only.length
+    const totalRefreshable = eligibility.already_enriched.length
+    
+    if (!eligibility || (totalEligible === 0 && (!forceRefresh || totalRefreshable === 0))) return
 
     setIsStarting(true)
     
-    // Calculate total contacts for progress tracking
+    // Calculate total contacts for progress tracking (include LinkedIn-only contacts)
     const totalContacts = forceRefresh 
-      ? eligibility.eligible.length + eligibility.already_enriched.length 
-      : eligibility.eligible.length
+      ? totalEligible + totalRefreshable
+      : totalEligible
 
     // Show progress modal immediately with contact info
     const tempJobInfo = {
       jobId: 'temp-' + Date.now(),
       totalContacts,
       contactIds: forceRefresh 
-        ? [...eligibility.eligible.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
-        : eligibility.eligible.map(c => c.id)
+        ? [...eligibility.eligible.map(c => c.id), ...eligibility.linkedin_only.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
+        : [...eligibility.eligible.map(c => c.id), ...eligibility.linkedin_only.map(c => c.id)]
     }
     
     console.log('🔄 BulkEnrichmentModal: Starting enrichment - showing progress modal immediately')
@@ -107,8 +125,8 @@ export function BulkEnrichmentModal({
     
     try {
       const contactIds = forceRefresh 
-        ? [...eligibility.eligible.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
-        : eligibility.eligible.map(c => c.id)
+        ? [...eligibility.eligible.map(c => c.id), ...eligibility.linkedin_only.map(c => c.id), ...eligibility.already_enriched.map(c => c.id)]
+        : [...eligibility.eligible.map(c => c.id), ...eligibility.linkedin_only.map(c => c.id)]
 
       console.log('Starting bulk enrichment:', {
         contact_ids: contactIds,
@@ -187,25 +205,50 @@ export function BulkEnrichmentModal({
   }
 
   const getStatusBadge = (contact: Contact) => {
-    if (!contact.website) {
-      return <Badge variant="secondary" className="text-xs">No Website</Badge>
+    const hasWebsite = !!contact.website
+    const hasLinkedIn = !!contact.linkedin_url
+    const isWebsiteEnriched = contact.enrichment_status === 'completed'
+    const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed'
+    const isProcessing = contact.enrichment_status === 'pending' || contact.linkedin_extraction_status === 'pending'
+    
+    if (isProcessing) {
+      return <Badge variant="default" className="text-xs bg-blue-100 text-blue-800">Processing</Badge>
     }
     
-    switch (contact.enrichment_status) {
-      case 'completed':
-        return <Badge variant="default" className="text-xs bg-green-100 text-green-800">Enriched</Badge>
-      case 'pending':
-        return <Badge variant="default" className="text-xs bg-blue-100 text-blue-800">Processing</Badge>
-      case 'failed':
-        return <Badge variant="destructive" className="text-xs">Failed</Badge>
-      default:
-        return <Badge variant="outline" className="text-xs">Ready</Badge>
+    if (isWebsiteEnriched && isLinkedInEnriched) {
+      return <Badge variant="default" className="text-xs bg-green-100 text-green-800">Fully Enriched</Badge>
     }
+    
+    if (isWebsiteEnriched) {
+      return <Badge variant="default" className="text-xs bg-green-100 text-green-800">Website Enriched</Badge>
+    }
+    
+    if (isLinkedInEnriched) {
+      return <Badge variant="default" className="text-xs bg-blue-100 text-blue-800">LinkedIn Enriched</Badge>
+    }
+    
+    if (contact.enrichment_status === 'failed' || contact.linkedin_extraction_status === 'failed') {
+      return <Badge variant="destructive" className="text-xs">Failed</Badge>
+    }
+    
+    if (!hasWebsite && !hasLinkedIn) {
+      return <Badge variant="secondary" className="text-xs">No Sources</Badge>
+    }
+    
+    if (!hasWebsite && hasLinkedIn) {
+      return <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">LinkedIn Available</Badge>
+    }
+    
+    if (hasWebsite) {
+      return <Badge variant="outline" className="text-xs">Ready</Badge>
+    }
+    
+    return <Badge variant="secondary" className="text-xs">Unknown</Badge>
   }
 
   const estimatedMinutes = eligibility ? Math.ceil((forceRefresh 
-    ? eligibility.eligible.length + eligibility.already_enriched.length 
-    : eligibility.eligible.length) * 0.5) : 0
+    ? eligibility.eligible.length + eligibility.linkedin_only.length + eligibility.already_enriched.length 
+    : eligibility.eligible.length + eligibility.linkedin_only.length) * 0.5) : 0
 
   if (!eligibility) {
     return (
@@ -226,31 +269,36 @@ export function BulkEnrichmentModal({
         <DialogHeader>
           <DialogTitle>Bulk Contact Enrichment</DialogTitle>
           <DialogDescription>
-            Analyze website content for {selectedContacts.length} selected contacts using Perplexity AI
+            Enrich {selectedContacts.length} selected contacts using website analysis or LinkedIn profile extraction
           </DialogDescription>
         </DialogHeader>
 
         {/* Status Overview */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <div className="text-center p-4 bg-green-50 rounded-lg">
-            <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-green-600">{eligibility.eligible.length}</div>
-            <div className="text-sm text-green-700">Ready to Enrich</div>
+        <div className="grid grid-cols-5 gap-3 mb-6">
+          <div className="text-center p-3 bg-green-50 rounded-lg">
+            <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+            <div className="text-xl font-bold text-green-600">{eligibility.eligible.length}</div>
+            <div className="text-xs text-green-700">Website Ready</div>
           </div>
-          <div className="text-center p-4 bg-blue-50 rounded-lg">
-            <Globe className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-blue-600">{eligibility.already_enriched.length}</div>
-            <div className="text-sm text-blue-700">Recently Enriched</div>
+          <div className="text-center p-3 bg-blue-50 rounded-lg">
+            <Linkedin className="h-6 w-6 text-blue-600 mx-auto mb-1" />
+            <div className="text-xl font-bold text-blue-600">{eligibility.linkedin_only.length}</div>
+            <div className="text-xs text-blue-700">LinkedIn Only</div>
           </div>
-          <div className="text-center p-4 bg-yellow-50 rounded-lg">
-            <AlertTriangle className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-yellow-600">{eligibility.no_website.length}</div>
-            <div className="text-sm text-yellow-700">No Website</div>
+          <div className="text-center p-3 bg-purple-50 rounded-lg">
+            <Globe className="h-6 w-6 text-purple-600 mx-auto mb-1" />
+            <div className="text-xl font-bold text-purple-600">{eligibility.already_enriched.length}</div>
+            <div className="text-xs text-purple-700">Recently Enriched</div>
           </div>
-          <div className="text-center p-4 bg-orange-50 rounded-lg">
-            <Clock className="h-8 w-8 text-orange-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-orange-600">{eligibility.processing.length}</div>
-            <div className="text-sm text-orange-700">Processing</div>
+          <div className="text-center p-3 bg-orange-50 rounded-lg">
+            <Clock className="h-6 w-6 text-orange-600 mx-auto mb-1" />
+            <div className="text-xl font-bold text-orange-600">{eligibility.processing.length}</div>
+            <div className="text-xs text-orange-700">Processing</div>
+          </div>
+          <div className="text-center p-3 bg-gray-50 rounded-lg">
+            <XCircle className="h-6 w-6 text-gray-600 mx-auto mb-1" />
+            <div className="text-xl font-bold text-gray-600">{eligibility.no_sources.length}</div>
+            <div className="text-xs text-gray-700">No Sources</div>
           </div>
         </div>
 
@@ -260,7 +308,7 @@ export function BulkEnrichmentModal({
             <TableHeader>
               <TableRow>
                 <TableHead>Contact</TableHead>
-                <TableHead>Website</TableHead>
+                <TableHead>Sources</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Enriched</TableHead>
               </TableRow>
@@ -275,18 +323,32 @@ export function BulkEnrichmentModal({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {contact.website ? (
-                      <a 
-                        href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline text-sm"
-                      >
-                        {contact.website.replace(/^https?:\/\//, '')}
-                      </a>
-                    ) : (
-                      <span className="text-gray-400 text-sm">No website</span>
-                    )}
+                    <div className="space-y-1">
+                      {contact.website ? (
+                        <a 
+                          href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline text-sm flex items-center gap-1"
+                        >
+                          <Globe className="h-3 w-3" />
+                          {contact.website.replace(/^https?:\/\//, '')}
+                        </a>
+                      ) : (
+                        <span className="text-gray-400 text-sm">No website</span>
+                      )}
+                      {contact.linkedin_url && (
+                        <a 
+                          href={contact.linkedin_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline text-sm flex items-center gap-1"
+                        >
+                          <Linkedin className="h-3 w-3" />
+                          LinkedIn
+                        </a>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {getStatusBadge(contact)}
@@ -358,8 +420,8 @@ export function BulkEnrichmentModal({
               <span className="text-blue-700">API Calls:</span>
               <div className="font-medium">
                 {forceRefresh 
-                  ? eligibility.eligible.length + eligibility.already_enriched.length
-                  : eligibility.eligible.length
+                  ? eligibility.eligible.length + eligibility.linkedin_only.length + eligibility.already_enriched.length
+                  : eligibility.eligible.length + eligibility.linkedin_only.length
                 } requests
               </div>
             </div>
@@ -377,7 +439,7 @@ export function BulkEnrichmentModal({
           <Button 
             onClick={handleStartEnrichment}
             disabled={
-              (eligibility.eligible.length === 0 && (!forceRefresh || eligibility.already_enriched.length === 0)) || 
+              (eligibility.eligible.length + eligibility.linkedin_only.length === 0 && (!forceRefresh || eligibility.already_enriched.length === 0)) || 
               isStarting
             }
             className="bg-blue-600 hover:bg-blue-700"
