@@ -663,7 +663,7 @@ export class LinkedInProfileExtractorService {
   }
 
   /**
-   * Process experience data with comprehensive validation
+   * Process experience data with comprehensive validation and synthesis
    */
   private processExperienceData(rawData: LinkedInProfileResponse): Array<{
     title?: string
@@ -676,31 +676,60 @@ export class LinkedInProfileExtractorService {
   }> {
     // Handle multiple possible experience data sources
     const experienceData = rawData.experience;
+    let validExperience: Array<any> = [];
     
-    if (!experienceData) {
-      console.log('⚠️ No experience data found in LinkedIn profile');
-      return [];
+    // First, try to process formal experience array
+    if (experienceData && Array.isArray(experienceData)) {
+      // Filter out null/empty entries and ensure required fields
+      validExperience = experienceData
+        .filter(exp => exp && (exp.title || exp.company))
+        .map(exp => ({
+          title: exp.title || '',
+          company: exp.company || '',
+          location: exp.location || '',
+          start_date: exp.start_date || '',
+          end_date: exp.end_date || '',
+          description: exp.description || '',
+          duration: exp.duration || ''
+        }));
+
+      console.log(`📊 Processed ${validExperience.length} formal experience entries from ${experienceData.length} raw entries`);
+    } else {
+      console.log('⚠️ No formal experience array found in LinkedIn profile');
     }
-
-    if (!Array.isArray(experienceData)) {
-      console.log('⚠️ Experience data is not an array:', typeof experienceData);
-      return [];
+    
+    // If we have no experience entries but have current company data, synthesize an entry
+    if (validExperience.length === 0 && (rawData.position || rawData.current_company)) {
+      console.log('🔧 Synthesizing experience entry from current company data...');
+      
+      let currentCompanyName = '';
+      if (typeof rawData.current_company === 'object' && rawData.current_company !== null) {
+        currentCompanyName = rawData.current_company.name || '';
+      } else if (typeof rawData.current_company === 'string') {
+        currentCompanyName = rawData.current_company;
+      }
+      
+      if (rawData.position || currentCompanyName) {
+        const synthesizedEntry = {
+          title: rawData.position || 'Professional',
+          company: currentCompanyName || 'Current Company',
+          location: rawData.city || '',
+          start_date: '', // We don't have start date info
+          end_date: '', // Current position, no end date
+          description: rawData.headline || rawData.about || '',
+          duration: 'Current'
+        };
+        
+        validExperience.push(synthesizedEntry);
+        console.log('✅ Synthesized experience entry:', {
+          title: synthesizedEntry.title,
+          company: synthesizedEntry.company,
+          location: synthesizedEntry.location
+        });
+      }
     }
-
-    // Filter out null/empty entries and ensure required fields
-    const validExperience = experienceData
-      .filter(exp => exp && (exp.title || exp.company))
-      .map(exp => ({
-        title: exp.title || '',
-        company: exp.company || '',
-        location: exp.location || '',
-        start_date: exp.start_date || '',
-        end_date: exp.end_date || '',
-        description: exp.description || '',
-        duration: exp.duration || ''
-      }));
-
-    console.log(`📊 Processed ${validExperience.length} valid experience entries from ${experienceData.length} raw entries`);
+    
+    console.log(`🎯 Final processed experience count: ${validExperience.length}`);
     return validExperience;
   }
 
