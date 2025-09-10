@@ -17,7 +17,8 @@ interface LinkedInProfileResponse {
   first_name?: string
   last_name?: string
   headline?: string
-  about?: string                       // Concise profile summary (18.96% coverage)
+  about?: string                       // Concise profile summary (18.96% coverage) - CRITICAL for personalization
+  summary?: string                     // Longer profile summary section
   
   // Location Information (High Coverage)
   city?: string                        // Geographical location (96.08% coverage)
@@ -27,13 +28,7 @@ interface LinkedInProfileResponse {
   
   // Professional Information
   position?: string                    // Current job title (91.70% coverage)
-  current_company?: string             // Legacy format
-  current_company_name?: string        // Company name from current_company object
-  current_company_company_id?: string  // Company ID from current_company object
-  industry?: string
-  
-  // Current Company Object (100% coverage)
-  current_company?: {
+  current_company?: string | {         // Can be string (legacy) or object (detailed)
     name?: string
     company_id?: string
     industry?: string
@@ -41,6 +36,9 @@ interface LinkedInProfileResponse {
     location?: string
     start_date?: string
   }
+  current_company_name?: string        // Company name from current_company object
+  current_company_company_id?: string  // Company ID from current_company object
+  industry?: string
   
   // Media and URLs
   url?: string                         // LinkedIn profile URL
@@ -226,6 +224,14 @@ interface LinkedInProfileResponse {
     current_company?: string
   }>
   
+  // Bio Links and External URLs (Critical for company URL extraction)
+  bio_links?: Array<{
+    title?: string
+    name?: string
+    link?: string
+    url?: string
+  }>
+  
   // Contact Information
   contact_info?: {
     websites?: string[]
@@ -234,6 +240,12 @@ interface LinkedInProfileResponse {
     twitter?: string
     address?: string
   }
+  
+  // Additional Rich Data from BrightData
+  services?: Array<{
+    name?: string
+    description?: string
+  }>
   
   // Metadata and Quality
   profile_completeness?: number
@@ -273,7 +285,7 @@ export class BrightDataLinkedInClient {
       apiKey: process.env.BRIGHTDATA_API_KEY!,
       // LinkedIn Profiles API dataset ID (working one)
       datasetId: process.env.BRIGHTDATA_DATASET_ID || 'gd_l1viktl72bvl7bjuj0',
-      baseUrl: process.env.BRIGHTDATA_API_URL || 'https://api.brightdata.com/datasets/v3'
+      baseUrl: (process.env.BRIGHTDATA_API_URL || 'https://api.brightdata.com/datasets/v3').replace(/\/trigger$/, '')
     }
 
     if (!this.config.apiKey) {
@@ -312,14 +324,20 @@ export class BrightDataLinkedInClient {
 
     try {
       // Prepare request payload for LinkedIn Profiles API
-      // According to Bright Data docs, LinkedIn profiles need specific format
+      // According to BrightData docs: https://docs.brightdata.com/api-reference/web-scraper-api/social-media-apis/linkedin#profiles-api
+      // Format: [{"url":"https://www.linkedin.com/in/profile-name/"}]
       const requestPayload = validUrls.map(url => ({ 
         url: this.normalizeLinkedInUrl(url)
       }))
 
       console.log('📤 Request payload:', JSON.stringify(requestPayload, null, 2))
+      
+      // BrightData LinkedIn Profiles API endpoint with correct parameters
+      const apiEndpoint = `${this.config.baseUrl}/trigger?dataset_id=${this.config.datasetId}&format=json&uncompressed_webhook=true&include_errors=true`
+      console.log('🌐 API Endpoint:', apiEndpoint)
+      console.log('🔑 Using dataset_id:', this.config.datasetId)
 
-      const response = await fetch(`${this.config.baseUrl}/trigger?dataset_id=${this.config.datasetId}&include_errors=true&format=json`, {
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,
@@ -337,7 +355,34 @@ export class BrightDataLinkedInClient {
 
       const data: BrightDataApiResponse = await response.json()
       console.log('✅ Bright Data API response received')
+      console.log('📊 Response status:', response.status, response.statusText)
+      console.log('📊 Response headers:', JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2))
       console.log('📊 Full API Response:', JSON.stringify(data, null, 2))
+      
+      // Log successful data retrieval
+      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        console.log(`✅ Retrieved ${data.data.length} LinkedIn profile(s) from immediate response`)
+        
+        // DEBUG: Log first profile's key fields to understand data structure
+        const firstProfile = data.data[0]
+        console.log('🔍 First profile key fields:', {
+          name: firstProfile.name || 'EMPTY',
+          headline: firstProfile.headline || 'EMPTY',
+          position: firstProfile.position || 'EMPTY',
+          current_company: firstProfile.current_company || 'EMPTY',
+          about: firstProfile.about || 'EMPTY',
+          city: firstProfile.city || 'EMPTY',
+          country: firstProfile.country || 'EMPTY',
+          experience_count: Array.isArray(firstProfile.experience) ? firstProfile.experience.length : 0,
+          education_count: Array.isArray(firstProfile.education) ? firstProfile.education.length : 0,
+          url: firstProfile.url || firstProfile.input_url || firstProfile.profile_url || 'EMPTY'
+        })
+      } else {
+        console.log('⚠️ No immediate data in API response')
+        if (data.snapshot_id) {
+          console.log('📝 Snapshot ID provided:', data.snapshot_id)
+        }
+      }
 
       // Handle API response
       if (data.error) {
@@ -436,25 +481,13 @@ export class BrightDataLinkedInClient {
    * Normalize profile data structure
    */
   private normalizeProfile(profile: LinkedInProfileResponse): LinkedInProfileResponse {
-    // Log the raw profile data structure for debugging
-    console.log('🔧 BrightData profile normalization - Raw arrays:', {
-      experience_raw: {
-        type: typeof profile.experience,
-        is_array: Array.isArray(profile.experience),
-        length: Array.isArray(profile.experience) ? profile.experience.length : 'N/A',
-        sample: Array.isArray(profile.experience) && profile.experience.length > 0 ? profile.experience[0] : null
-      },
-      education_raw: {
-        type: typeof profile.education,
-        is_array: Array.isArray(profile.education),
-        length: Array.isArray(profile.education) ? profile.education.length : 'N/A',
-        sample: Array.isArray(profile.education) && profile.education.length > 0 ? profile.education[0] : null
-      },
-      educations_details_raw: {
-        type: typeof profile.educations_details,
-        is_array: Array.isArray(profile.educations_details),
-        length: Array.isArray(profile.educations_details) ? profile.educations_details.length : 'N/A'
-      }
+    // DEBUG: Log profile data structure for monitoring
+    console.log('🔧 BrightData profile normalization:', {
+      name: profile.name || 'N/A',
+      experience_count: Array.isArray(profile.experience) ? profile.experience.length : 0,
+      education_count: Array.isArray(profile.education) ? profile.education.length : 0,
+      has_position: !!profile.position,
+      has_company: !!(profile.current_company)
     })
 
     // Clean arrays with logging
@@ -493,6 +526,12 @@ export class BrightDataLinkedInClient {
       education: cleanedEducation,
       certifications: Array.isArray(profile.certifications) ? profile.certifications.filter(cert => cert.name) : [],
       
+      // Clean bio_links for company URL extraction
+      bio_links: Array.isArray(profile.bio_links) ? profile.bio_links.filter(link => link && (link.url || link.link)) : [],
+      
+      // Clean services array (important for German LinkedIn profiles)
+      services: Array.isArray(profile.services) ? profile.services.filter(service => service && service.name) : [],
+      
       // Set status
       status: profile.error ? 'error' : 'success'
     }
@@ -519,11 +558,39 @@ export class BrightDataLinkedInClient {
   /**
    * Poll snapshot results until completion
    */
-  async pollSnapshotResults(snapshotId: string, maxWaitTime = 180000, pollInterval = 10000): Promise<LinkedInProfileResponse[]> {
-    console.log(`📊 Polling snapshot results for: ${snapshotId} (max wait: ${maxWaitTime}ms)`)
+  async pollSnapshotResults(snapshotId: string, maxWaitTime = 300000, pollInterval = 5000): Promise<LinkedInProfileResponse[]> {
+    console.log(`📊 Polling snapshot results for: ${snapshotId} (max wait: ${maxWaitTime}ms, interval: ${pollInterval}ms)`) 
     console.log(`📡 Progress endpoint: ${this.config.baseUrl}/progress/${snapshotId}`)
     console.log(`📥 Data endpoint: ${this.config.baseUrl}/snapshot/${snapshotId}`)
     
+    // IMMEDIATE CHECK: Try to download data right away (snapshot might already be ready)
+    console.log('🚀 Checking if snapshot data is immediately available...')
+    try {
+      const immediateResponse = await fetch(`${this.config.baseUrl}/snapshot/${snapshotId}?format=json`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        }
+      })
+      
+      if (immediateResponse.ok) {
+        const immediateData = await immediateResponse.json()
+        
+        // If we got actual data (not a status message), return it immediately
+        if (immediateData && !immediateData.status && (!Array.isArray(immediateData) || immediateData.length > 0)) {
+          console.log('🎉 Data immediately available! Skipping polling.')
+          return Array.isArray(immediateData) ? immediateData : [immediateData]
+        } else if (immediateData?.status === 'running') {
+          console.log(`⏳ Snapshot still processing: ${immediateData.message || 'No message'}`)
+        } else {
+          console.log('📊 Immediate check result:', JSON.stringify(immediateData, null, 2))
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Immediate data check failed, proceeding with polling:', error instanceof Error ? error.message : error)
+    }
+
     const startTime = Date.now()
     let attempts = 0
     const maxAttempts = Math.ceil(maxWaitTime / pollInterval)
@@ -551,7 +618,8 @@ export class BrightDataLinkedInClient {
           const progressData = await response.json()
           console.log(`📊 Snapshot status: ${progressData.status} (${progressData.rows_collected || 0}/${progressData.total_rows || 0} rows)`)
 
-          if (progressData.status === 'completed' || (progressData.status === 'ready' && (progressData.records > 0 || progressData.rows_collected > 0))) {
+          // If Bright Data reports completed/ready, always try to download
+          if (progressData.status === 'completed' || progressData.status === 'ready') {
             // Job is completed, now download the actual data
             console.log(`✅ Snapshot completed, downloading data...`)
             const dataResponse = await fetch(`${this.config.baseUrl}/snapshot/${snapshotId}?format=json`, {
@@ -571,6 +639,44 @@ export class BrightDataLinkedInClient {
             const actualData = await dataResponse.json()
             console.log(`✅ Downloaded data:`, JSON.stringify(actualData, null, 2))
             
+            // Log successful snapshot data retrieval with detailed structure info
+            if (actualData) {
+              if (Array.isArray(actualData)) {
+                console.log(`✅ Retrieved ${actualData.length} LinkedIn profile(s) from snapshot`)
+                
+                // DEBUG: Log first profile's key fields from snapshot data
+                if (actualData.length > 0) {
+                  const firstProfile = actualData[0]
+                  console.log('🔍 First snapshot profile key fields:', {
+                    name: firstProfile.name || 'EMPTY',
+                    headline: firstProfile.headline || 'EMPTY',
+                    position: firstProfile.position || 'EMPTY',
+                    current_company: firstProfile.current_company || 'EMPTY',
+                    about: firstProfile.about || 'EMPTY',
+                    city: firstProfile.city || 'EMPTY',
+                    country: firstProfile.country || 'EMPTY',
+                    experience_count: Array.isArray(firstProfile.experience) ? firstProfile.experience.length : 0,
+                    education_count: Array.isArray(firstProfile.education) ? firstProfile.education.length : 0,
+                    url: firstProfile.url || firstProfile.input_url || firstProfile.profile_url || 'EMPTY'
+                  })
+                }
+              } else {
+                console.log('✅ Retrieved LinkedIn profile from snapshot (single object)')
+                console.log('🔍 Snapshot profile key fields:', {
+                  name: actualData.name || 'EMPTY',
+                  headline: actualData.headline || 'EMPTY',
+                  position: actualData.position || 'EMPTY',
+                  current_company: actualData.current_company || 'EMPTY',
+                  about: actualData.about || 'EMPTY',
+                  city: actualData.city || 'EMPTY',
+                  country: actualData.country || 'EMPTY',
+                  experience_count: Array.isArray(actualData.experience) ? actualData.experience.length : 0,
+                  education_count: Array.isArray(actualData.education) ? actualData.education.length : 0,
+                  url: actualData.url || actualData.input_url || actualData.profile_url || 'EMPTY'
+                })
+              }
+            }
+            
             if (!actualData || (Array.isArray(actualData) && actualData.length === 0)) {
               console.warn('⚠️ No data in completed snapshot')
               return []
@@ -580,6 +686,44 @@ export class BrightDataLinkedInClient {
             
           } else if (progressData.status === 'failed') {
             throw new Error(`Snapshot processing failed: ${progressData.error || 'Unknown error'}`)
+          }
+          
+          // Opportunistic fetch every few attempts (Bright Data sometimes lags updating status)
+          if (attempts % 5 === 0) {
+            try {
+              console.log('🔎 Opportunistic snapshot fetch...')
+              const peek = await fetch(`${this.config.baseUrl}/snapshot/${snapshotId}?format=json`, {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${this.config.apiKey}`,
+                  'Content-Type': 'application/json',
+                }
+              })
+              if (peek.ok) {
+                const peekData = await peek.json()
+                console.log('🔍 Opportunistic fetch data:', JSON.stringify(peekData, null, 2))
+                
+                // Check if this is a status message vs actual profile data
+                if (peekData && typeof peekData === 'object') {
+                  // If it has 'status' and 'message', it's a status response, not profile data
+                  if (peekData.status && peekData.message) {
+                    console.log('⏳ Received status message, not profile data. Continuing polling...')
+                  }
+                  // If it's an array with profile data or a single profile object
+                  else if (Array.isArray(peekData) && peekData.length > 0) {
+                    console.log('✅ Profile data available, returning now')
+                    return peekData
+                  }
+                  // If it's a single profile object (check for LinkedIn-specific fields)
+                  else if (!Array.isArray(peekData) && (peekData.id || peekData.name || peekData.linkedin_id)) {
+                    console.log('✅ Single profile data available, returning now')
+                    return [peekData]
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('⚠️ Opportunistic fetch failed, continuing:', e instanceof Error ? e.message : e)
+            }
           }
           
           // Status is 'running' or 'ready' (without data), continue polling
@@ -599,6 +743,27 @@ export class BrightDataLinkedInClient {
         // Continue polling on error
         await new Promise(resolve => setTimeout(resolve, pollInterval))
       }
+    }
+
+    // Final attempt to fetch data before timing out completely
+    try {
+      console.log('⏱️ Timeout reached, attempting final data fetch...')
+      const finalResp = await fetch(`${this.config.baseUrl}/snapshot/${snapshotId}?format=json`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        }
+      })
+      if (finalResp.ok) {
+        const finalData = await finalResp.json()
+        if (finalData && (!Array.isArray(finalData) || finalData.length > 0)) {
+          console.log('✅ Final fetch succeeded at timeout, returning data')
+          return Array.isArray(finalData) ? finalData : [finalData]
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Final fetch failed:', e instanceof Error ? e.message : e)
     }
 
     throw new Error(`Snapshot polling timeout after ${maxWaitTime}ms`)

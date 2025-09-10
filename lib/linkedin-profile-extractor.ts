@@ -56,12 +56,26 @@ interface LinkedInEnrichmentData {
   follower_count?: number
   connection_count?: number
   recommendations_count?: number
-  recommendations?: string[]
+  recommendations?: Array<{
+    text?: string
+    recommender?: string
+    recommender_profile?: string
+    relationship?: string
+    date?: string
+  }> | string[]
   
   // Professional Content
   posts?: Array<{
+    title?: string
     text?: string
+    content?: string
     date?: string
+    created_date?: string
+    url?: string
+    likes_count?: number
+    comments_count?: number
+    shares_count?: number
+    media_type?: string
     engagement?: {
       likes?: number
       comments?: number
@@ -163,7 +177,7 @@ export class LinkedInProfileExtractorService {
       // 1. Get the contact and validate ownership
       const { data: contact, error: contactError } = await supabase
         .from('contacts')
-        .select('id, linkedin_url, first_name, last_name, linkedin_profile_data, linkedin_extraction_status')
+        .select('id, linkedin_url, first_name, last_name, website, linkedin_profile_data, linkedin_extraction_status')
         .eq('id', contactId)
         .eq('user_id', userId)
         .single()
@@ -240,31 +254,101 @@ export class LinkedInProfileExtractorService {
         // 7. Process and save the data
         const enrichmentData = this.processLinkedInData(profileData)
         
+        // Extract company URL from LinkedIn bio_links
+        const extractedCompanyUrl = this.extractCompanyUrlFromLinkedIn(profileData)
+        
         console.log('💾 Saving LinkedIn data to database:', {
           contact_id: contactId,
           experience_count: enrichmentData.experience?.length || 0,
           education_count: enrichmentData.education?.length || 0,
           has_about: !!enrichmentData.about,
-          has_current_company: !!enrichmentData.current_company
+          has_current_company: !!enrichmentData.current_company,
+          extracted_company_url: extractedCompanyUrl || 'none'
         })
         
-        // 8. Update contact with LinkedIn data
+        // 7.1. Validate that we have meaningful data
+        const hasValidData = this.validateLinkedInData(enrichmentData)
+        
+        if (!hasValidData) {
+          console.warn('⚠️ LinkedIn data appears to be empty or insufficient - marking as failed')
+          await this.updateLinkedInStatus(contactId, 'failed', 'LinkedIn profile contains no extractable data (may be private or restricted)')
+          return {
+            success: false,
+            error: 'LinkedIn profile contains no extractable data. This may be due to privacy settings or profile restrictions.',
+            contact_id: contactId,
+            linkedin_url: linkedinUrl,
+            status: 'failed'
+          }
+        }
+        
+        // 8. Update contact with LinkedIn data - both JSON blob and individual fields
+        const updateData: any = {
+          // Update personal fields if empty
+          first_name: contact.first_name || enrichmentData.first_name,
+          last_name: contact.last_name || enrichmentData.last_name,
+          position: enrichmentData.position,
+          city: enrichmentData.city,
+          country: enrichmentData.country,
+          
+          // Store complete LinkedIn profile data (backwards compatibility)
+          linkedin_profile_data: enrichmentData,
+          linkedin_extraction_status: 'completed',
+          linkedin_extracted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          
+          // NEW: Individual LinkedIn fields for better querying and display
+          linkedin_first_name: enrichmentData.first_name,
+          linkedin_last_name: enrichmentData.last_name,
+          linkedin_headline: enrichmentData.headline,
+          linkedin_summary: enrichmentData.summary,
+          linkedin_about: enrichmentData.about, // CRITICAL for personalization
+          linkedin_current_company: enrichmentData.current_company,
+          linkedin_current_position: enrichmentData.position,
+          linkedin_industry: enrichmentData.industry,
+          linkedin_location: enrichmentData.city && enrichmentData.country ? 
+            `${enrichmentData.city}, ${enrichmentData.country}` : 
+            enrichmentData.city || enrichmentData.country || null,
+          linkedin_city: enrichmentData.city,
+          linkedin_country: enrichmentData.country,
+          linkedin_country_code: enrichmentData.country_code,
+          linkedin_follower_count: enrichmentData.follower_count || null,
+          linkedin_connection_count: enrichmentData.connection_count || null,
+          linkedin_recommendations_count: enrichmentData.recommendations_count || null,
+          linkedin_profile_completeness: profileData.profile_completeness || null,
+          linkedin_avatar_url: profileData.avatar || profileData.avatar_url || null,
+          linkedin_banner_url: profileData.banner_image || profileData.banner_url || null,
+          
+          // JSONB fields for complex data structures
+          linkedin_experience: enrichmentData.experience?.length > 0 ? enrichmentData.experience : null,
+          linkedin_education: enrichmentData.education?.length > 0 ? enrichmentData.education : null,
+          linkedin_skills: enrichmentData.skills?.length > 0 ? enrichmentData.skills : null,
+          linkedin_languages: enrichmentData.languages?.length > 0 ? enrichmentData.languages : null,
+          linkedin_certifications: enrichmentData.certifications?.length > 0 ? enrichmentData.certifications : null,
+          linkedin_volunteer_experience: enrichmentData.volunteer_experience?.length > 0 ? enrichmentData.volunteer_experience : null,
+          linkedin_honors_awards: enrichmentData.honors_and_awards?.length > 0 ? enrichmentData.honors_and_awards : null,
+          linkedin_projects: enrichmentData.projects?.length > 0 ? enrichmentData.projects : null,
+          linkedin_courses: enrichmentData.courses?.length > 0 ? enrichmentData.courses : null,
+          linkedin_publications: enrichmentData.publications?.length > 0 ? enrichmentData.publications : null,
+          linkedin_patents: enrichmentData.patents?.length > 0 ? enrichmentData.patents : null,
+          linkedin_organizations: enrichmentData.organizations?.length > 0 ? enrichmentData.organizations : null,
+          linkedin_posts: enrichmentData.posts?.length > 0 ? enrichmentData.posts : null,
+          linkedin_recommendations: enrichmentData.recommendations?.length > 0 ? enrichmentData.recommendations : null,
+          linkedin_people_also_viewed: profileData.people_also_viewed?.length > 0 ? profileData.people_also_viewed : null,
+          linkedin_contact_info: enrichmentData.contact_info && Object.keys(enrichmentData.contact_info).length > 0 ? enrichmentData.contact_info : null,
+          linkedin_services: enrichmentData.services?.length > 0 ? enrichmentData.services : null
+        }
+
+        // Only add company URL if contact doesn't have a website and we extracted one from LinkedIn
+        let shouldEnrichWebsite = false
+        if (!contact.website && extractedCompanyUrl) {
+          updateData.website = extractedCompanyUrl
+          shouldEnrichWebsite = true
+          console.log('🌐 Added company website from LinkedIn:', extractedCompanyUrl)
+        }
+
         const { error: updateError } = await supabase
           .from('contacts')
-          .update({
-            // Update personal fields if empty
-            first_name: contact.first_name || enrichmentData.first_name,
-            last_name: contact.last_name || enrichmentData.last_name,
-            position: enrichmentData.position,
-            city: enrichmentData.city,
-            country: enrichmentData.country,
-            
-            // Store complete LinkedIn profile data
-            linkedin_profile_data: enrichmentData,
-            linkedin_extraction_status: 'completed',
-            linkedin_extracted_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', contactId)
           .eq('user_id', userId)
 
@@ -280,6 +364,27 @@ export class LinkedInProfileExtractorService {
           }
         }
 
+        // If we added a company website, trigger website enrichment
+        if (shouldEnrichWebsite && extractedCompanyUrl) {
+          console.log('🔄 Triggering website enrichment for extracted company URL...')
+          try {
+            // Import here to avoid circular dependency
+            const { ContactEnrichmentService } = await import('./contact-enrichment')
+            const websiteService = new ContactEnrichmentService()
+            
+            // Trigger website enrichment asynchronously (don't wait for completion)
+            websiteService.enrichContact(contactId, userId).catch((error) => {
+              console.error('⚠️ Website enrichment failed for extracted company URL:', error)
+              // Don't fail the LinkedIn extraction if website enrichment fails
+            })
+            
+            console.log('✅ Website enrichment triggered for company URL:', extractedCompanyUrl)
+          } catch (error) {
+            console.error('⚠️ Failed to trigger website enrichment:', error)
+            // Don't fail the LinkedIn extraction if we can't trigger website enrichment
+          }
+        }
+
         // Verify the data was saved correctly
         const { data: verificationContact } = await supabase
           .from('contacts')
@@ -289,8 +394,8 @@ export class LinkedInProfileExtractorService {
 
         if (verificationContact) {
           console.log('✅ Database verification:', {
-            stored_experience_count: verificationContact.linkedin_profile_data?.experience?.length || 0,
-            stored_education_count: verificationContact.linkedin_profile_data?.education?.length || 0,
+            stored_experience_count: (verificationContact.linkedin_profile_data as any)?.experience?.length || 0,
+            stored_education_count: (verificationContact.linkedin_profile_data as any)?.education?.length || 0,
             extraction_status: verificationContact.linkedin_extraction_status
           })
         }
@@ -361,7 +466,7 @@ export class LinkedInProfileExtractorService {
     }
 
     return {
-      linkedin_profile_data: data.linkedin_profile_data,
+      linkedin_profile_data: data.linkedin_profile_data as LinkedInEnrichmentData | null,
       linkedin_extraction_status: data.linkedin_extraction_status,
       linkedin_extracted_at: data.linkedin_extracted_at
     }
@@ -485,7 +590,9 @@ export class LinkedInProfileExtractorService {
       
       // Professional Information
       position: rawData.position || rawData.headline || '',
-      current_company: typeof rawData.current_company === 'object' && rawData.current_company?.name ? rawData.current_company.name : rawData.current_company || '',
+      current_company: typeof rawData.current_company === 'object' && rawData.current_company !== null && 'name' in rawData.current_company 
+        ? rawData.current_company.name || ''
+        : (typeof rawData.current_company === 'string' ? rawData.current_company : ''),
       industry: rawData.industry || '',
       
       // Experience and Education (with comprehensive processing)
@@ -622,17 +729,195 @@ export class LinkedInProfileExtractorService {
 
     // Filter out null/empty entries and ensure required fields
     const validEducation = educationData
-      .filter(edu => edu && (edu.school || edu.institution || edu.degree || edu.title))
-      .map(edu => ({
-        school: edu.school || edu.institution || edu.title || '',
-        degree: edu.degree || '',
-        field_of_study: edu.field_of_study || edu.field || '',
-        start_year: edu.start_year || edu.start_date || '',
-        end_year: edu.end_year || edu.end_date || ''
-      }));
+      .filter(edu => edu && ((edu as any).school || (edu as any).institution || (edu as any).degree || (edu as any).title))
+      .map(edu => {
+        const eduAny = edu as any
+        return {
+          school: eduAny.school || eduAny.institution || eduAny.title || '',
+          degree: eduAny.degree || '',
+          field_of_study: eduAny.field_of_study || eduAny.field || '',
+          start_year: eduAny.start_year || eduAny.start_date || '',
+          end_year: eduAny.end_year || eduAny.end_date || ''
+        }
+      });
 
     console.log(`📊 Processed ${validEducation.length} valid education entries from ${educationData.length} raw entries`);
     return validEducation;
+  }
+
+  /**
+   * Extract company URL from LinkedIn profile bio_links or contact_info
+   */
+  private extractCompanyUrlFromLinkedIn(rawData: any): string | null {
+    console.log('🔍 Extracting company URL from LinkedIn data...')
+    
+    // Check bio_links first (most common source for company websites)
+    if (Array.isArray(rawData.bio_links) && rawData.bio_links.length > 0) {
+      for (const link of rawData.bio_links) {
+        if (link && (link.title || link.name)) {
+          const title = (link.title || link.name || '').toLowerCase()
+          
+          // Look for company website indicators
+          if (title.includes('website') || 
+              title.includes('company') || 
+              title.includes('homepage') ||
+              title.includes('web') ||
+              title.includes('site')) {
+            
+            const url = link.link || link.url
+            if (url && this.isValidCompanyUrl(url)) {
+              console.log('🌐 Found company URL in bio_links:', url)
+              return this.normalizeUrl(url)
+            }
+          }
+        }
+      }
+    }
+
+    // Check contact_info.websites as fallback
+    if (rawData.contact_info?.websites && Array.isArray(rawData.contact_info.websites)) {
+      for (const website of rawData.contact_info.websites) {
+        if (website && this.isValidCompanyUrl(website)) {
+          console.log('🌐 Found company URL in contact_info.websites:', website)
+          return this.normalizeUrl(website)
+        }
+      }
+    }
+
+    // Check if bio_links has any URLs even without obvious titles
+    if (Array.isArray(rawData.bio_links) && rawData.bio_links.length > 0) {
+      const firstLink = rawData.bio_links[0]
+      if (firstLink && (firstLink.link || firstLink.url)) {
+        const url = firstLink.link || firstLink.url
+        if (url && this.isValidCompanyUrl(url)) {
+          console.log('🌐 Found company URL in first bio_link:', url)
+          return this.normalizeUrl(url)
+        }
+      }
+    }
+
+    console.log('⚠️ No company URL found in LinkedIn data')
+    return null
+  }
+
+  /**
+   * Validate if a URL looks like a company website (not social media)
+   */
+  private isValidCompanyUrl(url: string): boolean {
+    if (!url || typeof url !== 'string') return false
+    
+    // Normalize URL for checking
+    const cleanUrl = url.toLowerCase().trim()
+    
+    // Must be a valid URL format
+    if (!cleanUrl.match(/^https?:\/\/.+/)) return false
+    
+    // Exclude social media and common non-company domains
+    const excludePatterns = [
+      'linkedin.com',
+      'facebook.com',
+      'twitter.com',
+      'instagram.com',
+      'youtube.com',
+      'github.com',
+      'stackoverflow.com',
+      'medium.com',
+      'behance.net',
+      'dribbble.com'
+    ]
+    
+    for (const pattern of excludePatterns) {
+      if (cleanUrl.includes(pattern)) {
+        return false
+      }
+    }
+    
+    return true
+  }
+
+  /**
+   * Normalize URL to ensure consistent format
+   */
+  private normalizeUrl(url: string): string {
+    if (!url) return url
+    
+    let normalized = url.trim()
+    
+    // Ensure it starts with http/https
+    if (!normalized.match(/^https?:\/\//)) {
+      normalized = `https://${normalized}`
+    }
+    
+    // Remove trailing slash for consistency
+    normalized = normalized.replace(/\/$/, '')
+    
+    return normalized
+  }
+
+  /**
+   * Validate if LinkedIn data contains meaningful information
+   */
+  private validateLinkedInData(data: LinkedInEnrichmentData): boolean {
+    console.log('🔍 Validating LinkedIn data quality:', {
+      has_name: !!(data.name || data.first_name || data.last_name),
+      has_headline: !!data.headline,
+      has_about: !!data.about,
+      has_summary: !!data.summary,
+      has_position: !!data.position,
+      has_company: !!data.current_company,
+      has_experience: !!(data.experience && data.experience.length > 0),
+      has_education: !!(data.education && data.education.length > 0),
+      has_skills: !!(data.skills && data.skills.length > 0),
+      has_location: !!(data.city || data.country),
+      name_value: data.name,
+      headline_value: data.headline,
+      position_value: data.position
+    })
+
+    // Check if we have at least some basic meaningful data
+    // A valid LinkedIn profile should have at least:
+    // 1. A name OR headline OR position, AND
+    // 2. Some additional meaningful field (about, company, experience, etc.)
+    
+    const hasBasicIdentity = !!(
+      data.name?.trim() || 
+      data.first_name?.trim() || 
+      data.last_name?.trim() || 
+      data.headline?.trim() || 
+      data.position?.trim()
+    )
+    
+    const hasAdditionalInfo = !!(
+      data.about?.trim() ||
+      data.summary?.trim() ||
+      data.current_company?.toString()?.trim() ||
+      (data.experience && data.experience.length > 0) ||
+      (data.education && data.education.length > 0) ||
+      (data.skills && data.skills.length > 0) ||
+      data.city?.trim() ||
+      data.country?.trim() ||
+      data.industry?.trim()
+    )
+
+    // DEBUG: Log validation details for troubleshooting
+    if (!hasBasicIdentity || !hasAdditionalInfo) {
+      console.log('🔍 Detailed validation breakdown:', {
+        'data.name': data.name,
+        'data.current_company': data.current_company,
+        'data.city': data.city,
+        'hasBasicIdentity': hasBasicIdentity,
+        'hasAdditionalInfo': hasAdditionalInfo
+      })
+    }
+    
+    const isValid = hasBasicIdentity && hasAdditionalInfo
+    
+    console.log(`✅ LinkedIn data validation result: ${isValid ? 'VALID' : 'INVALID'}`, {
+      hasBasicIdentity,
+      hasAdditionalInfo
+    })
+    
+    return isValid
   }
 
   /**
