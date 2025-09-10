@@ -21,7 +21,8 @@ import {
   Linkedin,
   Twitter,
   Hash,
-  Clock4
+  Clock4,
+  Award
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseCompanyName } from '@/lib/contact-utils'
@@ -50,12 +51,30 @@ export function ContactViewModal({
     const fetchLatest = async () => {
       try {
         if (!isOpen || !contact?.id) return
+        // Fetch general contact record (includes JSON fields)
         const resp = await fetch(`/api/contacts?ids=${contact.id}`)
+        let freshest: any = null
         if (resp.ok) {
           const json = await resp.json()
-          const updated = json?.data?.contacts?.[0]
-          if (updated) setLatestContact(updated)
+          freshest = json?.data?.contacts?.[0] || null
         }
+
+        // Fetch LinkedIn-specific data to ensure JSON is present even if list endpoint omits it
+        const liResp = await fetch(`/api/contacts/${contact.id}/extract-linkedin`, { method: 'GET' })
+        if (liResp.ok) {
+          const liJson = await liResp.json()
+          const liData = liJson?.data
+          if (liData && (liData.linkedin_profile_data || liData.linkedin_extraction_status || liData.linkedin_extracted_at)) {
+            freshest = {
+              ...(freshest || contact),
+              linkedin_profile_data: liData.linkedin_profile_data ?? (freshest?.linkedin_profile_data || (contact as any).linkedin_profile_data),
+              linkedin_extraction_status: liData.linkedin_extraction_status ?? (freshest?.linkedin_extraction_status || (contact as any).linkedin_extraction_status),
+              linkedin_extracted_at: liData.linkedin_extracted_at ?? (freshest?.linkedin_extracted_at || (contact as any).linkedin_extracted_at)
+            }
+          }
+        }
+
+        if (freshest) setLatestContact(freshest as Contact)
       } catch (e) {
         // ignore
       }
@@ -64,7 +83,69 @@ export function ContactViewModal({
   }, [isOpen, contact?.id])
 
   const hydratedContact: Contact = latestContact || contact
-  const lp: any = (hydratedContact as any).linkedin_profile_data
+  
+  // NEW: Check for individual LinkedIn fields first, fallback to legacy JSON blob
+  const hasLinkedInData = !!(
+    hydratedContact.linkedin_first_name ||
+    hydratedContact.linkedin_headline ||
+    hydratedContact.linkedin_about ||
+    hydratedContact.linkedin_current_company ||
+    (hydratedContact as any).linkedin_profile_data
+  )
+  
+  // Backwards compatibility: use JSON blob if individual fields aren't populated yet
+  const lp: any = hasLinkedInData ? {
+    // Personal Information
+    first_name: hydratedContact.linkedin_first_name,
+    last_name: hydratedContact.linkedin_last_name,
+    name: hydratedContact.linkedin_first_name && hydratedContact.linkedin_last_name ? 
+          `${hydratedContact.linkedin_first_name} ${hydratedContact.linkedin_last_name}` : 
+          hydratedContact.linkedin_first_name || hydratedContact.linkedin_last_name,
+    headline: hydratedContact.linkedin_headline,
+    summary: hydratedContact.linkedin_summary,
+    about: hydratedContact.linkedin_about,
+    
+    // Professional Information
+    current_company: hydratedContact.linkedin_current_company,
+    position: hydratedContact.linkedin_current_position,
+    industry: hydratedContact.linkedin_industry,
+    
+    // Location
+    location: hydratedContact.linkedin_location,
+    city: hydratedContact.linkedin_city,
+    country: hydratedContact.linkedin_country,
+    country_code: hydratedContact.linkedin_country_code,
+    
+    // Social Stats
+    follower_count: hydratedContact.linkedin_follower_count,
+    connection_count: hydratedContact.linkedin_connection_count,
+    recommendations_count: hydratedContact.linkedin_recommendations_count,
+    profile_completeness: hydratedContact.linkedin_profile_completeness,
+    
+    // Media
+    avatar: hydratedContact.linkedin_avatar_url,
+    banner_image: hydratedContact.linkedin_banner_url,
+    
+    // Complex Data (from JSONB fields)
+    experience: hydratedContact.linkedin_experience,
+    education: hydratedContact.linkedin_education,
+    skills: hydratedContact.linkedin_skills,
+    languages: hydratedContact.linkedin_languages,
+    certifications: hydratedContact.linkedin_certifications,
+    volunteer_experience: hydratedContact.linkedin_volunteer_experience,
+    honors_and_awards: hydratedContact.linkedin_honors_awards,
+    projects: hydratedContact.linkedin_projects,
+    courses: hydratedContact.linkedin_courses,
+    publications: hydratedContact.linkedin_publications,
+    patents: hydratedContact.linkedin_patents,
+    organizations: hydratedContact.linkedin_organizations,
+    posts: hydratedContact.linkedin_posts,
+    activity: hydratedContact.linkedin_activity,
+    recommendations: hydratedContact.linkedin_recommendations,
+    people_also_viewed: hydratedContact.linkedin_people_also_viewed,
+    contact_info: hydratedContact.linkedin_contact_info,
+    services: hydratedContact.linkedin_services
+  } : (hydratedContact as any).linkedin_profile_data
 
   const formatName = (contact: Contact) => {
     // Priority 1: First Name + Last Name
@@ -145,12 +226,12 @@ export function ContactViewModal({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className={`grid w-full mb-6 ${lp ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <TabsList className={`grid w-full mb-6 ${(hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed' ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <TabsTrigger value="details" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Contact Details
             </TabsTrigger>
-            {lp && (
+            {((hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed') && (
               <TabsTrigger value="linkedin" className="flex items-center gap-2">
                 <Linkedin className="h-4 w-4" />
                 LinkedIn Profile
@@ -491,7 +572,7 @@ export function ContactViewModal({
           </TabsContent>
 
           {/* LinkedIn Profile Tab */}
-          {lp && (
+          {((hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed') && (
             <TabsContent value="linkedin" className="space-y-4">
               {/* Header Section */}
               <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
@@ -509,11 +590,57 @@ export function ContactViewModal({
                       )}
                     </div>
                   </div>
-                  <Badge className="bg-green-100 text-green-800 border-green-200">
-                    ✓ Data Available
-                  </Badge>
+                  {hasLinkedInData && lp ? (
+                    <Badge className="bg-green-100 text-green-800 border-green-200">
+                      ✓ Data Available
+                    </Badge>
+                  ) : hydratedContact.linkedin_extraction_status === 'failed' ? (
+                    <Badge className="bg-red-100 text-red-800 border-red-200">
+                      ⚠ Extraction Failed
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+                      No Data
+                    </Badge>
+                  )}
                 </div>
               </div>
+
+              {/* Show failure message if extraction failed */}
+              {hydratedContact.linkedin_extraction_status === 'failed' && (!hasLinkedInData || !lp) && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-red-100 p-2 rounded-lg">
+                      <Linkedin className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-red-900">LinkedIn Extraction Failed</h3>
+                      <p className="text-sm text-red-700">Unable to extract data from this LinkedIn profile</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3 text-sm">
+                    <div className="bg-red-100 p-3 rounded-lg border-l-4 border-red-400">
+                      <p className="font-medium text-red-800 mb-1">Possible Reasons:</p>
+                      <ul className="text-red-700 space-y-1">
+                        <li>• Profile privacy settings prevent data extraction</li>
+                        <li>• Profile may be restricted or incomplete</li>
+                        <li>• LinkedIn URL may be invalid or redirected</li>
+                        <li>• Temporary API limitations or rate limiting</li>
+                      </ul>
+                    </div>
+                    
+                    <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
+                      <p className="font-medium text-blue-800 mb-1">What you can try:</p>
+                      <ul className="text-blue-700 space-y-1">
+                        <li>• Verify the LinkedIn URL is correct and accessible</li>
+                        <li>• Try again later (rate limits may have been reached)</li>
+                        <li>• Use website enrichment instead for company information</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {typeof lp === 'object' && lp && (
                 <div className="grid gap-4">
@@ -581,13 +708,20 @@ export function ContactViewModal({
                         <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
                           {lp.about}
                         </p>
+                        {lp.about && (lp.about.endsWith('…') || lp.about.endsWith('...')) && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-xs text-amber-600 flex items-center gap-1">
+                              ⚠️ <span>Content may be truncated due to LinkedIn privacy settings</span>
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
 
                   {/* Network Stats - Use BrightData field names */}
-                  {(lp.followers || lp.connections || lp.follower_count || lp.connection_count) && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {(lp.followers || lp.connections || lp.follower_count || lp.connection_count || lp.profile_completeness) && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       {(lp.followers || lp.follower_count) && (
                         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
                           <div className="text-2xl font-bold text-blue-600">
@@ -614,6 +748,15 @@ export function ContactViewModal({
                           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recommendations</div>
                         </div>
                       )}
+                      
+                      {lp.profile_completeness && (
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                          <div className="text-2xl font-bold text-orange-600">
+                            {lp.profile_completeness}%
+                          </div>
+                          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Profile Complete</div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -631,6 +774,43 @@ export function ContactViewModal({
                             {(lang.subtitle || lang.proficiency) && (lang.subtitle || lang.proficiency) !== '-' && (
                               <p className="text-xs text-gray-600 mt-1">{lang.subtitle || lang.proficiency}</p>
                             )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Honors & Awards */}
+                  {lp.honors_and_awards && Array.isArray(lp.honors_and_awards) && lp.honors_and_awards.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Award className="h-4 w-4 text-gray-600" />
+                        <h3 className="font-semibold text-gray-900">Honors & Awards</h3>
+                        <Badge variant="outline" className="text-xs">Recognition</Badge>
+                      </div>
+                      <div className="space-y-3">
+                        {lp.honors_and_awards.map((award: any, index: number) => (
+                          <div key={index} className="bg-gradient-to-r from-amber-50 to-yellow-100 p-3 rounded-lg border-l-4 border-amber-500">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{award.title}</p>
+                                {award.publication && (
+                                  <p className="text-sm text-gray-700 mt-1">
+                                    <span className="text-amber-600 font-medium">Issued by:</span> {award.publication}
+                                  </p>
+                                )}
+                                {award.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{award.description}</p>
+                                )}
+                              </div>
+                              {award.date && (
+                                <div className="text-right ml-3">
+                                  <span className="text-xs text-gray-500 bg-amber-100 px-2 py-1 rounded">
+                                    {new Date(award.date).getFullYear()}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -793,6 +973,16 @@ export function ContactViewModal({
                             <Badge variant="outline" className="text-xs">
                               +{lp.experience.length - 3} more positions
                             </Badge>
+                          </div>
+                        )}
+                        {/* Show note for synthesized experience data */}
+                        {lp.experience.length === 1 && 
+                         lp.experience[0]?.title === 'Professional' && 
+                         lp.experience[0]?.duration === 'Current' && (
+                          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-xs text-blue-700 flex items-center gap-1">
+                              ℹ️ <span>Experience synthesized from current company data due to LinkedIn privacy settings</span>
+                            </p>
                           </div>
                         )}
                       </div>

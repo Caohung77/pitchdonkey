@@ -83,6 +83,17 @@ interface LinkedInEnrichmentData {
     }
   }>
   
+  // Recent LinkedIn Activity (interactions, likes, shares)
+  activity?: Array<{
+    interaction?: string
+    link?: string
+    title?: string
+    img?: string
+    id?: string
+    date?: string
+    type?: string
+  }>
+  
   // Services (Serviceleistungen)
   services?: Array<{
     name?: string
@@ -332,6 +343,7 @@ export class LinkedInProfileExtractorService {
           linkedin_patents: enrichmentData.patents?.length > 0 ? enrichmentData.patents : null,
           linkedin_organizations: enrichmentData.organizations?.length > 0 ? enrichmentData.organizations : null,
           linkedin_posts: enrichmentData.posts?.length > 0 ? enrichmentData.posts : null,
+          linkedin_activity: enrichmentData.activity?.length > 0 ? enrichmentData.activity : null,
           linkedin_recommendations: enrichmentData.recommendations?.length > 0 ? enrichmentData.recommendations : null,
           linkedin_people_also_viewed: profileData.people_also_viewed?.length > 0 ? profileData.people_also_viewed : null,
           linkedin_contact_info: enrichmentData.contact_info && Object.keys(enrichmentData.contact_info).length > 0 ? enrichmentData.contact_info : null,
@@ -612,6 +624,7 @@ export class LinkedInProfileExtractorService {
       
       // Professional Content (for engagement insights)
       posts: Array.isArray(rawData.posts) ? rawData.posts.slice(0, 10) : [], // Recent posts for personalization
+      activity: Array.isArray(rawData.activity) ? rawData.activity.slice(0, 15) : [], // Recent LinkedIn activity for personalization
       
       // Services (Serviceleistungen) - CRITICAL for German LinkedIn profiles
       services: Array.isArray(rawData.services) ? rawData.services : [],
