@@ -19,6 +19,18 @@ interface Contact {
   website: string | null
   enrichment_data: EnrichmentData | null
   enrichment_status: string | null
+  // LinkedIn fields
+  linkedin_headline: string | null
+  linkedin_about: string | null
+  linkedin_summary: string | null
+  linkedin_current_company: string | null
+  linkedin_current_position: string | null
+  linkedin_industry: string | null
+  linkedin_location: string | null
+  linkedin_experience: any[] | null
+  linkedin_education: any[] | null
+  linkedin_skills: string[] | null
+  linkedin_profile_data: any | null
 }
 
 interface PersonalizationContext {
@@ -33,6 +45,12 @@ interface PersonalizationContext {
     hasUniquePoints: boolean
     hasToneStyle: boolean
     hasPosition: boolean
+    hasLinkedInProfile: boolean
+    hasLinkedInHeadline: boolean
+    hasLinkedInAbout: boolean
+    hasLinkedInExperience: boolean
+    hasLinkedInEducation: boolean
+    hasLinkedInSkills: boolean
   }
   aiContext: {
     companyContext: string
@@ -40,6 +58,9 @@ interface PersonalizationContext {
     personalizationHints: string
     toneGuidance: string
     valuePropositionHints: string
+    linkedinPersonalization: string
+    personalReasonHints: string
+    proofPoints: string
   }
 }
 
@@ -105,7 +126,18 @@ export class EnrichmentIntelligenceService {
           email,
           website,
           enrichment_data,
-          enrichment_status
+          enrichment_status,
+          linkedin_headline,
+          linkedin_about,
+          linkedin_summary,
+          linkedin_current_company,
+          linkedin_current_position,
+          linkedin_industry,
+          linkedin_location,
+          linkedin_experience,
+          linkedin_education,
+          linkedin_skills,
+          linkedin_profile_data
         `)
         .eq('id', contactId)
         .eq('user_id', userId)
@@ -130,13 +162,19 @@ export class EnrichmentIntelligenceService {
     const enrichment = contact.enrichment_data
     
     return {
-      hasCompanyName: !!(contact.company || enrichment?.company_name),
-      hasIndustry: !!(enrichment?.industry),
+      hasCompanyName: !!(contact.company || enrichment?.company_name || contact.linkedin_current_company),
+      hasIndustry: !!(enrichment?.industry || contact.linkedin_industry),
       hasProducts: !!(enrichment?.products_services && enrichment.products_services.length > 0),
       hasTargetAudience: !!(enrichment?.target_audience && enrichment.target_audience.length > 0),
       hasUniquePoints: !!(enrichment?.unique_points && enrichment.unique_points.length > 0),
       hasToneStyle: !!(enrichment?.tone_style),
-      hasPosition: !!(contact.position)
+      hasPosition: !!(contact.position || contact.linkedin_current_position),
+      hasLinkedInProfile: !!(contact.linkedin_headline || contact.linkedin_about || contact.linkedin_profile_data),
+      hasLinkedInHeadline: !!(contact.linkedin_headline),
+      hasLinkedInAbout: !!(contact.linkedin_about || contact.linkedin_summary),
+      hasLinkedInExperience: !!(contact.linkedin_experience && contact.linkedin_experience.length > 0),
+      hasLinkedInEducation: !!(contact.linkedin_education && contact.linkedin_education.length > 0),
+      hasLinkedInSkills: !!(contact.linkedin_skills && contact.linkedin_skills.length > 0)
     }
   }
 
@@ -198,16 +236,20 @@ export class EnrichmentIntelligenceService {
   ): PersonalizationContext['aiContext'] {
     const enrichment = contact.enrichment_data
     
-    // Company context
+    // Company context (combine web enrichment and LinkedIn data)
     let companyContext = ''
-    const companyName = contact.company || enrichment?.company_name
+    const companyName = contact.company || enrichment?.company_name || contact.linkedin_current_company
     if (companyName) {
       companyContext += `Company: ${companyName}\n`
-      if (insights.hasIndustry) {
-        companyContext += `Industry: ${enrichment?.industry}\n`
+      const industry = enrichment?.industry || contact.linkedin_industry
+      if (industry) {
+        companyContext += `Industry: ${industry}\n`
       }
       if (contact.website) {
         companyContext += `Website: ${contact.website}\n`
+      }
+      if (contact.linkedin_location) {
+        companyContext += `Location: ${contact.linkedin_location}\n`
       }
     }
 
@@ -220,7 +262,7 @@ export class EnrichmentIntelligenceService {
       }
     }
 
-    // Personalization hints
+    // Personalization hints (combine web enrichment and LinkedIn data)
     let personalizationHints = ''
     if (insights.hasTargetAudience) {
       personalizationHints += `Their target audience: ${enrichment?.target_audience?.join(', ')}. `
@@ -228,8 +270,12 @@ export class EnrichmentIntelligenceService {
     if (insights.hasUniquePoints) {
       personalizationHints += `Key differentiators: ${enrichment?.unique_points?.join(', ')}. `
     }
-    if (contact.position) {
-      personalizationHints += `Contact position: ${contact.position}. `
+    const position = contact.position || contact.linkedin_current_position
+    if (position) {
+      personalizationHints += `Contact position: ${position}. `
+    }
+    if (insights.hasLinkedInSkills && contact.linkedin_skills) {
+      personalizationHints += `Skills: ${contact.linkedin_skills.slice(0, 5).join(', ')}. `
     }
 
     // Tone guidance
@@ -244,12 +290,56 @@ export class EnrichmentIntelligenceService {
       valuePropositionHints = `Consider how your solution might complement or enhance their ${enrichment.products_services.join(' and ')} offerings.`
     }
 
+    // LinkedIn-specific personalization
+    let linkedinPersonalization = ''
+    if (insights.hasLinkedInHeadline && contact.linkedin_headline) {
+      linkedinPersonalization += `LinkedIn headline: "${contact.linkedin_headline}". `
+    }
+    if (insights.hasLinkedInAbout && (contact.linkedin_about || contact.linkedin_summary)) {
+      const about = contact.linkedin_about || contact.linkedin_summary
+      linkedinPersonalization += `LinkedIn about: "${about?.substring(0, 200)}${about && about.length > 200 ? '...' : ''}". `
+    }
+    if (insights.hasLinkedInExperience && contact.linkedin_experience) {
+      const recentExp = contact.linkedin_experience[0]
+      if (recentExp?.company || recentExp?.title) {
+        linkedinPersonalization += `Recent experience: ${recentExp.title || 'Role'} at ${recentExp.company || 'Company'}. `
+      }
+    }
+
+    // Personal reason hints (for why this person specifically)
+    let personalReasonHints = ''
+    if (contact.linkedin_headline) {
+      personalReasonHints += `Reference their role/expertise from headline. `
+    }
+    if (contact.linkedin_about || contact.linkedin_summary) {
+      personalReasonHints += `Mention something specific from their profile summary. `
+    }
+    if (insights.hasLinkedInExperience) {
+      personalReasonHints += `Reference their professional background or recent career moves. `
+    }
+    if (enrichment?.industry || contact.linkedin_industry) {
+      personalReasonHints += `Connect to industry-specific challenges or opportunities. `
+    }
+
+    // Proof points for credibility
+    let proofPoints = ''
+    if (insights.hasTargetAudience && enrichment?.target_audience) {
+      proofPoints += `We've helped similar companies targeting ${enrichment.target_audience.join(' and ')}. `
+    }
+    if (insights.hasIndustry) {
+      const industry = enrichment?.industry || contact.linkedin_industry
+      proofPoints += `We have experience working with ${industry} companies. `
+    }
+
     return {
       companyContext: companyContext.trim(),
       industryInsights: industryInsights.trim(),
       personalizationHints: personalizationHints.trim(),
       toneGuidance,
-      valuePropositionHints: valuePropositionHints.trim()
+      valuePropositionHints: valuePropositionHints.trim(),
+      linkedinPersonalization: linkedinPersonalization.trim(),
+      personalReasonHints: personalReasonHints.trim(),
+      proofPoints: proofPoints.trim()
     }
   }
 
@@ -266,7 +356,13 @@ export class EnrichmentIntelligenceService {
       hasTargetAudience: false,
       hasUniquePoints: false,
       hasToneStyle: false,
-      hasPosition: !!(contact?.position)
+      hasPosition: !!(contact?.position),
+      hasLinkedInProfile: false,
+      hasLinkedInHeadline: false,
+      hasLinkedInAbout: false,
+      hasLinkedInExperience: false,
+      hasLinkedInEducation: false,
+      hasLinkedInSkills: false
     }
 
     return {
@@ -279,7 +375,10 @@ export class EnrichmentIntelligenceService {
         industryInsights: '',
         personalizationHints: contact?.position ? `Contact position: ${contact.position}` : '',
         toneGuidance: 'professional and respectful',
-        valuePropositionHints: ''
+        valuePropositionHints: '',
+        linkedinPersonalization: '',
+        personalReasonHints: '',
+        proofPoints: ''
       }
     }
   }
@@ -306,6 +405,34 @@ export class EnrichmentIntelligenceService {
   }
 
   /**
+   * Format personalization context for AI prompt
+   */
+  formatForAIPrompt(context: PersonalizationContext): string {
+    let prompt = `PERSONALIZATION CONTEXT:\n`
+    
+    if (context.aiContext.companyContext) {
+      prompt += `\nCOMPANY INFO:\n${context.aiContext.companyContext}\n`
+    }
+    
+    if (context.aiContext.linkedinPersonalization) {
+      prompt += `\nLINKEDIN PROFILE DATA:\n${context.aiContext.linkedinPersonalization}\n`
+    }
+    
+    if (context.aiContext.industryInsights) {
+      prompt += `\nINDUSTRY INSIGHTS:\n${context.aiContext.industryInsights}\n`
+    }
+    
+    if (context.aiContext.personalizationHints) {
+      prompt += `\nPERSONALIZATION HINTS:\n${context.aiContext.personalizationHints}\n`
+    }
+    
+    prompt += `\nENRICHMENT LEVEL: ${context.enrichmentLevel.toUpperCase()}\n`
+    prompt += `PERSONALIZATION SCORE: ${context.personalizationScore}/100\n`
+    
+    return prompt
+  }
+
+  /**
    * Create empty contact for extreme fallback
    */
   private createEmptyContact(contactId: string): Contact {
@@ -318,65 +445,24 @@ export class EnrichmentIntelligenceService {
       email: '',
       website: null,
       enrichment_data: null,
-      enrichment_status: null
+      enrichment_status: null,
+      // LinkedIn fields
+      linkedin_headline: null,
+      linkedin_about: null,
+      linkedin_summary: null,
+      linkedin_current_company: null,
+      linkedin_current_position: null,
+      linkedin_industry: null,
+      linkedin_location: null,
+      linkedin_experience: null,
+      linkedin_education: null,
+      linkedin_skills: null,
+      linkedin_profile_data: null
     }
   }
 
   /**
    * Format enrichment context for AI prompt
    */
-  formatForAIPrompt(context: PersonalizationContext): string {
-    const { contact, aiContext, enrichmentLevel } = context
-    
-    let prompt = '\n\n=== PERSONALIZATION CONTEXT ===\n'
-    prompt += `Enrichment Level: ${enrichmentLevel.toUpperCase()}\n`
-    prompt += `Personalization Score: ${context.personalizationScore}%\n\n`
-
-    if (contact.first_name) {
-      prompt += `Contact Name: ${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}\n`
-    }
-
-    if (aiContext.companyContext) {
-      prompt += `${aiContext.companyContext}\n`
-    }
-
-    if (aiContext.industryInsights) {
-      prompt += `\nIndustry Context: ${aiContext.industryInsights}\n`
-    }
-
-    if (aiContext.personalizationHints) {
-      prompt += `\nPersonalization Hints: ${aiContext.personalizationHints}\n`
-    }
-
-    if (aiContext.valuePropositionHints) {
-      prompt += `\nValue Proposition Guidance: ${aiContext.valuePropositionHints}\n`
-    }
-
-    prompt += `\nTone Guidance: Use a ${aiContext.toneGuidance} tone.\n`
-
-    prompt += '\n=== PERSONALIZATION INSTRUCTIONS ===\n'
-    
-    switch (enrichmentLevel) {
-      case 'premium':
-        prompt += '- Use specific company insights and unique differentiators\n'
-        prompt += '- Reference their target audience and industry position\n'
-        prompt += '- Demonstrate deep understanding of their business\n'
-        prompt += '- Use advanced personalization variables\n'
-        break
-      case 'enriched':
-        prompt += '- Reference their industry and products/services\n'
-        prompt += '- Mention relevant business context\n'
-        prompt += '- Use moderate personalization\n'
-        break
-      case 'basic':
-        prompt += '- Use available contact name and company information\n'
-        prompt += '- Keep personalization simple but professional\n'
-        break
-      default:
-        prompt += '- Use generic but professional approach\n'
-        prompt += '- Focus on clear value proposition\n'
-    }
-
-    return prompt
-  }
+  // Using the updated formatForAIPrompt method above
 }

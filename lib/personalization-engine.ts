@@ -88,16 +88,39 @@ export class PersonalizationEngine {
 
 Your mission is to create a ${toneGuidance}, ${lengthGuidance} outreach email that generates responses.
 
-CORE REQUIREMENTS:
-1. Subject Line: Create a compelling, non-spammy subject that includes personalization variables when appropriate
-2. Opening: Use a greeting with the placeholder {{first_name}} and reference {{company}} naturally (placeholders only, no real names)
-3. Value Focus: Clearly articulate the benefit to the recipient within the first 2 sentences
-4. Length: Keep it ${lengthGuidance} (${this.getWordCount(config.length)} words)
-5. Call-to-Action: Include ONE clear, specific CTA
-6. Tone: Maintain a ${toneGuidance} but warm approach
-7. Signature: Include the provided signature with proper HTML formatting
-8. HTML Format: Output clean, personal email HTML (NOT newsletter style)
-9. Font: Use Arial or web-safe fonts with max-width: 600px
+FOLLOW THE 4-PART EMAIL STRUCTURE:
+
+**1. PERSONAL REASON (Why This Person?)**
+Start with a specific reason for contacting them. Examples:
+- Reference their LinkedIn headline, recent post, or company news
+- Mention their role/expertise in their industry
+- Connect to their company's specific challenges or growth
+
+**2. VALUE PROPOSITION (What You Offer)**
+Clearly state what you do and the specific benefit. Include:
+- Concrete results/metrics when possible
+- How it specifically helps their type of business
+- Brief social proof (number of similar clients helped)
+
+**3. SIMPLE NEXT STEP (Clear CTA)**
+One clear, low-friction call-to-action:
+- 15-minute call/consultation
+- Free audit/assessment
+- Simple yes/no question
+- Demo/trial offer
+
+**4. PROOF (Handle Objections)**
+End with credibility through:
+- Specific client results
+- Industry experience
+- Similar company success stories
+
+TECHNICAL REQUIREMENTS:
+- Subject Line: 6 words or less, curious and personalized
+- Length: Keep it ${lengthGuidance} (${this.getWordCount(config.length)} words)
+- Tone: ${toneGuidance} but conversational and human
+- HTML Format: Clean, personal email style (NOT newsletter format)
+- Font: Arial or web-safe fonts with max-width: 600px
 
 PLACEHOLDER POLICY (NO REAL DATA):
 - When no contact info is provided, you MUST use placeholders instead of real names or companies.
@@ -141,7 +164,13 @@ ${enhancedInstructions}
 ENHANCED PERSONALIZATION REQUIREMENTS:
 ${this.buildPersonalizationRequirements(context)}
 
-Remember: Use the enrichment data to demonstrate genuine research and understanding, not just to fill templates.`
+4-PART STRUCTURE WITH YOUR DATA:
+1. PERSONAL REASON: ${context.aiContext.personalReasonHints}
+2. VALUE PROPOSITION: ${context.aiContext.valuePropositionHints}
+3. SIMPLE CTA: Use the purpose to create a relevant, low-friction ask
+4. PROOF: ${context.aiContext.proofPoints}
+
+Remember: Use both company enrichment data AND LinkedIn information to create authentic, well-researched emails that follow the 4-part structure.`
   }
 
   /**
@@ -151,47 +180,57 @@ Remember: Use the enrichment data to demonstrate genuine research and understand
     switch (level) {
       case 'premium':
         return `=== PREMIUM PERSONALIZATION MODE ===
-You have access to rich company insights. Use this data to:
+You have access to rich company insights AND LinkedIn data. Use this data to:
 
-1. SUBJECT LINE: Reference specific company attributes or recent developments
-2. OPENING: Mention something specific about their industry position or unique approach
-3. BODY: Connect your solution to their specific target audience or business model
-4. VALUE PROP: Align your offering with their documented unique points and differentiators
-5. TONE: Match their company's communication style (${context.aiContext.toneGuidance})
+1. PERSONAL REASON: Reference their LinkedIn headline, recent experience, or specific company insights
+2. VALUE PROPOSITION: Connect your solution to their documented unique points, target audience, and business model
+3. SIMPLE CTA: Tailor the ask to their role and company type
+4. PROOF: Use industry-specific examples and results from similar companies
 
-DEMONSTRATE RESEARCH: Show you understand their business beyond just the company name.`
+LINKEDIN DATA AVAILABLE: ${context.aiContext.linkedinPersonalization}
+COMPANY INSIGHTS: Use their industry position, unique differentiators, and target audience
+TONE: Match their company's communication style (${context.aiContext.toneGuidance})
+
+DEMONSTRATE RESEARCH: Show you understand both their personal background and business context.`
 
       case 'enriched':
         return `=== ENRICHED PERSONALIZATION MODE ===
-You have company industry and product insights. Use this to:
+You have company industry insights and/or LinkedIn data. Use this to:
 
-1. SUBJECT LINE: Include industry-relevant terminology
-2. OPENING: Reference their sector or business focus
-3. BODY: Connect your solution to their industry challenges
-4. VALUE PROP: Explain benefits in context of their products/services
-5. TONE: Professional tone aligned with industry standards
+1. PERSONAL REASON: Reference their industry role, LinkedIn headline, or company's sector
+2. VALUE PROPOSITION: Connect your solution to their industry challenges and business context
+3. SIMPLE CTA: Professional ask appropriate for their industry and role
+4. PROOF: Industry-specific examples and relevant case studies
 
-SHOW UNDERSTANDING: Demonstrate you know their business context.`
+AVAILABLE DATA: ${context.aiContext.linkedinPersonalization || 'Company industry and business context'}
+TONE: Professional tone aligned with industry standards
+
+SHOW UNDERSTANDING: Demonstrate you know their business and professional context.`
 
       case 'basic':
         return `=== BASIC PERSONALIZATION MODE ===
-You have basic contact information. Use this to:
+You have basic contact information and possibly some LinkedIn data. Use this to:
 
-1. SUBJECT LINE: Use {{first_name}} and {{company}} naturally
-2. OPENING: Professional greeting with proper personalization
-3. BODY: Generic but relevant value proposition
-4. TONE: Professional and respectful approach
+1. PERSONAL REASON: Reference their role, company, or any available LinkedIn information
+2. VALUE PROPOSITION: Clear, relevant benefit statement with generic but compelling value
+3. SIMPLE CTA: Straightforward, professional ask (call, demo, consultation)
+4. PROOF: General industry experience or client count
 
-KEEP IT SIMPLE: Focus on clear value and professional presentation.`
+AVAILABLE DATA: ${context.aiContext.linkedinPersonalization || 'Basic contact and company information'}
+TONE: Professional and respectful approach
+
+KEEP IT SIMPLE: Focus on clear value and professional presentation using the 4-part structure.`
 
       default:
         return `=== STANDARD MODE ===
-Limited personalization data available. Focus on:
+Limited personalization data available. Follow the 4-part structure:
 
-1. Clear value proposition
-2. Professional tone
-3. Generic but compelling messaging
-4. Strong call-to-action`
+1. PERSONAL REASON: Use basic company/role information or generic industry reference
+2. VALUE PROPOSITION: Clear, compelling benefit statement
+3. SIMPLE CTA: Professional, low-friction ask
+4. PROOF: General credibility statement
+
+TONE: Professional and respectful`
     }
   }
 
@@ -224,8 +263,20 @@ Limited personalization data available. Focus on:
     if (context.availableInsights.hasPosition) {
       requirements.push('- Address the recipient by their role/position when appropriate')
     }
+    
+    if (context.availableInsights.hasLinkedInHeadline) {
+      requirements.push('- Reference their LinkedIn headline or professional focus in the personal reason')
+    }
+    
+    if (context.availableInsights.hasLinkedInAbout) {
+      requirements.push('- Use insights from their LinkedIn summary to create a personal connection')
+    }
+    
+    if (context.availableInsights.hasLinkedInExperience) {
+      requirements.push('- Reference their professional background or recent career moves when relevant')
+    }
 
-    return requirements.length > 0 ? requirements.join('\n') : '- Focus on clear, professional communication'
+    return requirements.length > 0 ? requirements.join('\n') : '- Focus on clear, professional communication using the 4-part structure'
   }
 
   /**
@@ -241,6 +292,11 @@ Limited personalization data available. Focus on:
     if (context.availableInsights.hasUniquePoints) insights.push('Unique Differentiators')
     if (context.availableInsights.hasToneStyle) insights.push('Company Tone')
     if (context.availableInsights.hasPosition) insights.push('Contact Position')
+    if (context.availableInsights.hasLinkedInHeadline) insights.push('LinkedIn Headline')
+    if (context.availableInsights.hasLinkedInAbout) insights.push('LinkedIn Summary')
+    if (context.availableInsights.hasLinkedInExperience) insights.push('LinkedIn Experience')
+    if (context.availableInsights.hasLinkedInEducation) insights.push('LinkedIn Education')
+    if (context.availableInsights.hasLinkedInSkills) insights.push('LinkedIn Skills')
     
     return insights
   }

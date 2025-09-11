@@ -822,12 +822,33 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
 
       {/* Main Content Area - Vertical Layout */}
       <div className="space-y-6">
+        {/* Content Type Indicator */}
+        {selectedContact && generatedEmails.has(selectedContact.id) && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="h-4 w-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-800">
+                Editing personalized content for {selectedContact.first_name} {selectedContact.last_name}
+              </span>
+            </div>
+            <p className="text-xs text-blue-600 mt-1">
+              Changes will only affect this contact's email. Switch to a different contact or turn off "Use Contact Info" to edit the base template.
+            </p>
+          </div>
+        )}
+
         {/* Email Content Editor */}
         <Card className="max-w-full overflow-hidden">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Type className="h-5 w-5 mr-2" />
               Email Content
+              {selectedContact && generatedEmails.has(selectedContact.id) && (
+                <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-800">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  Personalized
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 max-w-full overflow-hidden">
@@ -838,8 +859,33 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                   type="text"
                   className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g., Quick question about {{company}}"
-                  value={subject}
-                  onChange={(e) => onSubjectChange(e.target.value)}
+                  value={(() => {
+                    // Show personalized subject for selected contact if available
+                    if (selectedContact && generatedEmails.has(selectedContact.id)) {
+                      const generatedEmail = generatedEmails.get(selectedContact.id)!
+                      return generatedEmail.subject || subject
+                    }
+                    return subject
+                  })()}
+                  onChange={(e) => {
+                    const newSubject = e.target.value
+                    
+                    // If we have a selected contact with generated content, update their personalized version
+                    if (selectedContact && generatedEmails.has(selectedContact.id)) {
+                      setGeneratedEmails(prev => {
+                        const newEmails = new Map(prev)
+                        const existingEmail = newEmails.get(selectedContact.id)!
+                        newEmails.set(selectedContact.id, {
+                          ...existingEmail,
+                          subject: newSubject
+                        })
+                        return newEmails
+                      })
+                    } else {
+                      // Update the base template
+                      onSubjectChange(newSubject)
+                    }
+                  }}
                 />
               </div>
 
@@ -918,8 +964,33 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                   className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
                   rows={12}
                   placeholder="Start typing your HTML email content here, or use a template above..."
-                  value={htmlContent}
-                  onChange={(e) => onContentChange(e.target.value)}
+                  value={(() => {
+                    // Show personalized content for selected contact if available
+                    if (selectedContact && generatedEmails.has(selectedContact.id)) {
+                      const generatedEmail = generatedEmails.get(selectedContact.id)!
+                      return generatedEmail.content || htmlContent
+                    }
+                    return htmlContent
+                  })()}
+                  onChange={(e) => {
+                    const newContent = e.target.value
+                    
+                    // If we have a selected contact with generated content, update their personalized version
+                    if (selectedContact && generatedEmails.has(selectedContact.id)) {
+                      setGeneratedEmails(prev => {
+                        const newEmails = new Map(prev)
+                        const existingEmail = newEmails.get(selectedContact.id)!
+                        newEmails.set(selectedContact.id, {
+                          ...existingEmail,
+                          content: newContent
+                        })
+                        return newEmails
+                      })
+                    } else {
+                      // Update the base template
+                      onContentChange(newContent)
+                    }
+                  }}
                 />
               </div>
           </CardContent>
