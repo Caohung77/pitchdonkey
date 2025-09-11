@@ -169,7 +169,13 @@ export function BulkEnrichmentModal({
         throw new Error(errorMessage)
       }
 
-      const data = await response.json()
+      const apiResponse = await response.json()
+      
+      // Extract data from wrapped API response (createSuccessResponse format)
+      const data = apiResponse.success && apiResponse.data ? apiResponse.data : apiResponse
+      
+      console.log('📊 Raw API response:', apiResponse)
+      console.log('📊 Parsed job data:', data)
       
       if (!data.success) {
         throw new Error(data.error || 'Failed to start bulk enrichment')

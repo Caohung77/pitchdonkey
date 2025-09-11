@@ -75,9 +75,9 @@ export const POST = withAuth(async (request: NextRequest, { user }, { params }: 
  * GET /api/contacts/[id]/extract-linkedin
  * Get LinkedIn extraction status and data for a contact
  */
-export const GET = withAuth(async (request: NextRequest, { user }, { params }: { params: { id: string } }) => {
+export const GET = withAuth(async (request: NextRequest, { user }, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const contactId = params.id
+    const { id: contactId } = await params
     const linkedinExtractor = new LinkedInProfileExtractorService()
     
     console.log(`📊 Getting LinkedIn data for contact ${contactId}`)

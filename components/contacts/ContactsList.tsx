@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, AlertCircle, Edit, Trash2, Tag, List, MoreVertical, Sparkles } from 'lucide-react'
+import { Users, AlertCircle, Edit, Trash2, Tag, List, MoreVertical, Sparkles, FileText } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -512,6 +512,16 @@ export function ContactsList({
       {/* Contacts grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {state.contacts.map((contact) => {
+          const hasNotes = (() => {
+            const html = (contact as any).notes as string | undefined
+            if (!html) return false
+            const text = html
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+            return text.length > 0
+          })()
           const formatName = () => {
             const firstName = contact.first_name || ''
             const lastName = contact.last_name || ''
@@ -669,6 +679,23 @@ export function ContactsList({
                     
                     {/* Enrichment Badges */}
                     <EnrichmentBadges contact={contact} size="sm" />
+                    {/* Notes badge */}
+                    {(() => {
+                      const html = (contact as any).notes as string | undefined
+                      if (!html) return null
+                      const text = html
+                        .replace(/<[^>]*>/g, ' ')
+                        .replace(/&nbsp;/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                      if (text.length === 0) return null
+                      return (
+                        <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-yellow-100 text-yellow-700 border-yellow-200 flex items-center gap-1">
+                          <FileText className="h-3 w-3" />
+                          Note
+                        </Badge>
+                      )
+                    })()}
                   </div>
                   
                   {/* Counts */}

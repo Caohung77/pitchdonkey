@@ -78,6 +78,10 @@ export interface Contact {
   linkedin_people_also_viewed?: any[]
   linkedin_contact_info?: any
   linkedin_services?: any[]
+  
+  // Contact Notes
+  notes?: string | null
+  notes_updated_at?: string | null
 }
 
 export interface EnrichmentData {
@@ -996,6 +1000,48 @@ export class ContactService {
       success: true,
       deleted_count: data?.length || 0,
       deleted_ids: data?.map(contact => contact.id) || []
+    }
+  }
+
+  // Contact Notes Management
+  async getContactNotes(contactId: string, userId: string) {
+    const supabase = await this.getSupabase()
+    
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('id, notes, notes_updated_at')
+      .eq('id', contactId)
+      .eq('user_id', userId)
+      .single()
+    
+    if (error) {
+      throw new Error(`Failed to fetch contact notes: ${error.message}`)
+    }
+    
+    return {
+      notes: data.notes || '',
+      notes_updated_at: data.notes_updated_at
+    }
+  }
+
+  async updateContactNotes(contactId: string, userId: string, notes: string) {
+    const supabase = await this.getSupabase()
+    
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ notes })
+      .eq('id', contactId)
+      .eq('user_id', userId)
+      .select('id, notes, notes_updated_at')
+      .single()
+    
+    if (error) {
+      throw new Error(`Failed to update contact notes: ${error.message}`)
+    }
+    
+    return {
+      notes: data.notes,
+      notes_updated_at: data.notes_updated_at
     }
   }
 }

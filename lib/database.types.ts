@@ -495,6 +495,44 @@ export type Database = {
           linkedin_profile_data: Json | null
           linkedin_extraction_status: string | null
           linkedin_extracted_at: string | null
+          // NEW: Individual LinkedIn fields
+          linkedin_first_name: string | null
+          linkedin_last_name: string | null
+          linkedin_headline: string | null
+          linkedin_summary: string | null
+          linkedin_about: string | null
+          linkedin_current_company: string | null
+          linkedin_current_position: string | null
+          linkedin_industry: string | null
+          linkedin_location: string | null
+          linkedin_city: string | null
+          linkedin_country: string | null
+          linkedin_country_code: string | null
+          linkedin_follower_count: number | null
+          linkedin_connection_count: number | null
+          linkedin_recommendations_count: number | null
+          linkedin_profile_completeness: number | null
+          linkedin_avatar_url: string | null
+          linkedin_banner_url: string | null
+          linkedin_experience: Json | null
+          linkedin_education: Json | null
+          linkedin_skills: Json | null
+          linkedin_languages: Json | null
+          linkedin_certifications: Json | null
+          linkedin_volunteer_experience: Json | null
+          linkedin_honors_awards: Json | null
+          linkedin_projects: Json | null
+          linkedin_courses: Json | null
+          linkedin_publications: Json | null
+          linkedin_patents: Json | null
+          linkedin_organizations: Json | null
+          linkedin_posts: Json | null
+          linkedin_recommendations: Json | null
+          linkedin_people_also_viewed: Json | null
+          linkedin_contact_info: Json | null
+          linkedin_services: Json | null
+          notes: string | null
+          notes_updated_at: string | null
           phone: string | null
           position: string | null
           postcode: string | null
@@ -536,6 +574,44 @@ export type Database = {
           linkedin_profile_data?: Json | null
           linkedin_extraction_status?: string | null
           linkedin_extracted_at?: string | null
+          // NEW: Individual LinkedIn fields
+          linkedin_first_name?: string | null
+          linkedin_last_name?: string | null
+          linkedin_headline?: string | null
+          linkedin_summary?: string | null
+          linkedin_about?: string | null
+          linkedin_current_company?: string | null
+          linkedin_current_position?: string | null
+          linkedin_industry?: string | null
+          linkedin_location?: string | null
+          linkedin_city?: string | null
+          linkedin_country?: string | null
+          linkedin_country_code?: string | null
+          linkedin_follower_count?: number | null
+          linkedin_connection_count?: number | null
+          linkedin_recommendations_count?: number | null
+          linkedin_profile_completeness?: number | null
+          linkedin_avatar_url?: string | null
+          linkedin_banner_url?: string | null
+          linkedin_experience?: Json | null
+          linkedin_education?: Json | null
+          linkedin_skills?: Json | null
+          linkedin_languages?: Json | null
+          linkedin_certifications?: Json | null
+          linkedin_volunteer_experience?: Json | null
+          linkedin_honors_awards?: Json | null
+          linkedin_projects?: Json | null
+          linkedin_courses?: Json | null
+          linkedin_publications?: Json | null
+          linkedin_patents?: Json | null
+          linkedin_organizations?: Json | null
+          linkedin_posts?: Json | null
+          linkedin_recommendations?: Json | null
+          linkedin_people_also_viewed?: Json | null
+          linkedin_contact_info?: Json | null
+          linkedin_services?: Json | null
+          notes?: string | null
+          notes_updated_at?: string | null
           phone?: string | null
           position?: string | null
           postcode?: string | null
@@ -577,6 +653,44 @@ export type Database = {
           linkedin_profile_data?: Json | null
           linkedin_extraction_status?: string | null
           linkedin_extracted_at?: string | null
+          // NEW: Individual LinkedIn fields
+          linkedin_first_name?: string | null
+          linkedin_last_name?: string | null
+          linkedin_headline?: string | null
+          linkedin_summary?: string | null
+          linkedin_about?: string | null
+          linkedin_current_company?: string | null
+          linkedin_current_position?: string | null
+          linkedin_industry?: string | null
+          linkedin_location?: string | null
+          linkedin_city?: string | null
+          linkedin_country?: string | null
+          linkedin_country_code?: string | null
+          linkedin_follower_count?: number | null
+          linkedin_connection_count?: number | null
+          linkedin_recommendations_count?: number | null
+          linkedin_profile_completeness?: number | null
+          linkedin_avatar_url?: string | null
+          linkedin_banner_url?: string | null
+          linkedin_experience?: Json | null
+          linkedin_education?: Json | null
+          linkedin_skills?: Json | null
+          linkedin_languages?: Json | null
+          linkedin_certifications?: Json | null
+          linkedin_volunteer_experience?: Json | null
+          linkedin_honors_awards?: Json | null
+          linkedin_projects?: Json | null
+          linkedin_courses?: Json | null
+          linkedin_publications?: Json | null
+          linkedin_patents?: Json | null
+          linkedin_organizations?: Json | null
+          linkedin_posts?: Json | null
+          linkedin_recommendations?: Json | null
+          linkedin_people_also_viewed?: Json | null
+          linkedin_contact_info?: Json | null
+          linkedin_services?: Json | null
+          notes?: string | null
+          notes_updated_at?: string | null
           phone?: string | null
           position?: string | null
           postcode?: string | null

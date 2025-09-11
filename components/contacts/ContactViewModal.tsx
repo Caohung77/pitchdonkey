@@ -22,11 +22,13 @@ import {
   Twitter,
   Hash,
   Clock4,
-  Award
+  Award,
+  FileText
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseCompanyName } from '@/lib/contact-utils'
 import { EnrichmentButton } from './EnrichmentButton'
+import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { useEffect, useState } from 'react'
 
 interface ContactViewModalProps {
@@ -46,6 +48,10 @@ export function ContactViewModal({
 
   // Always display freshest data from Supabase
   const [latestContact, setLatestContact] = useState<Contact | null>(contact)
+  
+  // Notes state management
+  const [notes, setNotes] = useState<string>('')
+  const [notesLoading, setNotesLoading] = useState(false)
 
   useEffect(() => {
     const fetchLatest = async () => {
@@ -193,6 +199,56 @@ export function ContactViewModal({
     })
   }
 
+  // Notes management functions
+  const fetchNotes = async () => {
+    if (!hydratedContact.id) return
+    
+    setNotesLoading(true)
+    try {
+      const response = await fetch(`/api/contacts/${hydratedContact.id}/notes`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setNotes(result.data.notes || '')
+      } else {
+        console.error('Failed to fetch notes:', result.error)
+      }
+    } catch (error) {
+      console.error('Error fetching notes:', error)
+    } finally {
+      setNotesLoading(false)
+    }
+  }
+
+  const saveNotes = async (content: string) => {
+    if (!hydratedContact.id) return
+    
+    try {
+      const response = await fetch(`/api/contacts/${hydratedContact.id}/notes`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notes: content })
+      })
+      
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save notes')
+      }
+    } catch (error) {
+      console.error('Error saving notes:', error)
+      throw error
+    }
+  }
+
+  // Fetch notes when modal opens
+  useEffect(() => {
+    if (isOpen && hydratedContact.id) {
+      fetchNotes()
+    }
+  }, [isOpen, hydratedContact.id])
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -226,7 +282,7 @@ export function ContactViewModal({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className={`grid w-full mb-6 ${(hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <TabsList className={`grid w-full mb-6 ${(hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed' ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="details" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Contact Details
@@ -237,6 +293,10 @@ export function ContactViewModal({
                 LinkedIn Profile
               </TabsTrigger>
             )}
+            <TabsTrigger value="notes" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Notes
+            </TabsTrigger>
             <TabsTrigger value="activity" className="flex items-center gap-2">
               <Send className="h-4 w-4" />
               Campaigns & Lists
@@ -1146,6 +1206,45 @@ export function ContactViewModal({
               )}
             </TabsContent>
           )}
+
+          {/* Notes Tab */}
+          <TabsContent value="notes" className="space-y-6">
+            <div className="bg-white border border-gray-200 rounded-lg">
+              <div className="p-4 border-b border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText className="h-5 w-5 text-gray-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Contact Notes</h3>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Keep track of important information, conversation history, and insights about this contact.
+                </p>
+              </div>
+              
+              <div className="p-4">
+                {notesLoading ? (
+                  <div className="flex items-center justify-center h-48">
+                    <div className="text-gray-500">Loading notes...</div>
+                  </div>
+                ) : (
+                  <RichTextEditor
+                    value={notes}
+                    onChange={setNotes}
+                    onSave={saveNotes}
+                    placeholder="Start typing your notes about this contact..."
+                    autoSave={true}
+                    minHeight="300px"
+                    className="w-full"
+                  />
+                )}
+              </div>
+              
+              {!notesLoading && (
+                <div className="px-4 pb-4 text-xs text-gray-500">
+                  💡 Tip: Notes are automatically saved as you type. Use the rich text editor to format your content.
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           <TabsContent value="activity" className="space-y-6">
             {/* Lists Section */}
