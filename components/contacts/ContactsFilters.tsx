@@ -1,27 +1,51 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Filter, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { FilterTagCloud } from './FilterTagCloud'
+import { SortDropdown } from './SortDropdown'
+
+interface EnrichmentStats {
+  webEnriched: number
+  linkedinEnriched: number
+  fullyEnriched: number
+  notEnriched: number
+  total: number
+}
 
 interface ContactsFiltersProps {
   searchTerm: string
   statusFilter: string
+  enrichmentFilter?: string | null
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+  userId: string
   onSearchChange: (search: string) => void
   onStatusFilterChange: (status: string) => void
+  onEnrichmentFilterChange?: (filter: string | null) => void
+  onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
   onClearFilters: () => void
 }
 
 export function ContactsFilters({
   searchTerm,
   statusFilter,
+  enrichmentFilter,
+  sortBy = 'updated_at',
+  sortOrder = 'desc',
+  userId,
   onSearchChange,
   onStatusFilterChange,
+  onEnrichmentFilterChange,
+  onSortChange,
   onClearFilters
 }: ContactsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchTerm)
+  const [enrichmentStats, setEnrichmentStats] = useState<EnrichmentStats | null>(null)
+  const [isLoadingStats, setIsLoadingStats] = useState(false)
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,12 +62,48 @@ export function ContactsFilters({
     }
   }
 
+  // Fetch enrichment statistics
+  useEffect(() => {
+    const fetchEnrichmentStats = async () => {
+      if (!userId) return
+      
+      setIsLoadingStats(true)
+      try {
+        const response = await fetch('/api/contacts/stats')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.data) {
+            // Transform the API response to our expected format
+            const stats: EnrichmentStats = {
+              total: data.data.total || 0,
+              webEnriched: data.data.enriched_web || 0,
+              linkedinEnriched: data.data.enriched_linkedin || 0, 
+              fullyEnriched: data.data.enriched_both || 0,
+              notEnriched: data.data.not_enriched || 0
+            }
+            setEnrichmentStats(stats)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch enrichment stats:', error)
+      } finally {
+        setIsLoadingStats(false)
+      }
+    }
+
+    fetchEnrichmentStats()
+  }, [userId])
+
   const handleClearFilters = () => {
     setLocalSearch('')
     onClearFilters()
   }
 
-  const hasActiveFilters = searchTerm || statusFilter !== 'all'
+  const handleEnrichmentFilterChange = (filter: string | null) => {
+    onEnrichmentFilterChange?.(filter)
+  }
+
+  const hasActiveFilters = searchTerm || statusFilter !== 'all' || enrichmentFilter
 
   return (
     <Card className="mb-6">
@@ -79,6 +139,15 @@ export function ContactsFilters({
             </select>
           </div>
 
+          {/* Sort Dropdown */}
+          {onSortChange && (
+            <SortDropdown
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={onSortChange}
+            />
+          )}
+
           {/* Clear Filters */}
           {hasActiveFilters && (
             <Button
@@ -90,6 +159,15 @@ export function ContactsFilters({
               <span>Clear</span>
             </Button>
           )}
+        </div>
+
+        {/* Enrichment Filter Tag Cloud */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <FilterTagCloud
+            onFilterChange={handleEnrichmentFilterChange}
+            activeFilter={enrichmentFilter || null}
+            enrichmentStats={enrichmentStats || undefined}
+          />
         </div>
 
         {/* Active Filters Display */}
@@ -104,6 +182,11 @@ export function ContactsFilters({
             {statusFilter !== 'all' && (
               <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800">
                 Status: {statusFilter}
+              </span>
+            )}
+            {enrichmentFilter && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-800">
+                Enrichment: {enrichmentFilter}
               </span>
             )}
           </div>

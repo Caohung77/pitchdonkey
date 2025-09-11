@@ -19,6 +19,9 @@ import { ToastProvider } from '@/components/ui/toast'
 interface ContactsPageState {
   searchTerm: string
   statusFilter: string
+  enrichmentFilter: string | null
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
   activeTab: string
 }
 
@@ -29,6 +32,9 @@ function ContactsPageContent() {
   const [state, setState] = useState<ContactsPageState>({
     searchTerm: '',
     statusFilter: 'all',
+    enrichmentFilter: null,
+    sortBy: 'updated_at',
+    sortOrder: 'desc',
     activeTab: 'contacts'
   })
 
@@ -41,8 +47,16 @@ function ContactsPageContent() {
     setState(prev => ({ ...prev, statusFilter }))
   }
 
+  const handleEnrichmentFilterChange = (enrichmentFilter: string | null) => {
+    setState(prev => ({ ...prev, enrichmentFilter }))
+  }
+
+  const handleSortChange = (sortBy: string, sortOrder: 'asc' | 'desc') => {
+    setState(prev => ({ ...prev, sortBy, sortOrder }))
+  }
+
   const handleClearFilters = () => {
-    setState(prev => ({ ...prev, searchTerm: '', statusFilter: 'all' }))
+    setState(prev => ({ ...prev, searchTerm: '', statusFilter: 'all', enrichmentFilter: null }))
   }
 
   // Contact handlers
@@ -160,8 +174,14 @@ function ContactsPageContent() {
             <ContactsFilters
               searchTerm={state.searchTerm}
               statusFilter={state.statusFilter}
+              enrichmentFilter={state.enrichmentFilter}
+              sortBy={state.sortBy}
+              sortOrder={state.sortOrder}
+              userId={user.id}
               onSearchChange={handleSearchChange}
               onStatusFilterChange={handleStatusFilterChange}
+              onEnrichmentFilterChange={handleEnrichmentFilterChange}
+              onSortChange={handleSortChange}
               onClearFilters={handleClearFilters}
             />
 
@@ -170,6 +190,9 @@ function ContactsPageContent() {
               userId={user.id}
               searchTerm={state.searchTerm}
               statusFilter={state.statusFilter}
+              enrichmentFilter={state.enrichmentFilter}
+              sortBy={state.sortBy}
+              sortOrder={state.sortOrder}
             />
           </TabsContent>
 

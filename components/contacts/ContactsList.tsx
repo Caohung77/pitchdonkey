@@ -30,6 +30,9 @@ interface ContactsListProps {
   userId: string
   searchTerm?: string
   statusFilter?: string
+  enrichmentFilter?: string | null
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
 }
 
 interface ContactsListState {
@@ -44,7 +47,14 @@ interface ContactsListState {
   }
 }
 
-export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: ContactsListProps) {
+export function ContactsList({ 
+  userId, 
+  searchTerm = '', 
+  statusFilter = 'all', 
+  enrichmentFilter = null,
+  sortBy = 'updated_at',
+  sortOrder = 'desc' 
+}: ContactsListProps) {
   const [state, setState] = useState<ContactsListState>({
     contacts: [],
     loading: true,
@@ -325,7 +335,7 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
 
   useEffect(() => {
     fetchContacts()
-  }, [userId, searchTerm, statusFilter])
+  }, [userId, searchTerm, statusFilter, enrichmentFilter, sortBy, sortOrder])
 
   // Debug effect to track modal state changes
   useEffect(() => {
@@ -351,6 +361,15 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       }
       if (statusFilter && statusFilter !== 'all') {
         params.append('status', statusFilter)
+      }
+      if (enrichmentFilter) {
+        params.append('enrichment', enrichmentFilter)
+      }
+      if (sortBy) {
+        params.append('sortBy', sortBy)
+      }
+      if (sortOrder) {
+        params.append('sortOrder', sortOrder)
       }
 
       console.log('ContactsList: Fetching contacts with params:', params.toString())

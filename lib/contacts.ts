@@ -96,6 +96,10 @@ export interface ContactStats {
   bounced: number
   by_status: Record<string, number>
   by_tags: Record<string, number>
+  enriched_web: number
+  enriched_linkedin: number
+  enriched_both: number
+  not_enriched: number
 }
 
 export class ContactService {
@@ -385,7 +389,23 @@ export class ContactService {
     }
 
     // Apply sorting
-    query = query.order(sortBy, { ascending: sortOrder === 'asc' })
+    if (sortBy === 'status_priority') {
+      // Custom sorting for status priority
+      const statusPrioritySQL = `
+        CASE status 
+          WHEN 'active' THEN 4
+          WHEN 'unsubscribed' THEN 3  
+          WHEN 'bounced' THEN 2
+          WHEN 'complained' THEN 1
+          ELSE 0
+        END ${sortOrder === 'asc' ? 'ASC' : 'DESC'}
+      `
+      query = query.order('status', { ascending: false, foreignTable: '', referencedTable: '' })
+      // For now, let's use a simpler approach
+      query = query.order('status', { ascending: sortOrder === 'asc' })
+    } else {
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' })
+    }
 
     // Apply pagination
     const from = (page - 1) * limit
@@ -466,7 +486,7 @@ export class ContactService {
     const supabase = await this.getSupabase()
     const { data, error } = await supabase
       .from('contacts')
-      .select('status, tags')
+      .select('status, tags, enrichment_status, linkedin_extraction_status')
       .eq('user_id', userId)
       .neq('status', 'deleted')
 
@@ -479,6 +499,10 @@ export class ContactService {
       bounced: 0,
       by_status: {},
       by_tags: {},
+      enriched_web: 0,
+      enriched_linkedin: 0,
+      enriched_both: 0,
+      not_enriched: 0,
     }
 
     data.forEach(contact => {
@@ -489,10 +513,26 @@ export class ContactService {
       if (contact.status === 'unsubscribed') stats.unsubscribed++
       if (contact.status === 'bounced') stats.bounced++
 
+      // Count by enrichment status
+      const isWebEnriched = contact.enrichment_status === 'completed'
+      const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed'
+      
+      if (isWebEnriched && isLinkedInEnriched) {
+        stats.enriched_both++
+      } else if (isWebEnriched) {
+        stats.enriched_web++
+      } else if (isLinkedInEnriched) {
+        stats.enriched_linkedin++
+      } else {
+        stats.not_enriched++
+      }
+
       // Count by tags
-      contact.tags.forEach((tag: string) => {
-        stats.by_tags[tag] = (stats.by_tags[tag] || 0) + 1
-      })
+      if (contact.tags && Array.isArray(contact.tags)) {
+        contact.tags.forEach((tag: string) => {
+          stats.by_tags[tag] = (stats.by_tags[tag] || 0) + 1
+        })
+      }
     })
 
     return stats
