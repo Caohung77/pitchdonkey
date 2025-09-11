@@ -45,7 +45,8 @@ export function EmailPreviewModal({
       email: 'john.smith@example.com',
       company: 'Acme Corp',
       company_name: 'Acme Corp',
-      sender_name: 'Your Name'
+      sender_name: 'Your Name',
+      website: 'https://example.com'
     }
     
     // Replace template variables with preview data
@@ -58,6 +59,7 @@ export function EmailPreviewModal({
       { pattern: /&#123;&#123;\s*company\s*&#125;&#125;/g, value: previewData.company },
       { pattern: /&#123;&#123;\s*company_name\s*&#125;&#125;/g, value: previewData.company_name },
       { pattern: /&#123;&#123;\s*sender_name\s*&#125;&#125;/g, value: previewData.sender_name },
+      { pattern: /&#123;&#123;\s*website\s*&#125;&#125;/g, value: previewData.website },
       
       // Regular curly braces (user input)
       { pattern: /\{\{\s*first_name\s*\}\}/g, value: previewData.first_name },
@@ -65,7 +67,8 @@ export function EmailPreviewModal({
       { pattern: /\{\{\s*email\s*\}\}/g, value: previewData.email },
       { pattern: /\{\{\s*company\s*\}\}/g, value: previewData.company },
       { pattern: /\{\{\s*company_name\s*\}\}/g, value: previewData.company_name },
-      { pattern: /\{\{\s*sender_name\s*\}\}/g, value: previewData.sender_name }
+      { pattern: /\{\{\s*sender_name\s*\}\}/g, value: previewData.sender_name },
+      { pattern: /\{\{\s*website\s*\}\}/g, value: previewData.website }
     ]
     
     // Apply all replacements safely

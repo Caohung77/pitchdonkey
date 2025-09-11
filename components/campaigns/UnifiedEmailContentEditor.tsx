@@ -241,15 +241,21 @@ export function UnifiedEmailContentEditor({
       
       const purposeText = emailPurpose.trim() || 'Professional outreach email'
       
-      const requestBody = {
-        purpose: `${purposeText}
+      const purposeForAI = useContactInfo
+        ? `${purposeText}
 
 RECIPIENT INFORMATION:
 - Name: ${displayName}
 - Company: ${companyName}  
 - Email: ${contact.email}
 
-Write a personalized outreach email TO this person (they are the recipient). Use their name, company, and create an authentic, professional email that addresses them directly.`,
+Write a personalized outreach email TO this person (they are the recipient). Use their name, company, and create an authentic, professional email that addresses them directly.`
+        : `${purposeText}
+
+IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT invent real data. Use these placeholders naturally in subject and content: {{first_name}}, {{last_name}}, {{company}}, {{company_name}}, {{website}}, {{email}}, {{sender_name}}. Begin with a greeting that includes {{first_name}} and avoid appending real surnames; use {{last_name}} when a surname is referenced.`
+
+      const requestBody = {
+        purpose: purposeForAI,
         language: language,
         signature: `Best regards,\nYour Team`,
         contact_id: useContactInfo ? contact.id : undefined,
@@ -475,7 +481,8 @@ Write a personalized outreach email TO this person (they are the recipient). Use
       email: '{{email}}',
       company: '{{company}}',
       sender_name: '{{sender_name}}',
-      company_name: '{{company_name}}'
+      company_name: '{{company_name}}',
+      website: '{{website}}'
     }
     
     const newContent = htmlContent + ' ' + variables[variable as keyof typeof variables] + ' '
@@ -497,6 +504,7 @@ Write a personalized outreach email TO this person (they are the recipient). Use
     previewContent = previewContent.replace(/\{\{company_name\}\}/g, selectedContact.company_name || '')
     previewContent = previewContent.replace(/\{\{email\}\}/g, selectedContact.email)
     previewContent = previewContent.replace(/\{\{sender_name\}\}/g, 'Your Team')
+    previewContent = previewContent.replace(/\{\{website\}\}/g, selectedContact.website || '')
 
     // Sanitize to prevent global styles from leaking and breaking layout
     return sanitizeEmailHtml(previewContent)
@@ -514,6 +522,7 @@ Write a personalized outreach email TO this person (they are the recipient). Use
     previewSubject = previewSubject.replace(/\{\{last_name\}\}/g, selectedContact.last_name)
     previewSubject = previewSubject.replace(/\{\{company\}\}/g, selectedContact.company_name || '')
     previewSubject = previewSubject.replace(/\{\{company_name\}\}/g, selectedContact.company_name || '')
+    previewSubject = previewSubject.replace(/\{\{website\}\}/g, selectedContact.website || '')
 
     return previewSubject
   }
@@ -874,6 +883,13 @@ Write a personalized outreach email TO this person (they are the recipient). Use
                   <Badge 
                     variant="secondary" 
                     className="cursor-pointer hover:bg-blue-100"
+                    onClick={() => insertVariable('last_name')}
+                  >
+                    {"{{last_name}}"}
+                  </Badge>
+                  <Badge 
+                    variant="secondary" 
+                    className="cursor-pointer hover:bg-blue-100"
                     onClick={() => insertVariable('company')}
                   >
                     {"{{company}}"}
@@ -884,6 +900,13 @@ Write a personalized outreach email TO this person (they are the recipient). Use
                     onClick={() => insertVariable('sender_name')}
                   >
                     {"{{sender_name}}"}
+                  </Badge>
+                  <Badge 
+                    variant="secondary" 
+                    className="cursor-pointer hover:bg-blue-100"
+                    onClick={() => insertVariable('website')}
+                  >
+                    {"{{website}}"}
                   </Badge>
                 </div>
               </div>

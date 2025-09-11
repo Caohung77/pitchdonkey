@@ -90,7 +90,7 @@ Your mission is to create a ${toneGuidance}, ${lengthGuidance} outreach email th
 
 CORE REQUIREMENTS:
 1. Subject Line: Create a compelling, non-spammy subject that includes personalization variables when appropriate
-2. Opening: Use a personalized greeting with {{first_name}} and reference {{company}} naturally
+2. Opening: Use a greeting with the placeholder {{first_name}} and reference {{company}} naturally (placeholders only, no real names)
 3. Value Focus: Clearly articulate the benefit to the recipient within the first 2 sentences
 4. Length: Keep it ${lengthGuidance} (${this.getWordCount(config.length)} words)
 5. Call-to-Action: Include ONE clear, specific CTA
@@ -98,6 +98,13 @@ CORE REQUIREMENTS:
 7. Signature: Include the provided signature with proper HTML formatting
 8. HTML Format: Output clean, personal email HTML (NOT newsletter style)
 9. Font: Use Arial or web-safe fonts with max-width: 600px
+
+PLACEHOLDER POLICY (NO REAL DATA):
+- When no contact info is provided, you MUST use placeholders instead of real names or companies.
+- Allowed placeholders: {{first_name}}, {{last_name}}, {{company}}, {{company_name}}, {{website}}, {{email}}, {{sender_name}}
+- Use at least {{first_name}} in the opening and {{company}} (or {{company_name}}) somewhere in the body.
+- Use {{website}} only when naturally relevant (e.g., referencing their site).
+- Do NOT invent or hallucinate specific personal or company details.
 
 PURPOSE: ${config.purpose}
 LANGUAGE: ${config.language}

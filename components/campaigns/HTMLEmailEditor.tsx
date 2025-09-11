@@ -170,7 +170,8 @@ export function HTMLEmailEditor({
       email: '&#123;&#123;email&#125;&#125;',
       company: '&#123;&#123;company&#125;&#125;',
       sender_name: '&#123;&#123;sender_name&#125;&#125;',
-      company_name: '&#123;&#123;company_name&#125;&#125;'
+      company_name: '&#123;&#123;company_name&#125;&#125;',
+      website: '&#123;&#123;website&#125;&#125;'
     }
     
     const newContent = editorContent + ' ' + variables[variable as keyof typeof variables] + ' '
@@ -290,6 +291,13 @@ export function HTMLEmailEditor({
                 <Badge 
                   variant="secondary" 
                   className="cursor-pointer hover:bg-blue-100"
+                  onClick={() => insertVariable('last_name')}
+                >
+                  {"{{last_name}}"}
+                </Badge>
+                <Badge 
+                  variant="secondary" 
+                  className="cursor-pointer hover:bg-blue-100"
                   onClick={() => insertVariable('company')}
                 >
                   {"{{company}}"}
@@ -307,6 +315,13 @@ export function HTMLEmailEditor({
                   onClick={() => insertVariable('email')}
                 >
                   {"{{email}}"}
+                </Badge>
+                <Badge 
+                  variant="secondary" 
+                  className="cursor-pointer hover:bg-blue-100"
+                  onClick={() => insertVariable('website')}
+                >
+                  {"{{website}}"}
                 </Badge>
               </div>
             </div>

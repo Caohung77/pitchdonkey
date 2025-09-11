@@ -15,13 +15,13 @@ interface OutreachGenerationRequest {
   use_enrichment?: boolean
 }
 
-// Expert outreach email agent prompt
+// Expert outreach email agent prompt (used when falling back, aligned with placeholder policy)
 const OUTREACH_AGENT_PROMPT = `You are an expert outreach email copywriter.  
 Your job is to write **concise, high-response emails** tailored to the given purpose and language.  
 
 Follow these rules strictly:
 1. Start with a compelling subject line (relevant, personal, not spammy) - USE personalization variables like {{first_name}} and {{company}} in the subject when appropriate.
-2. Personalize the opening by referencing something about the recipient (use {{first_name}} and {{company}} variables effectively).
+2. Personalize the opening by referencing something about the recipient using placeholders (use {{first_name}} and {{company}} variables effectively, do not invent real data).
 3. Communicate value quickly—make it clear how this benefits the recipient.
 4. Keep it **short (75–150 words)** and scannable.
 5. Use one clear call-to-action (CTA).

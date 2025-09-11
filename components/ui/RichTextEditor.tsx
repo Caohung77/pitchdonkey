@@ -33,6 +33,11 @@ export function RichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        link: {
+          autolink: true,
+          openOnClick: true,
+          HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
+        },
       }),
     ],
     editable: !readOnly,
@@ -80,7 +85,8 @@ export function RichTextEditor({
         <div className="flex flex-wrap items-center gap-1 border border-gray-300 rounded-t-md px-2 py-1 bg-white">
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded" onClick={() => editor?.chain().focus().toggleBold().run()} aria-label="Bold"><strong>B</strong></button>
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded italic" onClick={() => editor?.chain().focus().toggleItalic().run()} aria-label="Italic">I</button>
-          <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded underline" onClick={() => editor?.chain().focus().toggleStrike().run()} aria-label="Strike">S</button>
+          <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded line-through" onClick={() => editor?.chain().focus().toggleStrike().run()} aria-label="Strike">S</button>
+          <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded underline" onClick={() => editor?.chain().focus().toggleUnderline().run()} aria-label="Underline">U</button>
           <span className="mx-1 w-px h-4 bg-gray-300" />
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} aria-label="H1">H1</button>
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} aria-label="H2">H2</button>
@@ -88,6 +94,31 @@ export function RichTextEditor({
           <span className="mx-1 w-px h-4 bg-gray-300" />
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded" onClick={() => editor?.chain().focus().toggleBulletList().run()} aria-label="Bulleted list">• List</button>
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded" onClick={() => editor?.chain().focus().toggleOrderedList().run()} aria-label="Ordered list">1. List</button>
+          <span className="mx-1 w-px h-4 bg-gray-300" />
+          <button
+            type="button"
+            className="px-2 py-1 text-sm hover:bg-gray-100 rounded"
+            onClick={() => {
+              const url = window.prompt('Enter URL')?.trim()
+              if (url === undefined) return
+              if (!url) {
+                editor?.chain().focus().unsetLink().run()
+                return
+              }
+              editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+            }}
+            aria-label="Set link"
+          >
+            Link
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 text-sm hover:bg-gray-100 rounded"
+            onClick={() => editor?.chain().focus().unsetLink().run()}
+            aria-label="Remove link"
+          >
+            Unlink
+          </button>
           <span className="mx-1 w-px h-4 bg-gray-300" />
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded" onClick={() => editor?.chain().focus().undo().run()} aria-label="Undo">Undo</button>
           <button type="button" className="px-2 py-1 text-sm hover:bg-gray-100 rounded" onClick={() => editor?.chain().focus().redo().run()} aria-label="Redo">Redo</button>
