@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { parseCompanyName } from '@/lib/contact-utils'
+import { EnrichmentBadges } from './EnrichmentBadges'
 import { 
   Mail, 
   Building,
@@ -217,13 +218,8 @@ export function ContactCard({
               {contact.status}
             </Badge>
             
-            {/* AI Enriched */}
-            {('enrichment_status' in contact) && contact.enrichment_status === 'completed' && (
-              <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 border-blue-200">
-                <Sparkles className="h-3 w-3 mr-1" />
-                Enriched
-              </Badge>
-            )}
+            {/* Enrichment Badges */}
+            <EnrichmentBadges contact={contact} size="sm" />
           </div>
           
           {/* Counts */}

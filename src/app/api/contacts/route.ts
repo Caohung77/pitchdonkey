@@ -21,6 +21,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     const search = searchParams.get('search') || undefined
     const status = searchParams.get('status') || undefined
     const tags = searchParams.get('tags')?.split(',').filter(Boolean) || undefined
+    const enrichment = searchParams.get('enrichment') || undefined
     const sortBy = searchParams.get('sortBy') || 'created_at'
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc'
 
@@ -31,6 +32,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       search,
       status,
       tags,
+      enrichment,
       sortBy,
       sortOrder
     })

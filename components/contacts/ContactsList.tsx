@@ -20,6 +20,8 @@ import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 import { BulkTagManagementModal } from './BulkTagManagementModal'
 import { BulkListManagementModal } from './BulkListManagementModal'
+import { EnrichmentBadges } from './EnrichmentBadges'
+import { Pagination } from '@/components/ui/pagination'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { useToast } from '@/components/ui/toast'
 import { Contact } from '@/lib/contacts'
@@ -244,6 +246,9 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         }
       } catch {}
     }
+    // Ensure progress modal closes and job is cleared to prevent further polling
+    setIsProgressModalOpen(false)
+    setCurrentJobId(null)
   }
 
   // Bulk action handlers
@@ -643,20 +648,8 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
                       {contact.status}
                     </Badge>
                     
-                    {/* AI Enriched */}
-                    {'enrichment_status' in contact && contact.enrichment_status === 'completed' && (
-                      <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 border-blue-200">
-                        <Sparkles className="h-3 w-3 mr-1" />
-                        Enriched
-                      </Badge>
-                    )}
-
-                    {/* Processing status */}
-                    {'enrichment_status' in contact && contact.enrichment_status === 'pending' && (
-                      <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-orange-100 text-orange-700 border-orange-200">
-                        Processing
-                      </Badge>
-                    )}
+                    {/* Enrichment Badges */}
+                    <EnrichmentBadges contact={contact} size="sm" />
                   </div>
                   
                   {/* Counts */}
@@ -728,51 +721,32 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
         })}
       </div>
 
-      {/* Pagination */}
-      {state.pagination.pages > 1 && (
-        <div className="flex justify-center mt-8">
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              disabled={state.pagination.page === 1}
-              onClick={() => handlePageChange(state.pagination.page - 1)}
-            >
-              Previous
-            </Button>
-            <span className="flex items-center px-4 text-sm text-gray-600">
-              Page {state.pagination.page} of {state.pagination.pages}
-            </span>
-            <Button
-              variant="outline"
-              disabled={state.pagination.page === state.pagination.pages}
-              onClick={() => handlePageChange(state.pagination.page + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Results summary */}
-      <div className="text-center text-sm text-gray-600">
-        Showing {((state.pagination.page - 1) * state.pagination.limit) + 1} to{' '}
-        {Math.min(state.pagination.page * state.pagination.limit, state.pagination.total)} of{' '}
-        {state.pagination.total} contacts
-      </div>
+      {/* Improved Pagination */}
+      <Pagination
+        currentPage={state.pagination.page}
+        totalItems={state.pagination.total}
+        itemsPerPage={state.pagination.limit}
+        onPageChange={handlePageChange}
+        showInfo={true}
+        showFirstLast={true}
+        className="mt-8"
+      />
 
       {/* Edit Contact Modal */}
-      {/* Contact View Modal */}
-      <ContactViewModal
-        contact={viewingContact}
-        isOpen={isViewModalOpen}
-        onClose={() => setIsViewModalOpen(false)}
-        onEdit={(contact) => {
-          setViewingContact(null)
-          setIsViewModalOpen(false)
-          setEditingContact(contact)
-          setIsEditModalOpen(true)
-        }}
-      />
+      {/* Contact View Modal - render only when open to avoid hydration/static flag issues */}
+      {isViewModalOpen && viewingContact && (
+        <ContactViewModal
+          contact={viewingContact}
+          isOpen={true}
+          onClose={() => setIsViewModalOpen(false)}
+          onEdit={(contact) => {
+            setViewingContact(null)
+            setIsViewModalOpen(false)
+            setEditingContact(contact)
+            setIsEditModalOpen(true)
+          }}
+        />
+      )}
 
       {/* Contact Edit Modal */}
       <EditContactModal
@@ -799,17 +773,14 @@ export function ContactsList({ userId, searchTerm = '', statusFilter = 'all' }: 
       />
 
       {/* Bulk Enrichment Progress Modal */}
-      {(() => {
-        console.log('ContactsList: Rendering progress modal - currentJobId:', currentJobId, 'isProgressModalOpen:', isProgressModalOpen)
-        return currentJobId && isProgressModalOpen && (
-          <BulkEnrichmentProgressModal
-            jobId={currentJobId}
-            isOpen={isProgressModalOpen}
-            onClose={() => setIsProgressModalOpen(false)}
-            onComplete={handleProgressComplete}
-          />
-        )
-      })()}
+      {currentJobId && isProgressModalOpen && (
+        <BulkEnrichmentProgressModal
+          jobId={currentJobId}
+          isOpen={isProgressModalOpen}
+          onClose={() => setIsProgressModalOpen(false)}
+          onComplete={handleProgressComplete}
+        />
+      )}
 
       {/* Bulk Tag Management Modal */}
       <BulkTagManagementModal

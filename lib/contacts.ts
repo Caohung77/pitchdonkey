@@ -36,6 +36,48 @@ export interface Contact {
   enrichment_updated_at?: string | null
   created_at: string
   updated_at: string
+  
+  // Legacy LinkedIn data (for backwards compatibility)
+  linkedin_profile_data?: any
+  linkedin_extraction_status?: string | null
+  linkedin_extracted_at?: string | null
+  
+  // NEW: Individual LinkedIn fields for better querying and display
+  linkedin_first_name?: string
+  linkedin_last_name?: string
+  linkedin_headline?: string
+  linkedin_summary?: string
+  linkedin_about?: string // CRITICAL for personalization
+  linkedin_current_company?: string
+  linkedin_current_position?: string
+  linkedin_industry?: string
+  linkedin_location?: string
+  linkedin_city?: string
+  linkedin_country?: string
+  linkedin_country_code?: string
+  linkedin_follower_count?: number
+  linkedin_connection_count?: number
+  linkedin_recommendations_count?: number
+  linkedin_profile_completeness?: number
+  linkedin_avatar_url?: string
+  linkedin_banner_url?: string
+  linkedin_experience?: any[]
+  linkedin_education?: any[]
+  linkedin_skills?: string[]
+  linkedin_languages?: any[]
+  linkedin_certifications?: any[]
+  linkedin_volunteer_experience?: any[]
+  linkedin_honors_awards?: any[]
+  linkedin_projects?: any[]
+  linkedin_courses?: any[]
+  linkedin_publications?: any[]
+  linkedin_patents?: any[]
+  linkedin_organizations?: any[]
+  linkedin_posts?: any[]
+  linkedin_recommendations?: any[]
+  linkedin_people_also_viewed?: any[]
+  linkedin_contact_info?: any
+  linkedin_services?: any[]
 }
 
 export interface EnrichmentData {
@@ -239,6 +281,7 @@ export class ContactService {
       search?: string
       tags?: string[]
       status?: string
+      enrichment?: string
       sortBy?: string
       sortOrder?: 'asc' | 'desc'
     } = {}
@@ -249,6 +292,7 @@ export class ContactService {
       search,
       tags,
       status,
+      enrichment,
       sortBy = 'created_at',
       sortOrder = 'desc'
     } = options
@@ -320,6 +364,24 @@ export class ContactService {
 
     if (tags && tags.length > 0) {
       query = query.overlaps('tags', tags)
+    }
+
+    // Apply enrichment filtering
+    if (enrichment) {
+      switch (enrichment) {
+        case 'web-enriched':
+          query = query.eq('enrichment_status', 'completed')
+          break
+        case 'linkedin-enriched':
+          query = query.eq('linkedin_extraction_status', 'completed')
+          break
+        case 'fully-enriched':
+          query = query.eq('enrichment_status', 'completed').eq('linkedin_extraction_status', 'completed')
+          break
+        case 'not-enriched':
+          query = query.or('enrichment_status.is.null,enrichment_status.neq.completed').or('linkedin_extraction_status.is.null,linkedin_extraction_status.neq.completed')
+          break
+      }
     }
 
     // Apply sorting
