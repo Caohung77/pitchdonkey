@@ -217,7 +217,7 @@ export function UnifiedEmailContentEditor({
   // Smart activation logic for personalized reason button
   const isReasonButtonEnabled = () => {
     return emailPurpose.trim() !== '' && 
-           htmlContent.includes('((personalised reason))')
+           htmlContent.includes('((personalised_reason))')
   }
 
   // Handle personalized reason generation
@@ -328,9 +328,9 @@ export function UnifiedEmailContentEditor({
 
   // Update content with generated reason (for preview purposes)
   const updateContentWithReason = (reason: string) => {
-    if (!htmlContent.includes('((personalised reason))')) return
+    if (!htmlContent.includes('((personalised_reason))')) return
     
-    const updatedContent = htmlContent.replace('((personalised reason))', reason)
+    const updatedContent = htmlContent.replace('((personalised_reason))', reason)
     onContentChange(updatedContent)
   }
 
@@ -601,20 +601,6 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
     onContentChange(templates[template as keyof typeof templates])
   }
 
-  const insertVariable = (variable: string) => {
-    const variables = {
-      first_name: '{{first_name}}',
-      last_name: '{{last_name}}',
-      email: '{{email}}',
-      company: '{{company}}',
-      sender_name: '{{sender_name}}',
-      company_name: '{{company_name}}',
-      website: '{{website}}'
-    }
-    
-    const newContent = htmlContent + ' ' + variables[variable as keyof typeof variables] + ' '
-    onContentChange(newContent)
-  }
 
   const renderPreviewContent = () => {
     if (!selectedContact) return htmlContent
@@ -651,10 +637,10 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
     })
     
     if (generatedReason) {
-      previewContent = previewContent.replace(/\(\(personalised reason\)\)/g, generatedReason)
+      previewContent = previewContent.replace(/\(\(personalised_reason\)\)/g, generatedReason)
     } else {
       // Show placeholder text if no reason generated yet
-      previewContent = previewContent.replace(/\(\(personalised reason\)\)/g, '<em style="color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">((personalised reason - click "Personalised Reason" button to generate))</em>')
+      previewContent = previewContent.replace(/\(\(personalised_reason\)\)/g, '<em style="color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">((personalised_reason - click "Personalised Reason" button to generate))</em>')
     }
 
     // Sanitize to prevent global styles from leaking and breaking layout
@@ -927,7 +913,7 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                   onClick={handleGenerateReason}
                   disabled={!isReasonButtonEnabled() || isGeneratingReason || !selectedContact}
                   className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium whitespace-nowrap"
-                  title={!isReasonButtonEnabled() ? "Enable by entering Email Purpose and adding ((personalised reason)) placeholder to content" : "Generate personalized connection reason"}
+                  title={!isReasonButtonEnabled() ? "Enable by entering Email Purpose and adding ((personalised_reason)) placeholder to content" : "Generate personalized connection reason"}
                 >
                   {isGeneratingReason ? (
                     <>
@@ -1121,47 +1107,6 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                 </div>
               </div>
 
-              {/* Variables */}
-              <div className="border-b pb-4">
-                <h4 className="font-medium mb-3">Variables</h4>
-                <div className="flex flex-wrap gap-2">
-                  <Badge 
-                    variant="secondary" 
-                    className="cursor-pointer hover:bg-blue-100"
-                    onClick={() => insertVariable('first_name')}
-                  >
-                    {"{{first_name}}"}
-                  </Badge>
-                  <Badge 
-                    variant="secondary" 
-                    className="cursor-pointer hover:bg-blue-100"
-                    onClick={() => insertVariable('last_name')}
-                  >
-                    {"{{last_name}}"}
-                  </Badge>
-                  <Badge 
-                    variant="secondary" 
-                    className="cursor-pointer hover:bg-blue-100"
-                    onClick={() => insertVariable('company')}
-                  >
-                    {"{{company}}"}
-                  </Badge>
-                  <Badge 
-                    variant="secondary" 
-                    className="cursor-pointer hover:bg-blue-100"
-                    onClick={() => insertVariable('sender_name')}
-                  >
-                    {"{{sender_name}}"}
-                  </Badge>
-                  <Badge 
-                    variant="secondary" 
-                    className="cursor-pointer hover:bg-blue-100"
-                    onClick={() => insertVariable('website')}
-                  >
-                    {"{{website}}"}
-                  </Badge>
-                </div>
-              </div>
 
               {/* Content Editor */}
               <div>

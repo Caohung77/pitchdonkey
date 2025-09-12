@@ -40,7 +40,7 @@ const getReasonPrompt = (length: 'short' | 'medium' | 'detailed', hasContactData
 
   return `You are an expert at crafting personalized connection reasons for outreach emails.
 
-Your task is to generate ONLY a personalized reason explaining why you're reaching out to this person. This will be inserted into an email template at the ((personalised reason)) placeholder.
+Your task is to generate ONLY a personalized reason explaining why you're reaching out to this person. This will be inserted into an email template at the ((personalised_reason)) placeholder.
 
 Requirements:
 - Length: Exactly ${spec.sentences} (${spec.wordCount})

@@ -41,7 +41,8 @@ const EMAIL_VARIABLES = {
   company_name: '{{company_name}}',
   email: '{{email}}',
   website: '{{website}}',
-  sender_name: '{{sender_name}}'
+  sender_name: '{{sender_name}}',
+  personalised_reason: '((personalised_reason))'
 }
 
 export function EmailRichTextEditor({
