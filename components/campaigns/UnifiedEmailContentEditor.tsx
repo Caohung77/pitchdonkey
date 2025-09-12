@@ -78,6 +78,12 @@ export function UnifiedEmailContentEditor({
   const [templates, setTemplates] = useState<AITemplate[]>([])
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
+  // Personalized Reason state
+  const [isGeneratingReason, setIsGeneratingReason] = useState(false)
+  const [reasonLength, setReasonLength] = useState<'short' | 'medium' | 'detailed'>('medium')
+  const [generatedReasons, setGeneratedReasons] = useState<Map<string, string>>(new Map())
+  const [reasonError, setReasonError] = useState<string | null>(null)
+
   // Notify parent component when generated emails change
   useEffect(() => {
     if (onPersonalizedEmailsChange && generatedEmails.size > 0) {
@@ -206,6 +212,126 @@ export function UnifiedEmailContentEditor({
     }
   }
   useEffect(() => { loadTemplates() }, [])
+
+  // Smart activation logic for personalized reason button
+  const isReasonButtonEnabled = () => {
+    return emailPurpose.trim() !== '' && 
+           htmlContent.includes('((personalised reason))')
+  }
+
+  // Handle personalized reason generation
+  const handleGenerateReason = async () => {
+    if (!selectedContact) return
+    
+    if (generateForAll) {
+      await handleBatchReasonGeneration()
+    } else {
+      await generateReasonForContact(selectedContact)
+    }
+  }
+
+  // Generate reason for single contact
+  const generateReasonForContact = async (contact: Contact & { listName?: string }) => {
+    setIsGeneratingReason(true)
+    setReasonError(null)
+    
+    try {
+      console.log('🧠 Generating personalized reason for:', contact.first_name, contact.last_name)
+      
+      const response = await ApiClient.post('/api/ai/generate-reason', {
+        purpose: emailPurpose,
+        contact_id: useContactInfo ? contact.id : undefined,
+        length: reasonLength,
+        use_contact_info: useContactInfo,
+        language: language
+      })
+      
+      console.log('📡 API Response:', {
+        success: response.success,
+        hasData: !!response.data,
+        hasReason: !!response.data?.reason,
+        error: response.error || 'none',
+        message: response.message || 'none',
+        fullResponse: response
+      })
+      
+      if (response.success && response.data?.reason) {
+        const reason = response.data.reason
+        
+        // Store generated reason for this contact
+        setGeneratedReasons(prev => {
+          const newReasons = new Map(prev)
+          newReasons.set(contact.id, reason)
+          return newReasons
+        })
+        
+        // Only update the content if generating for single contact (not during batch)
+        if (!generateForAll) {
+          updateContentWithReason(reason)
+        }
+        
+        console.log('✅ Generated reason:', {
+          contactId: contact.id,
+          contactName: `${contact.first_name} ${contact.last_name}`,
+          length: reasonLength,
+          wordCount: response.data.word_count,
+          preview: reason.substring(0, 100) + '...',
+          totalReasonsStored: generatedReasons.size + 1
+        })
+      } else {
+        const errorMessage = response.error || response.message || 'API returned unsuccessful response'
+        console.error('❌ API Error Details:', {
+          success: response.success,
+          error: response.error,
+          message: response.message,
+          data: response.data
+        })
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      console.error('❌ Reason generation failed:', error)
+      setReasonError('Failed to generate personalized reason. Please try again.')
+    } finally {
+      setIsGeneratingReason(false)
+    }
+  }
+
+  // Generate reasons for all contacts
+  const handleBatchReasonGeneration = async () => {
+    if (contacts.length === 0) return
+    
+    setIsGeneratingReason(true)
+    setReasonError(null)
+    setBatchProgress({ current: 0, total: contacts.length, isRunning: true })
+    
+    try {
+      for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i]
+        setBatchProgress(prev => ({ ...prev, current: i + 1 }))
+        
+        try {
+          await generateReasonForContact(contact)
+          // Small delay to prevent rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } catch (error) {
+          console.error(`Failed to generate reason for ${contact.first_name}:`, error)
+        }
+      }
+    } catch (error) {
+      setReasonError('Batch reason generation failed. Some reasons may not have been generated.')
+    } finally {
+      setIsGeneratingReason(false)
+      setBatchProgress({ current: 0, total: 0, isRunning: false })
+    }
+  }
+
+  // Update content with generated reason (for preview purposes)
+  const updateContentWithReason = (reason: string) => {
+    if (!htmlContent.includes('((personalised reason))')) return
+    
+    const updatedContent = htmlContent.replace('((personalised reason))', reason)
+    onContentChange(updatedContent)
+  }
 
   const handleGenerateAI = async () => {
     if (!selectedContact) return
@@ -498,13 +624,37 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
 
     // Replace variables with actual contact data
     let previewContent = contentToUse
+    
+    // English placeholders  
     previewContent = previewContent.replace(/\{\{first_name\}\}/g, selectedContact.first_name)
     previewContent = previewContent.replace(/\{\{last_name\}\}/g, selectedContact.last_name)
-    previewContent = previewContent.replace(/\{\{company\}\}/g, selectedContact.company_name || '')
-    previewContent = previewContent.replace(/\{\{company_name\}\}/g, selectedContact.company_name || '')
+    previewContent = previewContent.replace(/\{\{company\}\}/g, selectedContact.company_name || selectedContact.company || '')
+    previewContent = previewContent.replace(/\{\{company_name\}\}/g, selectedContact.company_name || selectedContact.company || '')
     previewContent = previewContent.replace(/\{\{email\}\}/g, selectedContact.email)
     previewContent = previewContent.replace(/\{\{sender_name\}\}/g, 'Your Team')
     previewContent = previewContent.replace(/\{\{website\}\}/g, selectedContact.website || '')
+    
+    // Support existing German placeholders in content (but don't add new UI for them)
+    previewContent = previewContent.replace(/\{\{Nachname\}\}/g, selectedContact.last_name)
+    previewContent = previewContent.replace(/\{\{Vorname\}\}/g, selectedContact.first_name)
+    
+    // Replace personalized reason placeholder if we have a generated reason for this contact
+    const generatedReason = generatedReasons.get(selectedContact.id)
+    console.log('🔍 Preview Debug:', {
+      contactId: selectedContact.id,
+      contactName: `${selectedContact.first_name} ${selectedContact.last_name}`,
+      hasGeneratedReason: !!generatedReason,
+      reasonPreview: generatedReason ? generatedReason.substring(0, 50) + '...' : 'none',
+      totalStoredReasons: generatedReasons.size,
+      allStoredContactIds: Array.from(generatedReasons.keys())
+    })
+    
+    if (generatedReason) {
+      previewContent = previewContent.replace(/\(\(personalised reason\)\)/g, generatedReason)
+    } else {
+      // Show placeholder text if no reason generated yet
+      previewContent = previewContent.replace(/\(\(personalised reason\)\)/g, '<em style="color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">((personalised reason - click "Personalised Reason" button to generate))</em>')
+    }
 
     // Sanitize to prevent global styles from leaking and breaking layout
     return sanitizeEmailHtml(previewContent)
@@ -518,11 +668,17 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
     const subjectToUse = generatedEmail?.subject || subject
 
     let previewSubject = subjectToUse
+    
+    // English placeholders
     previewSubject = previewSubject.replace(/\{\{first_name\}\}/g, selectedContact.first_name)
     previewSubject = previewSubject.replace(/\{\{last_name\}\}/g, selectedContact.last_name)
-    previewSubject = previewSubject.replace(/\{\{company\}\}/g, selectedContact.company_name || '')
-    previewSubject = previewSubject.replace(/\{\{company_name\}\}/g, selectedContact.company_name || '')
+    previewSubject = previewSubject.replace(/\{\{company\}\}/g, selectedContact.company_name || selectedContact.company || '')
+    previewSubject = previewSubject.replace(/\{\{company_name\}\}/g, selectedContact.company_name || selectedContact.company || '')
     previewSubject = previewSubject.replace(/\{\{website\}\}/g, selectedContact.website || '')
+    
+    // Support existing German placeholders in content (but don't add new UI for them)
+    previewSubject = previewSubject.replace(/\{\{Nachname\}\}/g, selectedContact.last_name)
+    previewSubject = previewSubject.replace(/\{\{Vorname\}\}/g, selectedContact.first_name)
 
     return previewSubject
   }
@@ -748,24 +904,63 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
               )}
             </div>
 
-            {/* Right side: Personalise Button */}
-            <Button
-              onClick={handleGenerateAI}
-              disabled={isGeneratingAI || !selectedContact || !emailPurpose.trim()}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 text-sm font-medium whitespace-nowrap"
-            >
-              {isGeneratingAI ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {generateForAll ? `Personalising (${batchProgress.current}/${batchProgress.total})` : 'Personalising...'}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  {generateForAll ? `Personalise All (${contacts.length})` : 'Personalise Email(s)'}
-                </>
-              )}
-            </Button>
+            {/* Right side: Personalise Buttons */}
+            <div className="flex items-center space-x-3">
+              {/* Personalized Reason Button with Length Dropdown */}
+              <div className="flex items-center space-x-2">
+                {/* Length Selector */}
+                <select
+                  value={reasonLength}
+                  onChange={(e) => setReasonLength(e.target.value as 'short' | 'medium' | 'detailed')}
+                  disabled={!isReasonButtonEnabled()}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Reason length: Short (~2 sentences), Medium (~4 sentences), Detailed (6+ sentences)"
+                >
+                  <option value="short">Short</option>
+                  <option value="medium">Medium</option>
+                  <option value="detailed">Detailed</option>
+                </select>
+                
+                {/* Personalized Reason Button */}
+                <Button
+                  onClick={handleGenerateReason}
+                  disabled={!isReasonButtonEnabled() || isGeneratingReason || !selectedContact}
+                  className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium whitespace-nowrap"
+                  title={!isReasonButtonEnabled() ? "Enable by entering Email Purpose and adding ((personalised reason)) placeholder to content" : "Generate personalized connection reason"}
+                >
+                  {isGeneratingReason ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {generateForAll ? `Reasoning (${batchProgress.current}/${batchProgress.total})` : 'Reasoning...'}
+                    </>
+                  ) : (
+                    <>
+                      <Type className="h-4 w-4 mr-2" />
+                      {generateForAll ? `Reason All (${contacts.length})` : 'Personalised Reason'}
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Main Personalise Email Button */}
+              <Button
+                onClick={handleGenerateAI}
+                disabled={isGeneratingAI || !selectedContact || !emailPurpose.trim()}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 text-sm font-medium whitespace-nowrap"
+              >
+                {isGeneratingAI ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {generateForAll ? `Personalising (${batchProgress.current}/${batchProgress.total})` : 'Personalising...'}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    {generateForAll ? `Personalise All (${contacts.length})` : 'Personalise Email(s)'}
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -801,6 +996,16 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
           <div className="flex items-center">
             <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
             <p className="text-red-600 text-sm">{aiError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Reason Error Display */}
+      {reasonError && (
+        <div className="bg-orange-50 border border-orange-200 rounded-md p-3">
+          <div className="flex items-center">
+            <AlertCircle className="h-4 w-4 text-orange-600 mr-2" />
+            <p className="text-orange-600 text-sm">{reasonError}</p>
           </div>
         </div>
       )}

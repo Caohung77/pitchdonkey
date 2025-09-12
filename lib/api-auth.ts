@@ -175,8 +175,8 @@ export function handleApiError(error: any): NextResponse {
   console.error('API Error:', error)
   
   // Handle ValidationError from errors.ts
-  if (error.constructor?.name === 'ValidationError' || error.type === 'validation') {
-    return createErrorResponse(error.message, 400)
+  if (error.constructor?.name === 'ValidationError' || error.type === 'validation' || error.code === 'VALIDATION_FAILED') {
+    return createErrorResponse(error.message, error.statusCode || 400)
   }
   
   if (error.message?.includes('JWT')) {
