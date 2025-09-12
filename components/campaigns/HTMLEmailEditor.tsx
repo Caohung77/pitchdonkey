@@ -23,6 +23,7 @@ import {
 import { AIGeneratorModal } from './AIGeneratorModal'
 import { EmailPreviewModal } from './EmailPreviewModal'
 import { AIEmailPreviewModal } from './AIEmailPreviewModal'
+import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
 
 interface HTMLEmailEditorProps {
   subject: string
@@ -329,15 +330,16 @@ export function HTMLEmailEditor({
           {/* Email Editor */}
           <div className="w-full">
             <div className="space-y-3">
-              <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                rows={15}
-                placeholder="Start typing your HTML email content here, or use a template above..."
+              <EmailRichTextEditor
                 value={editorContent}
-                onChange={(e) => handleContentChange(e.target.value)}
+                onChange={handleContentChange}
+                placeholder="Start typing your email content here, or use the templates above..."
+                minHeight="450px"
+                showPreview={viewMode === 'mobile'}
+                onPreviewToggle={(show) => setViewMode(show ? 'mobile' : 'desktop')}
               />
               <p className="text-xs text-gray-500">
-                💡 Tip: Use HTML for formatting. Templates above include responsive CSS styling.
+                💡 Tip: The rich text editor generates email-safe HTML with inline styles for maximum compatibility.
               </p>
             </div>
           </div>

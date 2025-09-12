@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { Save } from 'lucide-react'
 import { SaveTemplateDialog } from './SaveTemplateDialog'
+import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
 import type { AITemplate } from '@/lib/ai-templates'
 
 interface Contact {
@@ -1165,10 +1166,7 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
               {/* Content Editor */}
               <div>
                 <label className="block text-sm font-medium mb-2">Email Content *</label>
-                <textarea
-                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
-                  rows={12}
-                  placeholder="Start typing your HTML email content here, or use a template above..."
+                <EmailRichTextEditor
                   value={(() => {
                     // Show personalized content for selected contact if available
                     if (selectedContact && generatedEmails.has(selectedContact.id)) {
@@ -1177,9 +1175,7 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                     }
                     return htmlContent
                   })()}
-                  onChange={(e) => {
-                    const newContent = e.target.value
-                    
+                  onChange={(newContent) => {
                     // If we have a selected contact with generated content, update their personalized version
                     if (selectedContact && generatedEmails.has(selectedContact.id)) {
                       setGeneratedEmails(prev => {
@@ -1196,6 +1192,9 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                       onContentChange(newContent)
                     }
                   }}
+                  placeholder="Start typing your email content here, or use the templates above..."
+                  minHeight="400px"
+                  className="max-w-full"
                 />
               </div>
           </CardContent>
