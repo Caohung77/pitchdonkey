@@ -423,4 +423,4 @@ describe('ABTestService', () => {
       expect(summary.progressPercentage).toBe(100) // 1000/1000 = 100%
     })
   })
-})"
+})

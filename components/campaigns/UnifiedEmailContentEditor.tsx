@@ -85,6 +85,19 @@ export function UnifiedEmailContentEditor({
   const [generatedReasons, setGeneratedReasons] = useState<Map<string, string>>(new Map())
   const [reasonError, setReasonError] = useState<string | null>(null)
 
+  // Ensure generated reasons are persisted into per-contact personalized content
+  const upsertPersonalizedEmailWithReason = (contactId: string, reason: string) => {
+    setGeneratedEmails(prev => {
+      const newEmails = new Map(prev)
+      const existing = newEmails.get(contactId) || { subject, content: htmlContent }
+      const baseSubject = existing.subject || subject
+      const baseContent = existing.content || htmlContent || ''
+      const mergedContent = baseContent.replace(/\(\(personalised_reason\)\)/g, reason)
+      newEmails.set(contactId, { subject: baseSubject, content: mergedContent })
+      return newEmails
+    })
+  }
+
   // Notify parent component when generated emails change
   useEffect(() => {
     if (onPersonalizedEmailsChange && generatedEmails.size > 0) {
@@ -265,6 +278,8 @@ export function UnifiedEmailContentEditor({
           newReasons.set(contact.id, reason)
           return newReasons
         })
+        // Persist the reason into the per-contact personalized email content
+        upsertPersonalizedEmailWithReason(contact.id, reason)
         
         // Only update the content if generating for single contact (not during batch)
         if (!generateForAll) {

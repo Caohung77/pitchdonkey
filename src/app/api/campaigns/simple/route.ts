@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withAuth } from '@/lib/auth-middleware'
+import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 
-export const POST = withAuth(async (request: NextRequest, { user, supabase }) => {
+export const POST = withAuth(async (request: NextRequest, user) => {
+  const supabase = (await import('@/lib/supabase-server')).createServerSupabaseClient()
   try {
     const body = await request.json()
     const {
@@ -129,19 +130,43 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
 
     console.log(`📋 Campaign ${campaign.id} will target ${allContactIds.length} contacts`)
 
+    // Helper function to replace placeholders in content when personalized version isn't available
+    const replacePersonalizedReasonFallback = (content: string) => {
+      if (!content.includes('((personalised_reason))')) {
+        return content
+      }
+      
+      // Use generic fallback since we don't have contact data available at this point
+      const fallbackReason = `I wanted to connect and discuss potential opportunities.`
+      
+      return content.replace(/\(\(personalised_reason\)\)/g, fallbackReason)
+    }
+
     // Create campaign_contacts entries with personalized content
     if (allContactIds.length > 0) {
-      const campaignContacts = allContactIds.map(contactId => ({
-        campaign_id: campaign.id,
-        contact_id: contactId,
-        status: 'pending',
-        current_sequence: 1,
-        personalized_subject: personalized_emails[contactId]?.subject || email_subject,
-        personalized_body: personalized_emails[contactId]?.content || html_content,
-        ai_personalization_used: !!personalized_emails[contactId],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }))
+      const campaignContacts = allContactIds.map(contactId => {
+        let personalizedBody = personalized_emails[contactId]?.content
+        
+        // If no personalized content available, use fallback replacement for placeholders
+        if (!personalizedBody) {
+          personalizedBody = replacePersonalizedReasonFallback(html_content)
+          console.log(`🔄 Generated fallback personalization for contact ${contactId}`)
+        } else {
+          console.log(`✅ Using AI-generated personalization for contact ${contactId}`)
+        }
+        
+        return {
+          campaign_id: campaign.id,
+          contact_id: contactId,
+          status: 'pending',
+          current_sequence: 1,
+          personalized_subject: personalized_emails[contactId]?.subject || email_subject,
+          personalized_body: personalizedBody,
+          ai_personalization_used: !!personalized_emails[contactId],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      })
 
       const { error: contactsError } = await supabase
         .from('campaign_contacts')
@@ -198,14 +223,17 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
 
   } catch (error) {
     console.error('Error creating simple campaign:', error)
+    console.error('Error stack:', error.stack)
     return NextResponse.json({
       error: 'Internal server error',
+      details: error.message,
       code: 'CREATE_ERROR'
     }, { status: 500 })
   }
 })
 
-export const GET = withAuth(async (request: NextRequest, { user, supabase }) => {
+export const GET = withAuth(async (request: NextRequest, user) => {
+  const supabase = (await import('@/lib/supabase-server')).createServerSupabaseClient()
   try {
     // Get simple campaigns (campaigns with html_content)
     const { data: campaigns, error: campaignsError } = await supabase

@@ -288,9 +288,36 @@ export class CampaignProcessor {
           // Generate tracking ID
           const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
 
-          // Personalize content
-          const personalizedSubject = this.personalizeContent(campaign.email_subject, contact)
-          const personalizedContent = this.personalizeContent(campaign.html_content, contact)
+          // Get personalized content from database if available
+          let personalizedSubject = campaign.email_subject
+          let personalizedContent = campaign.html_content
+          
+          // Check if this contact has personalized content stored in campaign_contacts
+          const { data: campaignContact, error: campaignContactError } = await supabase
+            .from('campaign_contacts')
+            .select('personalized_subject, personalized_body, ai_personalization_used')
+            .eq('campaign_id', campaign.id)
+            .eq('contact_id', contact.id)
+            .single()
+          
+          if (campaignContactError) {
+            console.warn(`⚠️ Could not find campaign_contact record for ${contact.id}, using base template`)
+          } else if (campaignContact) {
+            // Use personalized content if available
+            if (campaignContact.personalized_subject) {
+              personalizedSubject = campaignContact.personalized_subject
+              console.log(`✨ Using personalized subject for ${contact.first_name} ${contact.last_name}`)
+            }
+            if (campaignContact.personalized_body) {
+              personalizedContent = campaignContact.personalized_body
+              console.log(`✨ Using personalized content for ${contact.first_name} ${contact.last_name} (AI: ${campaignContact.ai_personalization_used})`)
+              console.log(`🔍 Personalized content preview: ${campaignContact.personalized_body.substring(0, 200)}...`)
+            }
+          }
+
+          // Apply standard variable replacement to the personalized content
+          personalizedSubject = this.personalizeContent(personalizedSubject, contact, campaignContact?.ai_personalization_used)
+          personalizedContent = this.personalizeContent(personalizedContent, contact, campaignContact?.ai_personalization_used)
 
           // Extract sender name from campaign description (mandatory field)
           let senderName = 'ColdReach Pro' // Fallback for legacy campaigns
@@ -539,15 +566,16 @@ export class CampaignProcessor {
   /**
    * Personalize email content with contact data
    */
-  private personalizeContent(content: string, contact: any): string {
+  private personalizeContent(content: string, contact: any, isAIPersonalized: boolean = false): string {
     if (!content) return ''
 
-    return content
+    let personalizedContent = content
       .replace(/\{\{first_name\}\}/g, contact.first_name || contact.name || 'there')
       .replace(/\{\{last_name\}\}/g, contact.last_name || '')
       .replace(/\{\{name\}\}/g, contact.name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'there')
       .replace(/\{\{email\}\}/g, contact.email || '')
       .replace(/\{\{company\}\}/g, contact.company || '')
+      .replace(/\{\{company_name\}\}/g, contact.company_name || contact.company || '')
       .replace(/\{\{position\}\}/g, contact.position || contact.job_title || '')
       .replace(/\{\{phone\}\}/g, contact.phone || '')
       .replace(/\{\{website\}\}/g, contact.website || '')
@@ -556,8 +584,16 @@ export class CampaignProcessor {
       .replace(/&#123;&#123;last_name&#125;&#125;/g, contact.last_name || '')
       .replace(/&#123;&#123;email&#125;&#125;/g, contact.email || '')
       .replace(/&#123;&#123;company&#125;&#125;/g, contact.company || '')
+      .replace(/&#123;&#123;company_name&#125;&#125;/g, contact.company_name || contact.company || '')
       .replace(/&#123;&#123;sender_name&#125;&#125;/g, 'Your Name')
-      .replace(/&#123;&#123;company_name&#125;&#125;/g, 'Your Company')
+      
+    // Only apply fallback personalized reason replacement if this is NOT AI-personalized content
+    if (!isAIPersonalized) {
+      personalizedContent = personalizedContent
+        .replace(/\(\(personalised_reason\)\)/g, `I noticed your work at ${contact.company_name || contact.company || 'your company'} and wanted to connect.`)
+    }
+    
+    return personalizedContent
   }
 }
 

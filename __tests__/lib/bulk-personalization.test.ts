@@ -533,4 +533,4 @@ describe('BulkPersonalizationUtils', () => {
       expect(BulkPersonalizationUtils.getStatusIcon('cancelled')).toBe('⏹️')
     })
   })
-})"
+})

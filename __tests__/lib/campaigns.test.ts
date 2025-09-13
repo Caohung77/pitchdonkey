@@ -498,4 +498,4 @@ describe('CampaignUtils', () => {
       expect(template.schedule_settings!.business_hours_only).toBe(true)
     })
   })
-})"
+})
