@@ -68,6 +68,24 @@ export default function SimpleCampaignPage() {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [personalizedEmails, setPersonalizedEmails] = useState<Map<string, { subject: string; content: string }>>(new Map())
+  
+  // Debug personalized emails changes
+  useEffect(() => {
+    if (personalizedEmails.size > 0) {
+      console.log('🎯 Campaign page received personalized emails:', {
+        totalEmails: personalizedEmails.size,
+        contactIds: Array.from(personalizedEmails.keys()),
+        emailSamples: Array.from(personalizedEmails.entries()).slice(0, 2).map(([id, email]) => ({
+          contactId: id,
+          subjectLength: email.subject?.length || 0,
+          contentLength: email.content?.length || 0,
+          contentPreview: email.content?.substring(0, 150) + '...' || 'none'
+        }))
+      })
+    } else {
+      console.log('📭 Campaign page: No personalized emails received')
+    }
+  }, [personalizedEmails])
   const [viewContactsModal, setViewContactsModal] = useState<{ isOpen: boolean; selectedList: ContactList | null }>({
     isOpen: false,
     selectedList: null
@@ -356,7 +374,17 @@ export default function SimpleCampaignPage() {
           : parseLocalDateTime(scheduleDate, scheduleTime).toISOString()
       }
       
-      console.log('Launching campaign with payload:', payload)
+      console.log('🚀 Launching campaign with payload:', {
+        ...payload,
+        html_content: payload.html_content?.substring(0, 100) + '...',
+        personalized_emails_count: Object.keys(personalizedEmailsObj).length,
+        personalized_emails_sample: Object.entries(personalizedEmailsObj).slice(0, 2).map(([id, email]) => ({
+          contactId: id,
+          hasSubject: !!(email as any).subject,
+          contentLength: (email as any).content?.length || 0,
+          contentPreview: (email as any).content?.substring(0, 100) + '...' || 'none'
+        }))
+      })
       
       const result = await ApiClient.post('/api/campaigns/simple', payload)
       

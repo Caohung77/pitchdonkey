@@ -300,9 +300,40 @@ export class CampaignProcessor {
             .eq('contact_id', contact.id)
             .single()
           
-          if (campaignContactError) {
-            console.warn(`⚠️ Could not find campaign_contact record for ${contact.id}, using base template`)
-          } else if (campaignContact) {
+          if (campaignContactError || !campaignContact) {
+            console.warn(`⚠️ Could not find campaign_contact record for ${contact.id}, will try campaign description fallback`)
+
+            // Fallback: use per-contact personalized content stored in campaign.description
+            try {
+              const desc = JSON.parse(campaign.description || '{}')
+              const map = desc?.personalized_emails || {}
+              const fromMap = map[contact.id]
+              if (fromMap?.subject || fromMap?.content) {
+                if (fromMap.subject) personalizedSubject = fromMap.subject
+                if (fromMap.content) personalizedContent = fromMap.content
+                console.log(`✨ Using fallback personalized content from description for ${contact.first_name} ${contact.last_name}`)
+
+                // Best-effort backfill campaign_contacts for analytics/history
+                try {
+                  await supabase
+                    .from('campaign_contacts')
+                    .insert({
+                      campaign_id: campaign.id,
+                      contact_id: contact.id,
+                      status: 'pending',
+                      current_sequence: 1,
+                      personalized_subject: personalizedSubject,
+                      personalized_body: personalizedContent,
+                      ai_personalization_used: true
+                    })
+                } catch (e) {
+                  console.warn('⚠️ Backfill campaign_contacts failed (non-fatal):', (e as any)?.message)
+                }
+              }
+            } catch (e) {
+              // ignore JSON parse error
+            }
+          } else {
             // Use personalized content if available
             if (campaignContact.personalized_subject) {
               personalizedSubject = campaignContact.personalized_subject

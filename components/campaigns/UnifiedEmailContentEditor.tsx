@@ -92,8 +92,25 @@ export function UnifiedEmailContentEditor({
       const existing = newEmails.get(contactId) || { subject, content: htmlContent }
       const baseSubject = existing.subject || subject
       const baseContent = existing.content || htmlContent || ''
+      
+      console.log('🔍 Upserting personalized reason:', {
+        contactId,
+        hasPlaceholder: baseContent.includes('((personalised_reason))'),
+        reasonPreview: reason.substring(0, 50) + '...',
+        baseContentLength: baseContent.length,
+        baseContentPreview: baseContent.substring(0, 100) + '...'
+      })
+      
       const mergedContent = baseContent.replace(/\(\(personalised_reason\)\)/g, reason)
       newEmails.set(contactId, { subject: baseSubject, content: mergedContent })
+      
+      console.log('✅ Stored personalized content for contact:', {
+        contactId,
+        mergedContentLength: mergedContent.length,
+        mergedContentPreview: mergedContent.substring(0, 150) + '...',
+        totalStoredEmails: newEmails.size
+      })
+      
       return newEmails
     })
   }
@@ -101,7 +118,19 @@ export function UnifiedEmailContentEditor({
   // Notify parent component when generated emails change
   useEffect(() => {
     if (onPersonalizedEmailsChange && generatedEmails.size > 0) {
+      console.log('📤 Notifying parent of personalized emails change:', {
+        totalEmails: generatedEmails.size,
+        contactIds: Array.from(generatedEmails.keys()),
+        emailPreviews: Array.from(generatedEmails.entries()).map(([id, email]) => ({
+          contactId: id,
+          hasSubject: !!email.subject,
+          contentLength: email.content?.length || 0,
+          contentPreview: email.content?.substring(0, 100) + '...' || 'none'
+        }))
+      })
       onPersonalizedEmailsChange(generatedEmails)
+    } else if (generatedEmails.size === 0) {
+      console.log('📭 No personalized emails to notify parent about')
     }
   }, [generatedEmails, onPersonalizedEmailsChange])
 
@@ -383,6 +412,9 @@ export function UnifiedEmailContentEditor({
       
       const purposeText = emailPurpose.trim() || 'Professional outreach email'
       
+      // Check if we have a pre-generated personalized reason for this contact
+      const existingReason = generatedReasons.get(contact.id)
+      
       const purposeForAI = useContactInfo
         ? `${purposeText}
 
@@ -391,7 +423,12 @@ RECIPIENT INFORMATION:
 - Company: ${companyName}  
 - Email: ${contact.email}
 
-Write a personalized outreach email TO this person (they are the recipient). Use their name, company, and create an authentic, professional email that addresses them directly.`
+${existingReason ? `SPECIFIC PERSONALIZED REASON TO USE:
+"${existingReason}"
+
+Use this EXACT personalized reason in your email. Do not generate a different one.` : ''}
+
+Write a personalized outreach email TO this person (they are the recipient). Use their name, company, and create an authentic, professional email that addresses them directly.${existingReason ? ' Make sure to incorporate the specific personalized reason provided above.' : ''}`
         : `${purposeText}
 
 IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT invent real data. Use these placeholders naturally in subject and content: {{first_name}}, {{last_name}}, {{company}}, {{company_name}}, {{website}}, {{email}}, {{sender_name}}. Begin with a greeting that includes {{first_name}} and avoid appending real surnames; use {{last_name}} when a surname is referenced.`
@@ -432,10 +469,18 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
         
         // Store generated email for this contact
         setGeneratedEmails(prev => {
-          const newEmails = new Map(prev).set(contact.id, {
+          const newEmails = new Map(prev)
+          newEmails.set(contact.id, {
             subject: subject || 'Professional Outreach',
             content: htmlContent || ''
           })
+          
+          console.log(`✅ Stored personalized email for ${contact.first_name} ${contact.last_name}`, {
+            hasExistingReason: !!existingReason,
+            contentLength: (htmlContent || '').length,
+            reasonPreview: existingReason ? existingReason.substring(0, 50) + '...' : 'none'
+          })
+          
           return newEmails
         })
         
@@ -473,10 +518,18 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
           }
           
           setGeneratedEmails(prev => {
-            const newEmails = new Map(prev).set(contact.id, {
+            const newEmails = new Map(prev)
+            newEmails.set(contact.id, {
               subject: safeSubject,
               content: safeContent
             })
+            
+            console.log(`✅ Stored fallback email for ${contact.first_name} ${contact.last_name}`, {
+              hasExistingReason: !!existingReason,
+              contentLength: safeContent.length,
+              reasonPreview: existingReason ? existingReason.substring(0, 50) + '...' : 'none'
+            })
+            
             return newEmails
           })
           

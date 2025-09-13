@@ -66,7 +66,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         name,
         description: JSON.stringify({
           description: description || '',
-          sender_name: sender_name || ''
+          sender_name: sender_name || '',
+          // Store the entire per-contact personalized emails map so we can fall back during sending
+          // if the campaign_contacts rows are missing or not created for some contacts.
+          personalized_emails: personalized_emails || {}
         }),
         status,
         email_subject,
@@ -144,8 +147,22 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Create campaign_contacts entries with personalized content
     if (allContactIds.length > 0) {
+      console.log('🔍 Processing personalized emails for campaign contacts:', {
+        totalContacts: allContactIds.length,
+        personalizedEmailsProvided: Object.keys(personalized_emails).length,
+        personalizedEmailsKeys: Object.keys(personalized_emails),
+        allContactIds: allContactIds.slice(0, 3) // Show first 3 for debugging
+      })
+      
       const campaignContacts = allContactIds.map(contactId => {
         let personalizedBody = personalized_emails[contactId]?.content
+        
+        console.log(`🔍 Processing contact ${contactId}:`, {
+          hasPersonalizedContent: !!personalizedBody,
+          personalizedSubject: personalized_emails[contactId]?.subject || 'none',
+          contentLength: personalizedBody?.length || 0,
+          contentPreview: personalizedBody ? personalizedBody.substring(0, 100) + '...' : 'none'
+        })
         
         // If no personalized content available, use fallback replacement for placeholders
         if (!personalizedBody) {
@@ -265,26 +282,38 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     }
 
     // Format campaigns for display
-    const formattedCampaigns = (campaigns || []).map(campaign => ({
-      id: campaign.id,
-      name: campaign.name,
-      description: campaign.description || '',
-      status: campaign.status,
-      email_subject: campaign.email_subject,
-      send_immediately: campaign.send_immediately,
-      scheduled_date: campaign.scheduled_date,
-      contactCount: campaign.total_contacts || 0,
-      emailsSent: campaign.emails_sent || 0,
-      openRate: campaign.emails_delivered > 0 
-        ? Math.round((campaign.emails_opened / campaign.emails_delivered) * 100) 
-        : 0,
-      replyRate: campaign.emails_sent > 0 
-        ? Math.round((campaign.emails_replied / campaign.emails_sent) * 100) 
-        : 0,
-      createdAt: campaign.created_at,
-      updatedAt: campaign.updated_at,
-      type: 'simple'
-    }))
+    const formattedCampaigns = (campaigns || []).map(campaign => {
+      let descriptionText = ''
+      try {
+        const parsed = typeof campaign.description === 'string'
+          ? JSON.parse(campaign.description)
+          : campaign.description
+        descriptionText = parsed?.description || ''
+      } catch {
+        descriptionText = campaign.description || ''
+      }
+
+      return {
+        id: campaign.id,
+        name: campaign.name,
+        description: descriptionText,
+        status: campaign.status,
+        email_subject: campaign.email_subject,
+        send_immediately: campaign.send_immediately,
+        scheduled_date: campaign.scheduled_date,
+        contactCount: campaign.total_contacts || 0,
+        emailsSent: campaign.emails_sent || 0,
+        openRate: campaign.emails_delivered > 0 
+          ? Math.round((campaign.emails_opened / campaign.emails_delivered) * 100) 
+          : 0,
+        replyRate: campaign.emails_sent > 0 
+          ? Math.round((campaign.emails_replied / campaign.emails_sent) * 100) 
+          : 0,
+        createdAt: campaign.created_at,
+        updatedAt: campaign.updated_at,
+        type: 'simple'
+      }
+    })
 
     return NextResponse.json({
       success: true,
