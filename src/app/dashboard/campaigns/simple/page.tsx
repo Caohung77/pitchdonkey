@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { ApiClient } from '@/lib/api-client'
 import { UnifiedEmailContentEditor } from '@/components/campaigns/UnifiedEmailContentEditor'
 import { ViewContactListModal } from '@/components/contacts/ViewContactListModal'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -21,7 +22,9 @@ import {
   AlertCircle,
   Play,
   Save,
-  Eye
+  Eye,
+  CheckCircle,
+  BarChart3
 } from 'lucide-react'
 
 interface SimpleCampaignData {
@@ -68,6 +71,8 @@ export default function SimpleCampaignPage() {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [personalizedEmails, setPersonalizedEmails] = useState<Map<string, { subject: string; content: string }>>(new Map())
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [campaignResult, setCampaignResult] = useState<any>(null)
   
   // Debug personalized emails changes
   useEffect(() => {
@@ -391,7 +396,8 @@ export default function SimpleCampaignPage() {
       console.log('Campaign launch result:', result)
       
       if (result.success || result.id) {
-        router.push('/dashboard/campaigns')
+        setCampaignResult(result)
+        setShowSuccessModal(true)
       } else {
         alert('Failed to launch campaign. Please try again.')
       }
@@ -874,6 +880,61 @@ export default function SimpleCampaignPage() {
         isOpen={viewContactsModal.isOpen}
         onClose={() => setViewContactsModal({ isOpen: false, selectedList: null })}
       />
+
+      {/* Success Modal */}
+      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="bg-green-100 p-3 rounded-full">
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+            </div>
+            <DialogTitle className="text-xl font-semibold">
+              {campaignData.send_immediately ? 'Campaign Started!' : 'Campaign Scheduled!'}
+            </DialogTitle>
+            <DialogDescription className="text-gray-600">
+              {campaignData.send_immediately 
+                ? 'Your email campaign is now processing and will start sending emails immediately.'
+                : `Your email campaign has been scheduled and will start sending at the specified time.`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Campaign Name:</span>
+              <span className="font-medium">{campaignData.name}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Recipients:</span>
+              <span className="font-medium">{getTotalContacts().toLocaleString()} contacts</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Status:</span>
+              <span className="font-medium">
+                {campaignData.send_immediately ? 'Sending' : 'Scheduled'}
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowSuccessModal(false)}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() => router.push('/dashboard/campaigns')}
+              className="flex items-center gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              View Campaign Status
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

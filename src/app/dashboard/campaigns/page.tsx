@@ -635,9 +635,17 @@ export default function CampaignsPage() {
                           // Parse JSON description if it exists, otherwise use raw description
                           try {
                             const descData = JSON.parse(campaign.description)
-                            return descData.description || campaign.description
+                            return descData.description || 'Campaign description'
                           } catch (e) {
-                            return campaign.description
+                            // If description is not JSON, check if it's HTML content
+                            if (campaign.description.includes('<') && campaign.description.includes('>')) {
+                              // This appears to be HTML content, not a description
+                              return 'Email campaign'
+                            }
+                            // If it's too long, truncate it
+                            return campaign.description.length > 100 
+                              ? campaign.description.substring(0, 100) + '...' 
+                              : campaign.description
                           }
                         })()}
                       </p>
