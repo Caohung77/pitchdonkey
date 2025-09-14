@@ -409,6 +409,22 @@ export default function SimpleCampaignPage() {
         console.log('✅ Campaign created successfully, showing modal')
         setCampaignResult(result)
         setShowSuccessModal(true)
+        
+        // VERCEL FIX: If campaign was set to send immediately, trigger processing via separate API call
+        if (campaignData.send_immediately) {
+          console.log('🔄 Triggering immediate campaign processing...')
+          try {
+            // Make a separate API call to trigger processing (non-blocking)
+            fetch('/api/campaigns/process', { 
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            }).catch(error => {
+              console.error('⚠️ Failed to trigger campaign processing:', error)
+            })
+          } catch (error) {
+            console.error('⚠️ Error triggering campaign processing:', error)
+          }
+        }
       } else {
         console.error('❌ Campaign creation failed:', result)
         alert('Failed to launch campaign. Please try again.')

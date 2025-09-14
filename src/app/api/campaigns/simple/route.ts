@@ -207,34 +207,13 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         .eq('id', campaign.id)
     }
 
-    // If the campaign is set to send immediately, trigger processing
+    // Log campaign creation but don't process here - let separate API handle processing
     if (status === 'sending') {
-      console.log('🚀 Campaign created with SENDING status - triggering immediate processing...')
+      console.log('🚀 Campaign created with SENDING status')
       console.log(`📋 Campaign details: ${campaign.id} - "${campaign.name}"`)
       console.log(`📧 Email subject: "${campaign.email_subject}"`)
       console.log(`👥 Contact lists: ${JSON.stringify(campaign.contact_list_ids)}`)
-      
-      try {
-        // Import and trigger campaign processor
-        console.log('📦 Loading campaign processor...')
-        const { campaignProcessor } = await import('@/lib/campaign-processor')
-        
-        console.log('⚡ Starting campaign processing...')
-        // VERCEL FIX: Start processing immediately but don't wait for completion
-        // This prevents the HTTP request from hanging while emails are being sent
-        campaignProcessor.processReadyCampaigns().then(() => {
-          console.log('✅ Campaign processing completed successfully!')
-        }).catch(error => {
-          console.error('💥 Campaign processing failed:', error)
-        })
-        
-        console.log('🚀 Campaign processing started in background')
-        console.log('🔍 Check server logs for email sending activity...')
-      } catch (error) {
-        console.error('⚠️ Failed to trigger campaign processing:', error)
-        console.error('📋 Error details:', error.stack)
-        // Don't fail the campaign creation if processing trigger fails
-      }
+      console.log('⏳ Campaign processing will be triggered by separate API call')
     } else {
       console.log(`📝 Campaign created with status: ${status} (not sending immediately)`)
     }
