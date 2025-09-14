@@ -14,12 +14,52 @@ export const POST = withAuth(async (request: NextRequest, { user }, { params }: 
     }
 
     const status = await service.verifyDomain(user.id, domain)
+    
+    // Extract verification status
+    const spfVerified = !!status.spf?.success
+    const dkimVerified = !!status.dkim?.success
+    const dmarcVerified = !!status.dmarc?.success
+    
+    // Update email accounts table with verification status
+    const supabase = (await import('@/lib/supabase-server')).createServerSupabaseClient()
+    
+    // Find all email accounts for this domain and update their verification status
+    const { data: emailAccounts } = await supabase
+      .from('email_accounts')
+      .select('id, email')
+      .eq('user_id', user.id)
+    
+    if (emailAccounts) {
+      for (const account of emailAccounts) {
+        // Extract domain from email account
+        const accountDomain = account.email.split('@')[1]?.toLowerCase()
+        if (accountDomain === domain) {
+          // Update this email account with verification status
+          await supabase
+            .from('email_accounts')
+            .update({
+              spf_verified: spfVerified,
+              dkim_verified: dkimVerified,
+              dmarc_verified: dmarcVerified,
+              domain_verified_at: new Date().toISOString()
+            })
+            .eq('id', account.id)
+          
+          console.log(`Updated email account ${account.email} verification status:`, {
+            spf_verified: spfVerified,
+            dkim_verified: dkimVerified,
+            dmarc_verified: dmarcVerified
+          })
+        }
+      }
+    }
+    
     // Map to UI shape
     const mapped = {
       domain,
-      spf: { verified: !!status.spf?.success, record: status.spf?.record?.raw, error: status.spf?.validation.errors.join('; ') || undefined },
-      dkim: { verified: !!status.dkim?.success, record: status.dkim?.record?.raw, selector: status.dkim?.record?.selector, error: status.dkim?.validation.errors.join('; ') || undefined },
-      dmarc: { verified: !!status.dmarc?.success, record: status.dmarc?.record?.raw, error: status.dmarc?.validation.errors.join('; ') || undefined },
+      spf: { verified: spfVerified, record: status.spf?.record?.raw, error: status.spf?.validation.errors.join('; ') || undefined },
+      dkim: { verified: dkimVerified, record: status.dkim?.record?.raw, selector: status.dkim?.record?.selector, error: status.dkim?.validation.errors.join('; ') || undefined },
+      dmarc: { verified: dmarcVerified, record: status.dmarc?.record?.raw, error: status.dmarc?.validation.errors.join('; ') || undefined },
       overallStatus: status.overallStatus,
       lastChecked: status.lastChecked
     }
