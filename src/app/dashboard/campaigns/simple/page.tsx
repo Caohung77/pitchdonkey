@@ -359,7 +359,14 @@ export default function SimpleCampaignPage() {
   }
 
   const handleLaunch = async () => {
-    if (!validateStep(currentStep)) return
+    console.log('🚀 handleLaunch called, current step:', currentStep)
+    const isValid = validateStep(currentStep)
+    console.log('✅ Validation result:', isValid, 'Errors:', errors)
+    
+    if (!isValid) {
+      console.log('❌ Validation failed, stopping')
+      return
+    }
 
     try {
       setLoading(true)
@@ -393,23 +400,30 @@ export default function SimpleCampaignPage() {
       
       const result = await ApiClient.post('/api/campaigns/simple', payload)
       
-      console.log('Campaign launch result:', result)
+      console.log('🚀 Campaign launch result:', result)
       
-      if (result.success || result.id) {
+      // Check for success - handle different API response formats
+      const isSuccessful = result.success || result.id || result.data?.id
+      
+      if (isSuccessful) {
+        console.log('✅ Campaign created successfully, showing modal')
         setCampaignResult(result)
         setShowSuccessModal(true)
       } else {
+        console.error('❌ Campaign creation failed:', result)
         alert('Failed to launch campaign. Please try again.')
       }
     } catch (error) {
-      console.error('Error launching campaign:', error)
+      console.error('❌ Error launching campaign:', error)
       console.error('Error details:', {
         message: error.message,
         stack: error.stack,
-        campaignData
+        campaignData,
+        payload
       })
       alert(`Failed to launch campaign: ${error.message || 'Please try again.'}`)
     } finally {
+      console.log('🔄 Resetting loading state')
       setLoading(false)
     }
   }
