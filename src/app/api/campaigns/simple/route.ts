@@ -15,9 +15,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       send_immediately,
       scheduled_date,
       timezone,
-      status = 'draft',
+      status: providedStatus,
       personalized_emails = {} // Map of contact_id -> { subject, content }
     } = body
+
+    // Determine the correct status based on send_immediately flag
+    const status = providedStatus || (send_immediately ? 'sending' : (scheduled_date ? 'scheduled' : 'draft'))
 
     console.log('Creating simple campaign with data:', { 
       name, 
