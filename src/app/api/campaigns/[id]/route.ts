@@ -148,6 +148,21 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
         const { CampaignExecutionEngine } = await import('@/lib/campaign-execution')
         await CampaignExecutionEngine.stopCampaign(campaignId, supabase)
         console.log(`Stopped campaign ${campaignId}`)
+      } else if (body.status === 'sending') {
+        // VERCEL FIX: Immediately trigger campaign processing for serverless environment
+        console.log(`🚀 Triggering immediate campaign processing for campaign ${campaignId} (Vercel serverless fix)`)
+        try {
+          const { campaignProcessor } = await import('@/lib/campaign-processor')
+          
+          // Process campaigns immediately (serverless-compatible)
+          console.log(`⚡ Processing campaigns immediately for Vercel serverless environment`)
+          await campaignProcessor.processReadyCampaigns()
+          
+          console.log(`✅ Completed immediate processing for campaign ${campaignId}`)
+        } catch (processingError) {
+          console.error(`❌ Failed to trigger immediate processing for campaign ${campaignId}:`, processingError)
+          // Don't fail the entire request, just log the error
+        }
       }
     } catch (executionError) {
       console.error('Campaign execution error:', executionError)

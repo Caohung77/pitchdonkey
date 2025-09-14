@@ -217,12 +217,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         const { campaignProcessor } = await import('@/lib/campaign-processor')
         
         console.log('⚡ Starting campaign processing...')
-        // Process campaigns in background (don't wait for completion)
-        campaignProcessor.processReadyCampaigns().catch(error => {
-          console.error('💥 Background campaign processing error:', error)
-        })
+        // VERCEL FIX: Process campaigns immediately and wait for completion in serverless environment
+        await campaignProcessor.processReadyCampaigns()
         
-        console.log('✅ Campaign processing triggered successfully!')
+        console.log('✅ Campaign processing completed successfully!')
         console.log('🔍 Check server logs above for email sending activity...')
       } catch (error) {
         console.error('⚠️ Failed to trigger campaign processing:', error)
