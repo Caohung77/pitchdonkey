@@ -43,30 +43,47 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         let realContactCount = 0
         let listNames = []
         
-        // FOR COMPLETED CAMPAIGNS: Use historical data to avoid deleted contact issues
+        // FOR COMPLETED CAMPAIGNS: Use original contact list size for display purposes
         if (campaign.status === 'completed') {
           console.log(`🔍 [COMPLETED CAMPAIGN DEBUG] ${campaign.name}:`)
           
-          // Strategy 1: Count actual email tracking records (most accurate for completed campaigns)
-          const { count: emailTrackingCount } = await supabase
-            .from('email_tracking')
-            .select('contact_id', { count: 'exact' })
-            .eq('campaign_id', campaign.id)
+          // Strategy 1: Use stored total_contacts as primary source (original list size)
+          realContactCount = campaign.total_contacts || 0
+          console.log(`  💾 Using stored total_contacts: ${campaign.total_contacts}`)
           
-          console.log(`  📊 Email tracking count: ${emailTrackingCount}`)
-          console.log(`  💾 Stored total_contacts: ${campaign.total_contacts}`)
+          // Strategy 2: If no stored total_contacts, calculate from contact lists
+          if (realContactCount === 0 && campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
+            const { data: contactLists } = await supabase
+              .from('contact_lists')
+              .select('id, name, contact_ids')
+              .in('id', campaign.contact_list_ids)
+            
+            if (contactLists && contactLists.length > 0) {
+              const allContactIds = []
+              contactLists.forEach(list => {
+                if (list.contact_ids && Array.isArray(list.contact_ids)) {
+                  allContactIds.push(...list.contact_ids)
+                }
+              })
+              realContactCount = [...new Set(allContactIds)].length // Remove duplicates
+              console.log(`  📋 Using current contact lists count: ${realContactCount}`)
+            }
+          }
           
-          realContactCount = emailTrackingCount || 0
-          
-          // Strategy 2: Use stored total_contacts as fallback
+          // Strategy 3: Count email tracking records as final fallback  
           if (realContactCount === 0) {
-            realContactCount = campaign.total_contacts || 0
-            console.log(`  ⚠️ Using fallback stored count: ${realContactCount}`)
+            const { count: emailTrackingCount } = await supabase
+              .from('email_tracking')
+              .select('contact_id', { count: 'exact' })
+              .eq('campaign_id', campaign.id)
+            
+            realContactCount = emailTrackingCount || 0
+            console.log(`  ⚠️ Using email tracking count as fallback: ${realContactCount}`)
           }
           
           console.log(`  ✅ Final realContactCount: ${realContactCount}`)
           
-          // Still get list names for display, but don't use for contact count
+          // Still get list names for display
           if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
             const { data: contactLists } = await supabase
               .from('contact_lists')
@@ -261,7 +278,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           name: campaign.name,
           description: campaign.description || '',
           status: derivedStatus,
-          contactCount,
+          contactCount, // This should show the actual contact list size, not emails sent
           emailsSent,
           openRate,
           replyRate,
@@ -271,7 +288,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           scheduledDate: campaign.scheduled_date,
           nextSendAt,
           // Enhanced progress tracking data
-          total_contacts: contactCount,
+          total_contacts: contactCount, // Ensure both fields show same value
           emails_delivered: emailsDelivered,
           emails_opened: emailsOpened,
           emails_clicked: emailsClicked,

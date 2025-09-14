@@ -52,7 +52,7 @@ export function CampaignProgressBar({
   onProgressUpdate 
 }: CampaignProgressBarProps) {
   const [progress, setProgress] = useState<ProgressStats>({
-    total: campaign.contactCount || campaign.total_contacts || 0,
+    total: campaign.total_contacts || campaign.contactCount || 0,
     sent: campaign.emailsSent || 0,
     delivered: campaign.emails_delivered || 0,
     opened: campaign.emails_opened || 0,
@@ -178,11 +178,11 @@ export function CampaignProgressBar({
         const failedCount = emailStats?.filter(e => e.bounced_at !== null).length || 0
         const openedCount = emailStats?.filter(e => e.opened_at !== null).length || 0
 
-        // Use the original contact count from props, not from database recalculation
-        const originalTotal = campaign.contactCount || campaign.total_contacts || 0
+        // Use the original contact count from props (total_contacts is the real list size)
+        const originalTotal = campaign.total_contacts || campaign.contactCount || 0
         
         const newProgress = {
-          total: originalTotal, // Use original total, don't recalculate
+          total: originalTotal, // Use original total from contact list, not tracking count
           sent: sentCount,
           delivered: deliveredCount,
           opened: openedCount || 0,
