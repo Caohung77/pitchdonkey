@@ -233,19 +233,35 @@ export class EmailTracker {
 
       console.log(`📊 Email open tracking: First open: ${isFirstOpen}, Email ID: ${emailRecord.id}`)
 
-      // Update email tracking record with open data
+      // Update email tracking record with open data - only set if not already opened
+      const updateData: any = {}
+      
+      // Only update if this is the first open
+      if (!emailRecord.opened_at) {
+        updateData.opened_at = now
+      }
+      
+      // Skip update if no changes needed
+      if (Object.keys(updateData).length === 0) {
+        console.log(`📊 Email already tracked as opened: ${pixelId}`)
+        return { success: true, firstOpen: false }
+      }
+      
       const { error: updateError } = await this.supabase
         .from('email_tracking')
-        .update({
-          opened_at: emailRecord.opened_at || now,
-          first_opened_at: isFirstOpen ? now : emailRecord.first_opened_at,
-          last_opened_at: now,
-          open_count: (emailRecord.open_count || 0) + 1
-        })
+        .update(updateData)
         .eq('tracking_pixel_id', pixelId)
 
       if (updateError) {
-        console.error('❌ Error updating email tracking record:', updateError)
+        console.error('❌ Error updating email tracking record:', {
+          error: updateError,
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code,
+          pixelId: pixelId,
+          updateData: { opened_at: emailRecord.opened_at || now }
+        })
         return { success: false, firstOpen: false }
       }
 
