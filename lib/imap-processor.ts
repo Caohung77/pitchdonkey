@@ -50,6 +50,136 @@ export class IMAPProcessor {
   }
 
   /**
+   * Discover Trash folder using special-use attributes, with common fallbacks
+   */
+  async findTrashMailbox(): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      if (!this.imap) return resolve(null)
+      this.imap.getBoxes((err, boxes) => {
+        if (err) return reject(err)
+
+        const flatten = (tree: any, prefix = ''): Array<{ path: string; attribs: string[] }> => {
+          const result: Array<{ path: string; attribs: string[] }> = []
+          for (const name of Object.keys(tree)) {
+            const box = tree[name]
+            const path = prefix ? `${prefix}${box.delimiter}${name}` : name
+            result.push({ path, attribs: box.attribs || [] })
+            if (box.children) result.push(...flatten(box.children, path))
+          }
+          return result
+        }
+
+        const flat = flatten(boxes)
+        const byAttr = flat.find(b => (b.attribs || []).some((a: string) => /\\Trash/i.test(a)))
+        if (byAttr) return resolve(byAttr.path)
+
+        const candidates = ['Trash', '[Gmail]/Trash', 'Deleted Items', 'Deleted Messages', 'Bin']
+        const found = flat.find(b => candidates.includes(b.path))
+        resolve(found ? found.path : null)
+      })
+    })
+  }
+
+  /**
+   * Ensure a mailbox exists, creating it if missing
+   */
+  async ensureMailbox(name: string): Promise<void> {
+    if (!this.imap) return
+    return new Promise((resolve, reject) => {
+      this.imap!.getBoxes((err, boxes) => {
+        if (err) return reject(err)
+        const exists = (() => {
+          const check = (tree: any, target: string): boolean => {
+            for (const key of Object.keys(tree)) {
+              if (key === target) return true
+              if (tree[key].children && check(tree[key].children, target)) return true
+            }
+            return false
+          }
+          return check(boxes, name)
+        })()
+        if (exists) return resolve()
+        this.imap!.addBox(name, (addErr) => {
+          if (addErr) return reject(addErr)
+          resolve()
+        })
+      })
+    })
+  }
+
+  /**
+   * Move a message by UID between mailboxes
+   */
+  async moveUid(uid: number, fromMailbox: string, toMailbox: string): Promise<void> {
+    if (!this.imap) throw new Error('IMAP not connected')
+    await this.openMailbox(fromMailbox)
+    return new Promise((resolve, reject) => {
+      // node-imap move uses UIDs when passing numeric ids here
+      this.imap!.move(String(uid), toMailbox, (err) => {
+        if (err) return reject(err)
+        resolve()
+      })
+    })
+  }
+
+  /**
+   * Find UID by Message-ID header in a mailbox
+   */
+  async findUidByMessageId(messageId: string, mailbox = 'INBOX'): Promise<number | null> {
+    if (!this.imap) throw new Error('IMAP not connected')
+    await this.openMailbox(mailbox)
+    return new Promise((resolve, reject) => {
+      const id = messageId
+      this.imap!.search(['HEADER', 'Message-ID', id], (err, uids) => {
+        if (err) return reject(err)
+        resolve(uids && uids.length > 0 ? uids[0] : null)
+      })
+    })
+  }
+
+  /**
+   * Move message to Trash; create Trash if missing; fallback to delete+expunge
+   */
+  async moveToTrashByUid(uid: number, sourceMailbox = 'INBOX'): Promise<void> {
+    if (!this.imap) throw new Error('IMAP not connected')
+    let trash = await this.findTrashMailbox()
+    try {
+      if (!trash) {
+        // Try to create a Trash mailbox if none found
+        await this.ensureMailbox('Trash')
+        trash = 'Trash'
+      }
+    } catch (_) {
+      // ignore creation failure; fallback below
+    }
+
+    if (trash) {
+      await this.moveUid(uid, sourceMailbox, trash)
+      return
+    }
+
+    // Fallback: mark as \Deleted and expunge only this message
+    await this.openMailbox(sourceMailbox)
+    await new Promise<void>((resolve, reject) => {
+      this.imap!.addFlags(String(uid), '\\Deleted', (err) => {
+        if (err) return reject(err)
+        // Attempt to expunge just this UID; if not supported, expunge all (risky)
+        try {
+          ;(this.imap as any).expunge(String(uid), (expErr: any) => {
+            if (expErr) return reject(expErr)
+            resolve()
+          })
+        } catch (_) {
+          ;(this.imap as any).expunge((expErr: any) => {
+            if (expErr) return reject(expErr)
+            resolve()
+          })
+        }
+      })
+    })
+  }
+
+  /**
    * Test IMAP connection
    */
   async testConnection(config: IMAPConfig): Promise<{

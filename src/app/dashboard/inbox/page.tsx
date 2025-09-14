@@ -2,24 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { 
   RefreshCw, 
   Search, 
   Filter,
-  Archive,
   Trash2,
-  ExternalLink,
   Mail,
-  MailOpen,
-  Clock,
-  AlertCircle,
-  CheckCircle,
-  MessageSquare,
-  Target,
-  User,
-  ChevronDown,
-  Eye,
+  CheckSquare,
+  Square,
+  MoreHorizontal,
   UserPlus
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -38,6 +29,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ContactViewModal } from '@/components/contacts/ContactViewModal'
 import { AddContactModal } from '@/components/contacts/AddContactModal'
+import { EmailListItem } from '@/components/EmailListItem'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface EmailAccount {
   id: string
@@ -92,82 +85,99 @@ export default function InboxPage() {
   const [autoSyncing, setAutoSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState<string>('')
   const [lastSyncTime, setLastSyncTime] = useState<number>(0)
-  
-  // Contact modal states
-  const [contactViewModalOpen, setContactViewModalOpen] = useState(false)
-  const [addContactModalOpen, setAddContactModalOpen] = useState(false)
-  const [selectedContact, setSelectedContact] = useState<any>(null)
-  const [contactsData, setContactsData] = useState<Map<string, any>>(new Map())
+  const [contactsData, setContactsData] = useState<Record<string, Contact>>({})
+  const [contactDataLoading, setContactDataLoading] = useState<Record<string, boolean>>({})
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false)
+  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
 
+  // Auto-sync functionality
   useEffect(() => {
-    const initializeInbox = async () => {
-      // Start with existing data from database (fast)
-      await fetchEmails()
-      await fetchEmailAccounts()
+    const interval = setInterval(async () => {
+      if (!autoSyncing) return
       
-      // Then trigger IMAP sync in the background (slower but ensures fresh data)
-      // Only auto-sync if not already syncing to avoid conflicts AND respect rate limits
       const now = Date.now()
       const timeSinceLastSync = now - lastSyncTime
-      const minSyncInterval = 30 * 1000 // 30 seconds minimum between auto-syncs
+      const minSyncInterval = 30000 // 30 seconds minimum between syncs
       
-      if (!syncing && !autoSyncing && timeSinceLastSync >= minSyncInterval) {
-        console.log('🔄 Auto-syncing IMAP on inbox load...')
-        setAutoSyncing(true)
-        setSyncStatus('')
-        setLastSyncTime(now)
-        
-        try {
-          const syncResult = await forceSync('all')
-          const newEmailsCount = syncResult?.data?.totalNewEmails || 0
-          setSyncStatus(`✅ Auto-sync completed: ${newEmailsCount} new emails found`)
-          
-          // Clear success message after 3 seconds
-          setTimeout(() => setSyncStatus(''), 3000)
-        } catch (error) {
-          console.error('Auto-sync failed:', error)
-          
-          // Handle rate limit errors specifically
-          if (error.message?.includes('Rate limit exceeded')) {
-            setSyncStatus('⏳ Rate limit reached - sync paused for 1 minute')
-            setTimeout(() => setSyncStatus(''), 60000) // Clear after 1 minute
-          } else {
-            setSyncStatus(`❌ Auto-sync failed: ${error.message}`)
-            setTimeout(() => setSyncStatus(''), 5000)
-          }
-        } finally {
-          setAutoSyncing(false)
-        }
-      } else if (timeSinceLastSync < minSyncInterval) {
-        console.log(`⏳ Skipping auto-sync - last sync was ${Math.round(timeSinceLastSync / 1000)}s ago`)
-        setSyncStatus('⏳ Auto-sync skipped - too soon since last sync')
+      if (timeSinceLastSync < minSyncInterval) return
+      
+      try {
+        setSyncStatus('Auto-syncing...')
+        await forceSync(selectedAccount === 'all' ? undefined : selectedAccount)
+        setSyncStatus('Auto-sync completed')
         setTimeout(() => setSyncStatus(''), 3000)
+      } catch (error: any) {
+        console.log('Auto-sync skipped:', error.message)
+        setSyncStatus('')
       }
-    }
+    }, 45000) // Check every 45 seconds
     
-    initializeInbox()
-  }, [])
+    return () => clearInterval(interval)
+  }, [autoSyncing, selectedAccount, lastSyncTime])
 
   useEffect(() => {
     fetchEmails()
+    fetchEmailAccounts()
   }, [selectedAccount, filter, searchTerm])
+
+  const preloadContactsForEmails = async (emailList: IncomingEmail[]) => {
+    const emailsNeedingContacts = emailList.filter(email => {
+      const reply = email.email_replies?.[0]
+      return reply?.contact_id && !contactsData[reply.contact_id] && !contactDataLoading[reply.contact_id]
+    })
+
+    if (emailsNeedingContacts.length === 0) return
+
+    const contactIds = emailsNeedingContacts.map(email => email.email_replies[0].contact_id).filter(Boolean) as string[]
+    
+    // Mark as loading to prevent duplicate requests
+    const newLoadingState = { ...contactDataLoading }
+    contactIds.forEach(id => newLoadingState[id] = true)
+    setContactDataLoading(newLoadingState)
+
+    try {
+      const response = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactIds })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const newContactsData = { ...contactsData }
+        data.contacts?.forEach((contact: Contact) => {
+          newContactsData[contact.id] = contact
+        })
+        setContactsData(newContactsData)
+      }
+    } catch (error) {
+      console.error('Error preloading contacts:', error)
+    } finally {
+      // Clear loading state
+      const clearedLoadingState = { ...contactDataLoading }
+      contactIds.forEach(id => delete clearedLoadingState[id])
+      setContactDataLoading(clearedLoadingState)
+    }
+  }
 
   const fetchEmails = async () => {
     try {
       setLoading(true)
-      const params = new URLSearchParams()
       
-      if (selectedAccount !== 'all') {
+      const params = new URLSearchParams()
+      if (selectedAccount && selectedAccount !== 'all') {
         params.append('account_id', selectedAccount)
       }
-      if (filter !== 'all') {
+      if (filter && filter !== 'all') {
         params.append('classification', filter)
       }
       if (searchTerm) {
         params.append('search', searchTerm)
       }
       
-      const url = `/api/inbox/emails${params.toString() ? `?${params.toString()}` : ''}`
+      const url = `/api/inbox/emails?${params.toString()}`
       const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
@@ -237,495 +247,325 @@ export default function InboxPage() {
     }
   }
 
-  const getClassificationBadge = (classification: string, confidence: number | null) => {
-    const badges = {
-      human_reply: { icon: MessageSquare, color: 'bg-green-100 text-green-800', label: 'Reply' },
-      bounce: { icon: AlertCircle, color: 'bg-red-100 text-red-800', label: 'Bounce' },
-      auto_reply: { icon: Clock, color: 'bg-blue-100 text-blue-800', label: 'Auto-Reply' },
-      unsubscribe: { icon: Trash2, color: 'bg-orange-100 text-orange-800', label: 'Unsubscribe' },
-      spam: { icon: AlertCircle, color: 'bg-gray-100 text-gray-800', label: 'Spam' },
-      unclassified: { icon: Mail, color: 'bg-gray-100 text-gray-600', label: 'Unclassified' }
+  const deleteEmail = async (emailId: string) => {
+    // Optimistic UI update
+    setEmails(prev => prev.filter(e => e.id !== emailId))
+    setSelectedEmails(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(emailId)
+      return newSet
+    })
+
+    try {
+      const res = await fetch('/api/inbox/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailIds: [emailId] })
+      })
+
+      if (!res.ok) {
+        console.error('Failed to delete email')
+        // Revert optimistic update on failure
+        fetchEmails()
+      }
+    } catch (error) {
+      console.error('Error deleting email:', error)
+      // Revert optimistic update on failure
+      fetchEmails()
     }
+  }
 
-    const badge = badges[classification as keyof typeof badges] || badges.unclassified
-    const Icon = badge.icon
+  const deleteSelectedEmails = async () => {
+    if (selectedEmails.size === 0) return
 
-    return (
-      <Badge className={`${badge.color} flex items-center gap-1`}>
-        <Icon className="h-3 w-3" />
-        {badge.label}
-        {confidence && (
-          <span className="text-xs opacity-75">
-            {Math.round(confidence * 100)}%
-          </span>
-        )}
-      </Badge>
-    )
+    const emailIds = Array.from(selectedEmails)
+    
+    // Optimistic UI update
+    setEmails(prev => prev.filter(e => !selectedEmails.has(e.id)))
+    setSelectedEmails(new Set())
+    setSelectionMode(false)
+
+    try {
+      const res = await fetch('/api/inbox/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailIds })
+      })
+
+      if (!res.ok) {
+        console.error('Failed to delete emails')
+        // Revert optimistic update on failure
+        fetchEmails()
+      }
+    } catch (error) {
+      console.error('Error deleting emails:', error)
+      // Revert optimistic update on failure
+      fetchEmails()
+    }
+  }
+
+  const toggleEmailSelection = (emailId: string) => {
+    setSelectedEmails(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(emailId)) {
+        newSet.delete(emailId)
+      } else {
+        newSet.add(emailId)
+      }
+      return newSet
+    })
+  }
+
+  const selectAllEmails = () => {
+    const allEmailIds = new Set(emails.map(email => email.id))
+    setSelectedEmails(allEmailIds)
+  }
+
+  const clearSelection = () => {
+    setSelectedEmails(new Set())
+    setSelectionMode(false)
+  }
+
+  const handleContactClick = (contact: Contact) => {
+    setSelectedContact(contact)
+    setIsContactModalOpen(true)
+  }
+
+  const handleContactModalClose = () => {
+    setIsContactModalOpen(false)
+    setSelectedContact(null)
   }
 
   const filteredEmails = emails // Server-side filtering now handles all filters
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffTime = Math.abs(now.getTime() - date.getTime())
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 1) return 'Today'
-    if (diffDays === 2) return 'Yesterday'
-    if (diffDays <= 7) return `${diffDays} days ago`
-    
-    return date.toLocaleDateString()
-  }
-
-  const getEmailPreview = (email: IncomingEmail) => {
-    const content = email.text_content || email.html_content || ''
-    return content.length > 100 ? content.substring(0, 100) + '...' : content
-  }
-
-  const getCampaignInfo = (email: IncomingEmail) => {
-    // Find the first reply that has campaign info
-    const replyWithCampaign = email.email_replies?.find(reply => reply.campaigns)
-    return replyWithCampaign?.campaigns || null
-  }
-
-  const getContactInfo = (email: IncomingEmail) => {
-    // Find the first reply that has contact info
-    const replyWithContact = email.email_replies?.find(reply => reply.contacts)
-    return replyWithContact?.contacts || null
-  }
-
-  const getContactDisplayName = (contact: Contact) => {
-    const firstName = contact.first_name || ''
-    const lastName = contact.last_name || ''
-    const fullName = `${firstName} ${lastName}`.trim()
-    return fullName || contact.email
-  }
-
-  // Contact lookup and management functions
-  const lookupContactByEmail = async (emailAddress: string) => {
-    try {
-      // Check if already cached
-      if (contactsData.has(emailAddress)) {
-        return contactsData.get(emailAddress)
-      }
-
-      const response = await fetch(`/api/contacts/lookup?email=${encodeURIComponent(emailAddress)}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        const contact = data.contact
-        // Cache the contact data (including null if not found)
-        setContactsData(prev => new Map(prev.set(emailAddress, contact)))
-        return contact
-      }
-      
-      return null
-    } catch (error) {
-      console.error('Error looking up contact:', error)
-      return null
-    }
-  }
-
-  // Batch lookup all contacts when emails load to prevent flashing
-  const preloadContactsForEmails = async (emailList: IncomingEmail[]) => {
-    const uniqueEmails = [...new Set(emailList.map(email => extractEmailAddress(email.from_address)))]
-    const uncachedEmails = uniqueEmails.filter(email => !contactsData.has(email))
-    
-    if (uncachedEmails.length === 0) return
-
-    try {
-      // Do parallel lookups for all uncached emails
-      const lookupPromises = uncachedEmails.map(async (emailAddress) => {
-        const contact = await lookupContactByEmail(emailAddress)
-        return { emailAddress, contact }
-      })
-      
-      await Promise.all(lookupPromises)
-    } catch (error) {
-      console.error('Error preloading contacts:', error)
-    }
-  }
-
-  const handleViewContact = async (emailAddress: string) => {
-    const contact = await lookupContactByEmail(emailAddress)
-    if (contact) {
-      setSelectedContact(contact)
-      setContactViewModalOpen(true)
-    }
-  }
-
-  const handleAddContact = (emailAddress: string) => {
-    // Pre-fill the email in the add contact form
-    setSelectedContact({ email: emailAddress })
-    setAddContactModalOpen(true)
-  }
-
-  const extractEmailAddress = (fromAddress: string): string => {
-    // Extract email from formats like "Name <email@domain.com>" or just "email@domain.com"
-    const match = fromAddress.match(/<([^>]+)>/)
-    return match ? match[1] : fromAddress.trim()
-  }
-
-  // Component for contact action buttons
-  const ContactActionButtons = ({ fromAddress, email }: { fromAddress: string, email: IncomingEmail }) => {
-    const emailAddress = extractEmailAddress(fromAddress)
-    const [isLoading, setIsLoading] = useState(false)
-    const [contactExists, setContactExists] = useState<boolean | null>(null)
-
-    // Check if contact exists when component mounts
-    useEffect(() => {
-      const checkContact = async () => {
-        // First check if contact exists in email_replies (most accurate for campaign-related emails)
-        const existingContact = email.email_replies.find(reply => 
-          reply.contact_id && reply.contacts && reply.contacts.email === emailAddress
-        )
-        
-        if (existingContact) {
-          setContactExists(true)
-          return
-        }
-
-        // Check if already cached (includes both positive and negative results)
-        if (contactsData.has(emailAddress)) {
-          const cachedContact = contactsData.get(emailAddress)
-          setContactExists(!!cachedContact)
-          return
-        }
-
-        // Database lookup for uncached contacts
-        setIsLoading(true)
-        try {
-          const contact = await lookupContactByEmail(emailAddress)
-          setContactExists(!!contact)
-          
-          // Cache both positive and negative results to avoid repeated lookups
-          contactsData.set(emailAddress, contact)
-        } catch (error) {
-          console.error('Error looking up contact:', error)
-          setContactExists(false)
-          // Cache negative result
-          contactsData.set(emailAddress, null)
-        } finally {
-          setIsLoading(false)
-        }
-      }
-      
-      checkContact()
-    }, [emailAddress, email.email_replies, contactsData])
-
-    if (isLoading) {
-      return (
-        <Button size="sm" variant="outline" disabled>
-          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400 mr-1"></div>
-          Loading...
-        </Button>
-      )
-    }
-
-    // Show a neutral state while data is loading to prevent flashing
-    if (contactExists === null) {
-      return (
-        <Button size="sm" variant="outline" disabled>
-          <User className="h-3 w-3 mr-1" />
-          Contact
-        </Button>
-      )
-    }
-
-    if (contactExists) {
-      return (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={(e) => {
-            e.stopPropagation()
-            // Use contact from email_replies if available, otherwise lookup
-            const existingContact = email.email_replies.find(reply => 
-              reply.contact_id && reply.contacts && reply.contacts.email === emailAddress
-            )
-            if (existingContact && existingContact.contacts) {
-              setSelectedContact(existingContact.contacts)
-              setContactViewModalOpen(true)
-            } else {
-              handleViewContact(emailAddress)
-            }
-          }}
-          className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-        >
-          <Eye className="h-3 w-3 mr-1" />
-          View Contact
-        </Button>
-      )
-    } else {
-      return (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={(e) => {
-            e.stopPropagation()
-            handleAddContact(emailAddress)
-          }}
-          className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-        >
-          <UserPlus className="h-3 w-3 mr-1" />
-          Add Contact
-        </Button>
-      )
-    }
-  }
-
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Inbox</h1>
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full bg-gray-50">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            Inbox
-            {autoSyncing && (
-              <div className="flex items-center gap-1 text-sm text-blue-600 font-normal">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Auto-syncing...
-              </div>
-            )}
-          </h1>
-          <p className="text-gray-600">
-            {emails.length} emails • {filteredEmails.length} showing
-          </p>
-          {syncStatus && (
-            <p className={`text-sm mt-1 ${
-              syncStatus.includes('✅') ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {syncStatus}
+      <div className="bg-white border-b border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Inbox</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              {filteredEmails.length} email{filteredEmails.length !== 1 ? 's' : ''} 
+              {selectionMode && selectedEmails.size > 0 && (
+                <span className="ml-2 text-blue-600">
+                  • {selectedEmails.size} selected
+                </span>
+              )}
             </p>
-          )}
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button disabled={loading || syncing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${(loading || syncing) ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing...' : 'Refresh'}
-              <ChevronDown className="h-4 w-4 ml-2" />
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {/* Selection Mode Toggle */}
+            <Button
+              variant={selectionMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setSelectionMode(!selectionMode)
+                if (!selectionMode) {
+                  setSelectedEmails(new Set())
+                }
+              }}
+            >
+              {selectionMode ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={fetchEmails}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Quick Refresh (Database Only)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => forceSync('all')}>
-              <Mail className="h-4 w-4 mr-2" />
-              Force IMAP Sync (All Accounts)
-            </DropdownMenuItem>
-            {selectedAccount !== 'all' && (
-              <DropdownMenuItem onClick={() => forceSync(selectedAccount)}>
-                <User className="h-4 w-4 mr-2" />
-                Force Sync Selected Account
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
-      {/* Filters */}
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search emails..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+            {/* Auto-sync Toggle */}
+            <Button
+              variant={autoSyncing ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAutoSyncing(!autoSyncing)}
+            >
+              <RefreshCw className={`h-4 w-4 ${autoSyncing ? 'animate-spin' : ''}`} />
+              {autoSyncing ? 'Auto' : 'Manual'}
+            </Button>
+
+            {/* Manual Sync */}
+            <Button
+              onClick={() => forceSync(selectedAccount === 'all' ? undefined : selectedAccount)}
+              disabled={syncing}
+              size="sm"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              Sync
+            </Button>
+
+            {/* Add Contact */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAddContactModalOpen(true)}
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Contact
+            </Button>
+          </div>
         </div>
-        
-        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-          <SelectTrigger className="w-56">
-            <Mail className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filter by account" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Accounts</SelectItem>
-            {emailAccounts.map((account) => (
-              <SelectItem key={account.id} value={account.id}>
-                {account.email} ({account.provider})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        
-        <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-48">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filter by type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Emails</SelectItem>
-            <SelectItem value="human_reply">Human Replies</SelectItem>
-            <SelectItem value="bounce">Bounces</SelectItem>
-            <SelectItem value="auto_reply">Auto-Replies</SelectItem>
-            <SelectItem value="unsubscribe">Unsubscribes</SelectItem>
-            <SelectItem value="unclassified">Unclassified</SelectItem>
-          </SelectContent>
-        </Select>
+
+        {/* Search and Filters */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search emails..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          
+          <div className="flex gap-2">
+            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Accounts</SelectItem>
+                {emailAccounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filter} onValueChange={setFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Emails</SelectItem>
+                <SelectItem value="unclassified">Unclassified</SelectItem>
+                <SelectItem value="human_reply">Replies</SelectItem>
+                <SelectItem value="bounce">Bounces</SelectItem>
+                <SelectItem value="auto_reply">Auto-Replies</SelectItem>
+                <SelectItem value="spam">Spam</SelectItem>
+                <SelectItem value="unsubscribe">Unsubscribes</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Selection Actions Bar */}
+        <AnimatePresence>
+          {selectionMode && selectedEmails.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-medium text-blue-900">
+                    {selectedEmails.size} email{selectedEmails.size !== 1 ? 's' : ''} selected
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllEmails}
+                    className="text-blue-700 border-blue-300"
+                  >
+                    Select All
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteSelectedEmails}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete Selected
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSelection}
+                    className="text-gray-600"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Sync Status */}
+        {syncStatus && (
+          <div className="mt-4 text-sm text-blue-600">
+            {syncStatus}
+          </div>
+        )}
       </div>
 
       {/* Email List */}
-      <div className="bg-white rounded-lg border shadow">
+      <div className="flex-1 overflow-auto p-6">
         {filteredEmails.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium mb-2">No emails found</p>
-            <p>Try adjusting your search or filter criteria</p>
+          <div className="text-center py-16">
+            <Mail className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p className="text-lg font-medium text-gray-900 mb-2">No emails found</p>
+            <p className="text-gray-600">Try adjusting your search or filter criteria</p>
           </div>
         ) : (
-          <div className="divide-y">
+          <div className="space-y-2 max-w-4xl mx-auto">
             {filteredEmails.map((email) => (
-              <div
+              <EmailListItem
                 key={email.id}
-                className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                onClick={() => setSelectedEmail(email)}
-              >
-                <div className="flex items-start gap-4">
-                  {/* Email Icon */}
-                  <div className="mt-1">
-                    {email.processing_status === 'completed' ? (
-                      <MailOpen className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <Mail className="h-5 w-5 text-blue-600" />
-                    )}
-                  </div>
-
-                  {/* Email Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium text-gray-900 truncate">
-                            {email.from_address}
-                          </p>
-                          {getClassificationBadge(email.classification_status, email.classification_confidence)}
-                        </div>
-                        <p className="font-medium text-gray-800 mb-1 truncate">
-                          {email.subject || '(No Subject)'}
-                        </p>
-                        <div className="flex items-center gap-4 mb-1">
-                          {getCampaignInfo(email) && (
-                            <div className="flex items-center gap-1 text-xs text-blue-600">
-                              <Target className="h-3 w-3" />
-                              <span className="truncate">{getCampaignInfo(email)?.name}</span>
-                            </div>
-                          )}
-                          {getContactInfo(email) && (
-                            <div className="flex items-center gap-1 text-xs text-green-600">
-                              <User className="h-3 w-3" />
-                              <button 
-                                className="truncate hover:underline"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  // TODO: Open contact modal or navigate to contact detail
-                                  console.log('Open contact:', getContactInfo(email)?.id)
-                                }}
-                              >
-                                {getContactDisplayName(getContactInfo(email)!)}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600 truncate">
-                          {getEmailPreview(email)}
-                        </p>
-                      </div>
-                      
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-sm text-gray-500 mb-2">
-                          {formatDate(email.date_received)}
-                        </p>
-                        <div className="flex gap-2 flex-col">
-                          <ContactActionButtons fromAddress={email.from_address} email={email} />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              // Open in external email client
-                              window.open(`mailto:${email.from_address}`, '_blank')
-                            }}
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            Reply
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                email={email}
+                onEmailClick={setSelectedEmail}
+                onDelete={deleteEmail}
+                onContactClick={handleContactClick}
+                isSelected={selectedEmails.has(email.id)}
+                selectionMode={selectionMode}
+                onSelectionToggle={toggleEmailSelection}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {/* Email Reading Modal */}
+      {/* Email Detail Modal */}
       {selectedEmail && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b">
-              <div>
-                <h3 className="text-lg font-semibold">
-                  {selectedEmail.subject || '(No Subject)'}
-                </h3>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-auto">
+            <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold truncate">
+                {selectedEmail.subject || '(No Subject)'}
+              </h2>
+              <Button variant="outline" onClick={() => setSelectedEmail(null)}>
+                Close
+              </Button>
+            </div>
+            <div className="p-6">
+              <div className="mb-4">
+                <p className="font-medium text-gray-900">{selectedEmail.from_address}</p>
                 <p className="text-sm text-gray-600">
-                  From: {selectedEmail.from_address}
+                  {new Date(selectedEmail.date_received).toLocaleString()}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                {getClassificationBadge(selectedEmail.classification_status, selectedEmail.classification_confidence)}
-                <Button variant="outline" onClick={() => setSelectedEmail(null)}>
-                  Close
-                </Button>
-              </div>
-            </div>
-            
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {selectedEmail.html_content ? (
-                <div 
-                  dangerouslySetInnerHTML={{ __html: selectedEmail.html_content }}
-                  className="prose max-w-none"
-                />
-              ) : selectedEmail.text_content ? (
-                <pre className="whitespace-pre-wrap font-sans text-gray-800">
-                  {selectedEmail.text_content}
-                </pre>
-              ) : (
-                <p className="text-gray-500 italic">No content available</p>
-              )}
-            </div>
-            
-            <div className="flex justify-between items-center p-6 border-t bg-gray-50">
-              <div className="text-sm text-gray-600">
-                Received: {new Date(selectedEmail.date_received).toLocaleString()}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    window.open(`mailto:${selectedEmail.from_address}?subject=Re: ${selectedEmail.subject}`, '_blank')
-                  }}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Reply in Email Client
-                </Button>
+              <div className="prose max-w-none">
+                {selectedEmail.html_content ? (
+                  <div 
+                    className="email-content"
+                    dangerouslySetInnerHTML={{ __html: selectedEmail.html_content }}
+                  />
+                ) : (
+                  <div className="whitespace-pre-wrap">
+                    {selectedEmail.text_content || 'No content available'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -733,33 +573,22 @@ export default function InboxPage() {
       )}
 
       {/* Contact View Modal */}
-      <ContactViewModal
-        contact={selectedContact}
-        isOpen={contactViewModalOpen}
-        onClose={() => {
-          setContactViewModalOpen(false)
-          setSelectedContact(null)
-        }}
-        onEdit={(contact) => {
-          // Handle edit if needed - for now just close the modal
-          setContactViewModalOpen(false)
-        }}
-      />
+      {isContactModalOpen && selectedContact && (
+        <ContactViewModal
+          contact={selectedContact}
+          isOpen={isContactModalOpen}
+          onClose={handleContactModalClose}
+        />
+      )}
 
       {/* Add Contact Modal */}
       <AddContactModal
-        isOpen={addContactModalOpen}
-        onClose={() => {
-          setAddContactModalOpen(false)
-          setSelectedContact(null)
-        }}
+        isOpen={isAddContactModalOpen}
+        onClose={() => setIsAddContactModalOpen(false)}
         onContactAdded={() => {
-          setAddContactModalOpen(false)
-          setSelectedContact(null)
-          // Refresh contacts data cache
-          setContactsData(new Map())
+          // Refresh contacts data if needed
+          setIsAddContactModalOpen(false)
         }}
-        initialData={selectedContact}
       />
     </div>
   )
