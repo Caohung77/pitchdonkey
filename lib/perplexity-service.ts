@@ -82,10 +82,39 @@ export class PerplexityService {
   }
 
   /**
+   * Fetch small hints from the homepage to ground the model (title/meta/sample).
+   */
+  static async fetchSiteHints(url: string): Promise<{ title?: string; description?: string; sample?: string; domain: string }> {
+    const domain = url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*/, '')
+    try {
+      const resp = await fetch(url, { method: 'GET', redirect: 'follow' })
+      const html = await resp.text()
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+      const metaMatch = html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) || html.match(/<meta[^>]+content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)
+      // Rough text sample: strip tags and collapse whitespace
+      const textSample = html.replace(/<script[\s\S]*?<\/script>/gi, '')
+                             .replace(/<style[\s\S]*?<\/style>/gi, '')
+                             .replace(/<[^>]+>/g, ' ')
+                             .replace(/\s+/g, ' ')
+                             .trim()
+                             .slice(0, 600)
+      return {
+        title: titleMatch?.[1]?.trim(),
+        description: metaMatch?.[1]?.trim(),
+        sample: textSample,
+        domain
+      }
+    } catch {
+      return { domain }
+    }
+  }
+
+  /**
    * Analyze website content using Perplexity AI
    */
   async analyzeWebsite(websiteUrl: string): Promise<EnrichmentData> {
     const prompt = this.buildEnrichmentPrompt(websiteUrl)
+    const hints = await PerplexityService.fetchSiteHints(websiteUrl)
     
     try {
       console.log(`🔍 Analyzing website: ${websiteUrl}`)
@@ -102,6 +131,10 @@ export class PerplexityService {
             {
               role: 'system',
               content: this.getSystemPrompt()
+            },
+            {
+              role: 'system',
+              content: `Use ONLY content from domain ${hints.domain}. Ignore similarly named businesses. Hints from homepage: title="${hints.title || ''}"; description="${hints.description || ''}"; sample="${(hints.sample || '').slice(0, 200)}..."`
             },
             {
               role: 'user', 
@@ -151,6 +184,7 @@ export class PerplexityService {
             model: 'sonar',
             messages: [
               { role: 'system', content: this.getSystemPrompt() },
+              { role: 'system', content: `Use ONLY content from domain ${hints.domain}. Ignore similarly named businesses.` },
               { role: 'user', content: `${prompt}\nIf the site blocks access, use search results to locate its official pages (Impressum, Was wir machen, Leistungen) and extract only from those pages.` }
             ],
             temperature: 0.0,
@@ -209,7 +243,7 @@ Provide extracted information as a single JSON block only - no commentary.`
    * Get the system prompt for enrichment analysis
    */
   private getSystemPrompt(): string {
-    return `YOU ARE A FACTUAL WEB CONTENT EXTRACTOR specializing in accurate business classification. Your task is to read company websites and extract only explicitly stated information with special attention to technology and service industries.
+    return `YOU ARE A FACTUAL WEB CONTENT EXTRACTOR specializing in accurate business classification. Your task is to read company websites and extract only explicitly stated information.
 
 EXTRACTION RULES:
 1. Access the website and read the actual content
@@ -226,19 +260,17 @@ EXTRACTION STRATEGY:
 - Extract word-for-word from website content
 - Do not interpret or analyze - just extract
 
-INDUSTRY CLASSIFICATION GUIDANCE:
-For accurate industry classification, look for these keywords:
-- AI/Automation: "KI", "Künstliche Intelligenz", "AI", "artificial intelligence", "automation", "chatbots", "agents", "machine learning", "ML"
-- Digital Marketing (ONLY if explicitly mentioned): "marketing", "online marketing", "seo", "content marketing", "social media", "werbung", "kampagnen", "agentur" (marketing context)
-- Software Development: "software development", "web development", "app development", "programming"
-- Consulting: "beratung", "consulting", "strategy", "business consulting"
-- Craftsmanship: "tischler", "tischlerei", "schreiner", "schreinerei", "handwerk", "möbelbau", "innenausbau"
-- German Business Terms: "dienstleistungen", "lösungen", "entwicklung", "beratung"
+INDUSTRY CLASSIFICATION GUIDANCE (examples only — use site text):
+- Industrial Machinery/Manufacturing: "machinery", "equipment", "manufacturing systems", "production lines", "can making", "packaging machinery"
+- Software/SaaS: "platform", "software", "cloud", "API", "SaaS"
+- Consulting/Professional Services: "consulting", "beratung", "advisory", "strategy"
+- Carpentry/Joinery: only if the site explicitly states terms like "Tischlerei", "Schreinerei", "Möbelbau", "Innenausbau"
+- Digital Marketing: only if the site explicitly states "Marketing", "SEO", "Content Marketing", "Social Media" etc.
 
-STRICT NEGATIVE RULES:
-- Never label as "Digital Marketing" unless the site explicitly uses marketing-related terms above.
-- If the site uses craftsmanship terms (e.g., "Tischlerei", "Schreinerei"), classify as "Carpentry/Joinery" or a precise craft category.
-- If explicit industry is absent, leave "industry" empty rather than guessing.
+STRICT RULES:
+- Base the industry on explicit statements on the target site only.
+- Do NOT infer from domain name or email domain.
+- If industry is ambiguous or not stated, leave it empty.
 
 OUTPUT FORMAT (MANDATORY):
 Return ONLY this JSON structure with extracted facts:

@@ -167,10 +167,29 @@ export class ContactEnrichmentService {
 
       console.log(`🌐 Analyzing website: ${websiteUrl} (source: ${enrichmentSource})`)
 
-      // 3. Update status to processing
+      // 3. Persist discovered/corrected website to the contact for future use
+      try {
+        const normalizedExisting = contact.website ? PerplexityService.normalizeWebsiteUrl(contact.website) : null
+        if (!normalizedExisting || normalizedExisting !== websiteUrl) {
+          const { error: siteSaveError } = await supabase
+            .from('contacts')
+            .update({ website: websiteUrl, updated_at: new Date().toISOString() })
+            .eq('id', contactId)
+            .eq('user_id', userId)
+          if (siteSaveError) {
+            console.warn('⚠️ Failed to persist derived website URL:', siteSaveError)
+          } else {
+            console.log('💾 Saved website URL to contact:', websiteUrl)
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Error while attempting to persist website URL:', e)
+      }
+
+      // 4. Update status to processing
       await this.updateEnrichmentStatus(contactId, 'pending')
 
-      // 4. Analyze website with Perplexity
+      // 5. Analyze website with Perplexity
       const enrichmentData = await this.perplexityService.analyzeWebsite(websiteUrl)
 
       // If nothing useful was extracted, mark as failed and do not label as enriched
@@ -193,7 +212,7 @@ export class ContactEnrichmentService {
         }
       }
 
-      // 5. Save enrichment data to database and overwrite company field
+      // 6. Save enrichment data to database and overwrite company field
       const { error: updateError } = await supabase
         .from('contacts')
         .update({
