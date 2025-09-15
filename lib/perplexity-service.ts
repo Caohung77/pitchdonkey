@@ -58,7 +58,7 @@ export class PerplexityService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'sonar-reasoning',
+          model: 'sonar',
           messages: [
             {
               role: 'system',
@@ -69,9 +69,9 @@ export class PerplexityService {
               content: prompt
             }
           ],
-          // First try: restrict browsing to the target domain
+          // First try: restrict browsing to the target domain (if supported by model)
           search_domain_filter: [websiteUrl.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '')],
-          temperature: 0.1,
+          temperature: 0.0,
           max_tokens: 1500,
           search_recency_filter: "month"
         })
@@ -109,12 +109,12 @@ export class PerplexityService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'sonar-reasoning',
+            model: 'sonar',
             messages: [
               { role: 'system', content: this.getSystemPrompt() },
               { role: 'user', content: `${prompt}\nIf the site blocks access, use search results to locate its official pages (Impressum, Was wir machen, Leistungen) and extract only from those pages.` }
             ],
-            temperature: 0.1,
+            temperature: 0.0,
             max_tokens: 1500,
             search_recency_filter: 'month'
           })
@@ -141,41 +141,63 @@ export class PerplexityService {
    * Build the enrichment prompt with website URL
    */
   private buildEnrichmentPrompt(websiteUrl: string): string {
-    return `IMPORTANT: Please search the web and access the company website at ${websiteUrl} to extract detailed business information.
+    return `CRITICAL: Access and read the actual website content at ${websiteUrl}. This may be a German business website. Extract ONLY factual information that appears on the website itself.
 
 REQUIRED TASKS:
-1. Access and read the content from ${websiteUrl}
-2. Extract company information from the actual website content
-3. Look for: company name, services, contact information, about section, products offered
-4. Use web search if direct access fails
+1. Navigate to ${websiteUrl} and read the homepage content
+2. Look for About page, Services page, Contact information, Impressum, "Über uns", "Leistungen", "Was wir machen"
+3. Extract ONLY information explicitly stated on the website
+4. Do NOT infer or assume information based on domain name or industry assumptions
+5. Pay special attention to technology terms, AI services, automation, and digital marketing
 
-CRITICAL: You must actually search for and access the website content. Do not make assumptions based on the domain name alone.
+FOCUS AREAS:
+- Company name: Exact name as shown on the website
+- Industry: Classify precisely - distinguish between AI/automation services, digital marketing, software development, consulting
+- Services/Products: Only those specifically listed or described (look for German terms like "Dienstleistungen", "Lösungen")
+- Target audience: Only if clearly stated as "we serve..." or "our clients are..." or "für Unternehmen" etc.
 
-Provide the extracted information strictly as a single fenced JSON block as specified in the system instructions. Do not include any explanation.`
+SPECIAL ATTENTION FOR GERMAN SITES:
+- Look for "KI" (Künstliche Intelligenz), "Automation", "Chatbots", "Agenten"
+- Check if they offer AI services vs. traditional marketing services
+- Note if they specialize in automation, machine learning, or AI solutions
+
+STRICT RULE: If information is not clearly stated on the website, leave those fields empty. Do not fill in likely or assumed information. Be precise with industry classification.
+
+Provide extracted information as a single JSON block only - no commentary.`
   }
 
   /**
    * Get the system prompt for enrichment analysis
    */
   private getSystemPrompt(): string {
-    return `YOU ARE AN EXPERT WEB RESEARCHER AND BUSINESS INTELLIGENCE ANALYST. Your task is to extract factual business information from company websites for email personalization purposes.
+    return `YOU ARE A FACTUAL WEB CONTENT EXTRACTOR specializing in accurate business classification. Your task is to read company websites and extract only explicitly stated information with special attention to technology and service industries.
 
-CRITICAL INSTRUCTIONS:
-1. You MUST search the web and access the actual website content
-2. Extract ONLY factual information that appears on the website
-3. Do NOT invent or assume information that isn't explicitly stated
-4. If the website is not accessible, clearly state this in your response
-5. Return findings in the exact JSON schema below
+EXTRACTION RULES:
+1. Access the website and read the actual content
+2. Extract ONLY information explicitly written on the website
+3. Do NOT infer, assume, or deduce information from domain names or context
+4. If information is not clearly stated, leave fields empty
+5. Return only the JSON schema below
 
-SEARCH STRATEGY:
-- Try direct website access first
-- Use web search if direct access fails
-- Look for: homepage, about page, services page, contact information
-- Focus on business-relevant information for outreach
+EXTRACTION STRATEGY:
+- Read homepage, about page, services/products pages, team page
+- Look for company description, service lists, target market statements
+- Pay special attention to technology, automation, AI, agent, marketing terms
+- Extract word-for-word from website content
+- Do not interpret or analyze - just extract
+
+INDUSTRY CLASSIFICATION GUIDANCE:
+For accurate industry classification, look for these keywords:
+- AI/Automation: "KI", "Künstliche Intelligenz", "AI", "artificial intelligence", "automation", "chatbots", "agents", "machine learning", "ML"
+- Digital Marketing: "marketing", "lead generation", "SEO", "social media", "advertising", "campaigns" 
+- Software Development: "software development", "web development", "app development", "programming"
+- Consulting: "beratung", "consulting", "strategy", "business consulting"
+- German Business Terms: "dienstleistungen", "lösungen", "entwicklung", "beratung", "agentur"
 
 OUTPUT FORMAT (MANDATORY):
-Return ONLY a fenced JSON block that conforms to this schema, with no prose before or after:
-\n\`\`\`json
+Return ONLY this JSON structure with extracted facts:
+
+\`\`\`json
 {
   "company_name": "",
   "industry": "",
@@ -186,15 +208,15 @@ Return ONLY a fenced JSON block that conforms to this schema, with no prose befo
 }
 \`\`\`
 
-QUALITY REQUIREMENTS (GERMAN SITES COMMON):
-- company_name: Exact name as it appears on website
-- industry: Specific industry/sector (not generic terms)
-- products_services: Specific offerings (max 5 items)
-- target_audience: Specific customer types mentioned
-- unique_points: Actual differentiators mentioned on site
-- tone_style: Professional communication style observed
+FIELD REQUIREMENTS:
+- company_name: Exact name from website (required)
+- industry: PRECISELY categorize based on primary business focus (e.g., "AI and Automation Services", "Digital Marketing", "Software Development")
+- products_services: Only services/products explicitly listed (max 5)
+- target_audience: Only if website states "we serve X" or "our customers are Y"
+- unique_points: Only explicit differentiators mentioned on site
+- tone_style: Only if clear communication style is evident
 
-If website content is in German, extract in English while keeping proper names (company name) in original. If the website is not accessible or contains insufficient information, return an empty JSON object that still matches the schema (empty strings/arrays). Do not include commentary.`
+STRICT RULE: Empty fields are better than guessed information. Do not fill fields with likely assumptions. Be precise with industry classification - if it's an AI/automation company, don't classify it as general "digital marketing".`
   }
 
   /**

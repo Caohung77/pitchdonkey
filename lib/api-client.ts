@@ -49,14 +49,26 @@ export class ApiClient {
       try {
         const errorData = await response.json()
         console.error('API Error Response:', errorData)
-        if (errorData.error) {
-          errorMessage = errorData.error
-        }
-        if (errorData.details) {
-          errorMessage += ` - ${errorData.details}`
-        }
-        if (errorData.message) {
-          errorMessage = errorData.message
+
+        // Handle both plain errors and our API envelope: { success, data, error, message }
+        const topLevelError = (errorData && (errorData.error || errorData.message || errorData.details)) as string | undefined
+        const envelopeData = errorData && errorData.data ? errorData.data : undefined
+        const nestedError = envelopeData && (envelopeData.error || envelopeData.message || envelopeData.details) as string | undefined
+
+        if (topLevelError) {
+          errorMessage = topLevelError
+        } else if (nestedError) {
+          errorMessage = nestedError
+        } else if (envelopeData && typeof envelopeData === 'object') {
+          // Try common fields we return inside data for validation/capability errors
+          const hints: string[] = []
+          if (envelopeData.reason) hints.push(envelopeData.reason)
+          if (envelopeData.currentStatus) hints.push(`status=${envelopeData.currentStatus}`)
+          if (hints.length) {
+            errorMessage = `${errorMessage} - ${hints.join(' | ')}`
+          }
+        } else if (errorData && typeof errorData === 'object' && Object.keys(errorData).length === 0) {
+          // Empty object body — keep the default message
         }
       } catch (e) {
         // If we can't parse the error response, try text
