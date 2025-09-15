@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { useEffect, useMemo, useState } from 'react'
 import { 
   Mail,
   MailOpen,
@@ -13,7 +13,7 @@ import {
   CheckCircle
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { useSwipeGesture } from '../hooks/useSwipeGesture'
+import { Button } from '@/components/ui/button'
 
 interface EmailAccount {
   id: string
@@ -43,6 +43,7 @@ interface EmailReply {
 interface IncomingEmail {
   id: string
   from_address: string
+  to_address?: string
   subject: string
   date_received: string
   classification_status: 'unclassified' | 'bounce' | 'auto_reply' | 'human_reply' | 'unsubscribe' | 'spam'
@@ -60,6 +61,7 @@ interface EmailListItemProps {
   onEmailClick: (email: IncomingEmail) => void
   onDelete: (emailId: string) => void
   onContactClick?: (contact: Contact) => void
+  onOpenThread?: (email: IncomingEmail) => void
   isSelected?: boolean
   selectionMode?: boolean
   onSelectionToggle?: (emailId: string) => void
@@ -70,36 +72,38 @@ export const EmailListItem: React.FC<EmailListItemProps> = ({
   onEmailClick,
   onDelete,
   onContactClick,
+  onOpenThread,
   isSelected = false,
   selectionMode = false,
   onSelectionToggle
 }) => {
-  const { swipeState, handlers, resetSwipe } = useSwipeGesture({
-    onSwipeLeft: () => onDelete(email.id),
-    threshold: 80,
-    preventScrollOnSwipe: true,
-  })
+  const [lookupContact, setLookupContact] = useState<Contact | null>(null)
+  const [lookupTried, setLookupTried] = useState(false)
+
 
   const handleClick = (e: React.MouseEvent) => {
-    // Prevent click if we're in the middle of a swipe
-    if (swipeState.isSwipeActive || swipeState.isSwiped) {
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
-
     if (selectionMode) {
       onSelectionToggle?.(email.id)
     } else {
-      onEmailClick(email)
+      // Navigate directly to single-column email view
+      onOpenThread?.(email)
     }
+  }
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onOpenThread?.(email)
   }
 
   const handleContactClick = (e: React.MouseEvent, contact: Contact) => {
     e.stopPropagation()
-    if (!swipeState.isSwipeActive) {
-      onContactClick?.(contact)
-    }
+    onContactClick?.(contact)
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onDelete(email.id)
   }
 
   const getClassificationBadge = (classification: string, confidence: number | null) => {
@@ -164,45 +168,70 @@ export const EmailListItem: React.FC<EmailListItemProps> = ({
   }
 
   const isUnread = email.processing_status !== 'completed'
-  const contact = getContactInfo(email)
+  const contact = getContactInfo(email) || lookupContact || null
   const campaign = getCampaignInfo(email)
+
+  // Prefer showing the other participant. If the IMAP record's from equals the
+  // account email, fall back to a recipient that isn't the account (from `to_address`).
+  const extractFirstEmail = (value?: string) => {
+    if (!value) return ''
+    // Try angle-bracket first
+    const m = value.match(/<([^>]+)>/)
+    if (m) return m[1].trim()
+    // Fallback simple email pattern
+    const m2 = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+    return m2 ? m2[0] : value
+  }
+
+  const accountEmail = (email.email_accounts?.email || '').toLowerCase()
+  const fromAddr = extractFirstEmail(email.from_address).toLowerCase()
+  const toAddr = extractFirstEmail(email.to_address).toLowerCase()
+
+  const counterpartyEmail = useMemo(() => {
+    if (accountEmail && fromAddr === accountEmail) {
+      if (toAddr && toAddr !== accountEmail) return toAddr
+    }
+    return fromAddr
+  }, [accountEmail, fromAddr, toAddr])
+
+  // Lookup contact by counterparty email if not provided via relations
+  useEffect(() => {
+    const doLookup = async () => {
+      if (contact || lookupTried || !counterpartyEmail) return
+      try {
+        setLookupTried(true)
+        const resp = await fetch(`/api/contacts/lookup?email=${encodeURIComponent(counterpartyEmail)}`)
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data?.contact) setLookupContact(data.contact)
+        }
+      } catch {}
+    }
+    doLookup()
+  }, [contact, counterpartyEmail, lookupTried])
+
+  const displayFrom = (() => {
+    // If the sender appears to be the account itself, show the counterparty
+    if (accountEmail && fromAddr === accountEmail) {
+      if (contact) return `${getContactDisplayName(contact)} <${contact.email}>`
+      if (toAddr && toAddr !== accountEmail) return email.to_address as string
+    }
+    if (contact) return `${getContactDisplayName(contact)} <${counterpartyEmail || extractFirstEmail(email.from_address)}>`
+    return email.from_address
+  })()
 
   return (
     <div className="relative">
-      {/* Delete Action Background */}
-      <motion.div
-        className="absolute inset-0 bg-red-500 rounded-xl flex items-center justify-end px-6"
-        initial={{ opacity: 0 }}
-        animate={{ 
-          opacity: swipeState.translateX < -40 ? 1 : 0,
-        }}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="flex items-center gap-2 text-white font-medium">
-          <Trash2 className="h-5 w-5" />
-          <span>Delete</span>
-        </div>
-      </motion.div>
-
       {/* Email Item */}
-      <motion.div
+      <div
         className={`
           relative bg-white border border-slate-200 rounded-xl shadow-sm 
           transition-all duration-200 cursor-pointer
           ${isSelected ? 'ring-2 ring-blue-500 border-blue-300' : 'hover:shadow-md hover:border-slate-300'}
           ${isUnread ? 'border-l-4 border-l-blue-500' : ''}
         `}
-        animate={{
-          x: swipeState.translateX,
-          scale: swipeState.isSwipeActive ? 0.98 : 1,
-        }}
-        transition={{ 
-          type: "spring",
-          stiffness: 300,
-          damping: 30 
-        }}
         onClick={handleClick}
-        {...handlers}
+        onDoubleClick={handleDoubleClick}
       >
         <div className="p-4">
           <div className="flex items-start gap-4">
@@ -235,7 +264,7 @@ export const EmailListItem: React.FC<EmailListItemProps> = ({
                     truncate text-sm
                     ${isUnread ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}
                   `}>
-                    {email.from_address}
+                    {displayFrom}
                   </p>
                   {getClassificationBadge(email.classification_status, email.classification_confidence)}
                 </div>
@@ -252,20 +281,9 @@ export const EmailListItem: React.FC<EmailListItemProps> = ({
                 {email.subject || '(No Subject)'}
               </h3>
 
-              {/* Metadata Row */}
-              {(contact || campaign) && (
-                <div className="flex items-center gap-4 mb-2 text-xs text-slate-600">
-                  {contact && (
-                    <button
-                      className="inline-flex items-center gap-1.5 hover:text-blue-600 transition-colors"
-                      onClick={(e) => handleContactClick(e, contact)}
-                    >
-                      <User className="h-3 w-3" />
-                      <span className="truncate max-w-32">
-                        {getContactDisplayName(contact)}
-                      </span>
-                    </button>
-                  )}
+              {/* Metadata Row (Gmail-style) */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-4 text-xs text-slate-600 min-w-0">
                   {campaign && (
                     <span className="inline-flex items-center gap-1.5 text-blue-600">
                       <Target className="h-3 w-3" />
@@ -273,7 +291,40 @@ export const EmailListItem: React.FC<EmailListItemProps> = ({
                     </span>
                   )}
                 </div>
-              )}
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  {contact ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={(e) => handleContactClick(e as any, contact)}
+                    >
+                      View Contact
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="secondary" 
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const evt = new CustomEvent('inbox:add-contact', { detail: { email: counterpartyEmail } })
+                        window.dispatchEvent(evt)
+                      }}
+                    >
+                      Add Contact
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={handleDeleteClick}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
 
               {/* Preview */}
               <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
@@ -282,7 +333,7 @@ export const EmailListItem: React.FC<EmailListItemProps> = ({
             </div>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }

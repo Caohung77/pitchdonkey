@@ -11,7 +11,8 @@ import {
   CheckSquare,
   Square,
   MoreHorizontal,
-  UserPlus
+  UserPlus,
+  MessageSquare
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -31,6 +32,7 @@ import { ContactViewModal } from '@/components/contacts/ContactViewModal'
 import { AddContactModal } from '@/components/contacts/AddContactModal'
 import { EmailListItem } from '@/components/EmailListItem'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 
 interface EmailAccount {
   id: string
@@ -73,12 +75,15 @@ interface IncomingEmail {
 }
 
 export default function InboxPage() {
+  const router = useRouter()
   const [emails, setEmails] = useState<IncomingEmail[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null)
+  const [emailThread, setEmailThread] = useState<IncomingEmail[]>([])
+  const [loadingThread, setLoadingThread] = useState(false)
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([])
   const [selectedAccount, setSelectedAccount] = useState<string>('all')
   const [syncing, setSyncing] = useState(false)
@@ -90,7 +95,9 @@ export default function InboxPage() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [isContactModalOpen, setIsContactModalOpen] = useState(false)
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
+  const [addContactInitialData, setAddContactInitialData] = useState<any | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
+  const [mobileView, setMobileView] = useState<'email' | 'thread'>('email')
 
   // Auto-sync functionality
   useEffect(() => {
@@ -121,6 +128,18 @@ export default function InboxPage() {
     fetchEmails()
     fetchEmailAccounts()
   }, [selectedAccount, filter, searchTerm])
+
+  // Listen for add-contact requests from list items
+  useEffect(() => {
+    const handler = (e: any) => {
+      const email = e?.detail?.email
+      if (!email) return
+      setAddContactInitialData({ email })
+      setIsAddContactModalOpen(true)
+    }
+    window.addEventListener('inbox:add-contact' as any, handler)
+    return () => window.removeEventListener('inbox:add-contact' as any, handler)
+  }, [])
 
   const preloadContactsForEmails = async (emailList: IncomingEmail[]) => {
     const emailsNeedingContacts = emailList.filter(email => {
@@ -336,6 +355,36 @@ export default function InboxPage() {
     setSelectedContact(null)
   }
 
+  const fetchEmailThread = async (email: IncomingEmail) => {
+    setLoadingThread(true)
+    try {
+      const response = await fetch(`/api/inbox/thread/${email.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setEmailThread(data.thread || [])
+      } else {
+        // Fallback to just the single email if thread API fails
+        setEmailThread([email])
+      }
+    } catch (error) {
+      console.error('Error fetching email thread:', error)
+      // Fallback to just the single email
+      setEmailThread([email])
+    } finally {
+      setLoadingThread(false)
+    }
+  }
+
+  const handleEmailClick = async (email: IncomingEmail) => {
+    setSelectedEmail(email)
+    await fetchEmailThread(email)
+  }
+
+  const closeEmailView = () => {
+    setSelectedEmail(null)
+    setEmailThread([])
+  }
+
   const filteredEmails = emails // Server-side filtering now handles all filters
 
   if (loading) {
@@ -510,67 +559,190 @@ export default function InboxPage() {
         )}
       </div>
 
-      {/* Email List */}
-      <div className="flex-1 overflow-auto p-6">
-        {filteredEmails.length === 0 ? (
-          <div className="text-center py-16">
-            <Mail className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-lg font-medium text-gray-900 mb-2">No emails found</p>
-            <p className="text-gray-600">Try adjusting your search or filter criteria</p>
-          </div>
-        ) : (
-          <div className="space-y-2 max-w-4xl mx-auto">
-            {filteredEmails.map((email) => (
-              <EmailListItem
-                key={email.id}
-                email={email}
-                onEmailClick={setSelectedEmail}
-                onDelete={deleteEmail}
-                onContactClick={handleContactClick}
-                isSelected={selectedEmails.has(email.id)}
-                selectionMode={selectionMode}
-                onSelectionToggle={toggleEmailSelection}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Email Detail Modal */}
-      {selectedEmail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-auto">
-            <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold truncate">
-                {selectedEmail.subject || '(No Subject)'}
-              </h2>
-              <Button variant="outline" onClick={() => setSelectedEmail(null)}>
-                Close
-              </Button>
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {selectedEmail ? (
+          /* Two Column Email View - Responsive */
+          <div className="flex flex-col lg:flex-row w-full h-full">
+            {/* Mobile Toggle Buttons */}
+            <div className="lg:hidden bg-white border-b border-gray-200 p-4">
+              <div className="flex rounded-lg bg-gray-100 p-1">
+                <button
+                  className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    mobileView === 'email'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  onClick={() => setMobileView('email')}
+                >
+                  Email
+                </button>
+                <button
+                  className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    mobileView === 'thread'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  onClick={() => setMobileView('thread')}
+                >
+                  Thread ({emailThread.length})
+                </button>
+              </div>
             </div>
-            <div className="p-6">
-              <div className="mb-4">
-                <p className="font-medium text-gray-900">{selectedEmail.from_address}</p>
-                <p className="text-sm text-gray-600">
-                  {new Date(selectedEmail.date_received).toLocaleString()}
+
+            {/* Left Column - Email Content */}
+            <div className={`
+              lg:w-1/2 w-full lg:border-r border-gray-200 bg-white overflow-auto
+              ${mobileView === 'thread' ? 'hidden lg:block' : 'block'}
+            `}>
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold truncate pr-4">
+                    {selectedEmail.subject || '(No Subject)'}
+                  </h2>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={closeEmailView}
+                  >
+                    Close
+                  </Button>
+                </div>
+                <div className="mt-2">
+                  <p className="font-medium text-gray-900 text-sm">{selectedEmail.from_address}</p>
+                  <p className="text-xs text-gray-600">
+                    {new Date(selectedEmail.date_received).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                <div className="prose max-w-none">
+                  {selectedEmail.html_content ? (
+                    <div 
+                      className="email-content"
+                      dangerouslySetInnerHTML={{ __html: selectedEmail.html_content }}
+                    />
+                  ) : (
+                    <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">
+                      {selectedEmail.text_content || 'No content available'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* Right Column - Email Thread */}
+            <div className={`
+              lg:w-1/2 w-full bg-gray-50 overflow-auto
+              ${mobileView === 'email' ? 'hidden lg:block' : 'block'}
+            `}>
+              <div className="sticky top-0 bg-gray-50 border-b border-gray-200 p-4 z-10">
+                <h3 className="text-md font-semibold text-gray-900">Conversation</h3>
+                <p className="text-xs text-gray-600 mt-1">
+                  {emailThread.length} message{emailThread.length !== 1 ? 's' : ''} in thread
                 </p>
               </div>
-              <div className="prose max-w-none">
-                {selectedEmail.html_content ? (
-                  <div 
-                    className="email-content"
-                    dangerouslySetInnerHTML={{ __html: selectedEmail.html_content }}
-                  />
-                ) : (
-                  <div className="whitespace-pre-wrap">
-                    {selectedEmail.text_content || 'No content available'}
+              
+              <div className="p-4 space-y-4">
+                {loadingThread ? (
+                  <div className="flex items-center justify-center h-32">
+                    <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
                   </div>
+                ) : emailThread.length === 0 ? (
+                  <div className="text-center py-8">
+                    <MessageSquare className="h-8 w-8 mx-auto mb-3 text-gray-400" />
+                    <p className="text-sm text-gray-600">No thread messages found</p>
+                  </div>
+                ) : (
+                  emailThread.map((threadEmail, index) => (
+                    <div 
+                      key={threadEmail.id}
+                      className={`
+                        border rounded-lg p-4 transition-colors
+                        ${threadEmail.id === selectedEmail.id 
+                          ? 'bg-blue-50 border-blue-200' 
+                          : 'bg-white border-gray-200 hover:bg-gray-50'
+                        }
+                      `}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {threadEmail.from_address}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {new Date(threadEmail.date_received).toLocaleString()}
+                          </p>
+                        </div>
+                        {threadEmail.id === selectedEmail.id && (
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <h4 className="text-sm font-medium text-gray-800 mb-2 line-clamp-2">
+                        {threadEmail.subject || '(No Subject)'}
+                      </h4>
+                      
+                      <div className="text-xs text-gray-600 line-clamp-3">
+                        {threadEmail.text_content || 
+                         threadEmail.html_content?.replace(/<[^>]*>/g, '')?.substring(0, 150) || 
+                         'No preview available'}
+                      </div>
+                      
+                      {threadEmail.id !== selectedEmail.id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="mt-2 text-xs"
+                          onClick={() => {
+                            handleEmailClick(threadEmail)
+                            // Switch to email view on mobile when clicking a thread item
+                            if (window.innerWidth < 1024) {
+                              setMobileView('email')
+                            }
+                          }}
+                        >
+                          View this email
+                        </Button>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          /* Email List */
+          <div className="w-full p-6 overflow-auto">
+            {filteredEmails.length === 0 ? (
+              <div className="text-center py-16">
+                <Mail className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-lg font-medium text-gray-900 mb-2">No emails found</p>
+                <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredEmails.map((email) => (
+                  <EmailListItem
+                    key={email.id}
+                    email={email}
+                    onEmailClick={handleEmailClick}
+                    onOpenThread={(e) => router.push(`/dashboard/inbox/${e.id}`)}
+                    onDelete={deleteEmail}
+                    onContactClick={handleContactClick}
+                    isSelected={selectedEmails.has(email.id)}
+                    selectionMode={selectionMode}
+                    onSelectionToggle={toggleEmailSelection}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Contact View Modal */}
       {isContactModalOpen && selectedContact && (
@@ -584,10 +756,16 @@ export default function InboxPage() {
       {/* Add Contact Modal */}
       <AddContactModal
         isOpen={isAddContactModalOpen}
-        onClose={() => setIsAddContactModalOpen(false)}
-        onContactAdded={() => {
-          // Refresh contacts data if needed
+        onClose={() => {
           setIsAddContactModalOpen(false)
+          setAddContactInitialData(null)
+        }}
+        initialData={addContactInitialData || undefined}
+        onContactAdded={async () => {
+          setIsAddContactModalOpen(false)
+          setAddContactInitialData(null)
+          // Refresh to show newly recognized names
+          await fetchEmails()
         }}
       />
     </div>

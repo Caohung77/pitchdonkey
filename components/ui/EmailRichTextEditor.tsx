@@ -31,6 +31,8 @@ export interface EmailRichTextEditorProps {
   readOnly?: boolean
   showPreview?: boolean
   onPreviewToggle?: (show: boolean) => void
+  hideVariables?: boolean
+  focusAtStart?: boolean
 }
 
 // Email-safe variables that can be inserted
@@ -53,7 +55,9 @@ export function EmailRichTextEditor({
   minHeight = '300px',
   readOnly = false,
   showPreview = false,
-  onPreviewToggle
+  onPreviewToggle,
+  hideVariables = false,
+  focusAtStart = false
 }: EmailRichTextEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -123,6 +127,15 @@ export function EmailRichTextEditor({
       editor.commands.setContent(value)
     }
   }, [value, editor])
+
+  // Handle focus at start when requested
+  useEffect(() => {
+    if (focusAtStart && editor && !readOnly) {
+      setTimeout(() => {
+        editor.chain().focus().setTextSelection(0).run()
+      }, 100)
+    }
+  }, [focusAtStart, editor, readOnly])
 
   const insertVariable = (variable: keyof typeof EMAIL_VARIABLES) => {
     if (!editor) return
@@ -359,7 +372,7 @@ export function EmailRichTextEditor({
       )}
 
       {/* Variable Insertion Bar */}
-      {!readOnly && (
+      {!readOnly && !hideVariables && (
         <div className="px-3 py-2 bg-blue-50 border-b border-gray-300">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-blue-900">Variables:</span>

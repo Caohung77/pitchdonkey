@@ -67,12 +67,6 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="white-space: pre-wrap;">${message.replace(/\n/g, '<br>')}</div>
-              
-              <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-              
-              <p style="color: #6b7280; font-size: 12px;">
-                This test email was sent from ColdReach Pro using the email account: ${account.email}
-              </p>
             </div>
           `
         })
