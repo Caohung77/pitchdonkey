@@ -43,6 +43,45 @@ export class PerplexityService {
   }
 
   /**
+   * Verify that a website is reachable and likely valid.
+   * Tries the provided URL; if it fails and the host has/hasn't "www.", tries the alternate.
+   */
+  static async verifyWebsiteAccessible(url: string): Promise<{ ok: boolean; finalUrl?: string }> {
+    const tryFetch = async (u: string) => {
+      try {
+        const resp = await fetch(u, { method: 'GET', redirect: 'follow' })
+        if (resp.ok) {
+          const ct = resp.headers.get('content-type') || ''
+          // Consider it accessible if it's HTML or unknown but 200
+          if (ct.includes('text/html') || ct === '') {
+            return { ok: true as const, finalUrl: resp.url || u }
+          }
+        }
+        return { ok: false as const }
+      } catch {
+        return { ok: false as const }
+      }
+    }
+
+    // Try original
+    const first = await tryFetch(url)
+    if (first.ok) return first
+
+    // Toggle www variant
+    try {
+      const u = new URL(url)
+      const host = u.host
+      const hasWww = host.startsWith('www.')
+      const altHost = hasWww ? host.replace(/^www\./, '') : `www.${host}`
+      u.host = altHost
+      const second = await tryFetch(u.toString())
+      if (second.ok) return second
+    } catch {}
+
+    return { ok: false }
+  }
+
+  /**
    * Analyze website content using Perplexity AI
    */
   async analyzeWebsite(websiteUrl: string): Promise<EnrichmentData> {
@@ -178,6 +217,7 @@ EXTRACTION RULES:
 3. Do NOT infer, assume, or deduce information from domain names or context
 4. If information is not clearly stated, leave fields empty
 5. Return only the JSON schema below
+6. If the website is not reachable or provides no relevant content, return all fields empty (do NOT guess)
 
 EXTRACTION STRATEGY:
 - Read homepage, about page, services/products pages, team page
@@ -189,10 +229,16 @@ EXTRACTION STRATEGY:
 INDUSTRY CLASSIFICATION GUIDANCE:
 For accurate industry classification, look for these keywords:
 - AI/Automation: "KI", "Künstliche Intelligenz", "AI", "artificial intelligence", "automation", "chatbots", "agents", "machine learning", "ML"
-- Digital Marketing: "marketing", "lead generation", "SEO", "social media", "advertising", "campaigns" 
+- Digital Marketing (ONLY if explicitly mentioned): "marketing", "online marketing", "seo", "content marketing", "social media", "werbung", "kampagnen", "agentur" (marketing context)
 - Software Development: "software development", "web development", "app development", "programming"
 - Consulting: "beratung", "consulting", "strategy", "business consulting"
-- German Business Terms: "dienstleistungen", "lösungen", "entwicklung", "beratung", "agentur"
+- Craftsmanship: "tischler", "tischlerei", "schreiner", "schreinerei", "handwerk", "möbelbau", "innenausbau"
+- German Business Terms: "dienstleistungen", "lösungen", "entwicklung", "beratung"
+
+STRICT NEGATIVE RULES:
+- Never label as "Digital Marketing" unless the site explicitly uses marketing-related terms above.
+- If the site uses craftsmanship terms (e.g., "Tischlerei", "Schreinerei"), classify as "Carpentry/Joinery" or a precise craft category.
+- If explicit industry is absent, leave "industry" empty rather than guessing.
 
 OUTPUT FORMAT (MANDATORY):
 Return ONLY this JSON structure with extracted facts:

@@ -16,6 +16,40 @@ interface EnrichmentResult {
   error?: string
   contact_id: string
   website_url: string
+  enrichment_source?: 'website' | 'email'
+}
+
+// Personal email domains that should be skipped for business enrichment
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+  'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'freenet.de',
+  'aol.com', 'live.com', 'me.com', 'msn.com', 'ymail.com',
+  'protonmail.com', 'tutanota.com', '1und1.de', 'arcor.de'
+])
+
+/**
+ * Extract domain from email address
+ * Example: claus.overloeper@koeppen-du.de → koeppen-du.de
+ */
+function extractDomainFromEmail(email: string): string | null {
+  const emailRegex = /^[^\s@]+@([^\s@]+\.[^\s@]+)$/
+  const match = email.match(emailRegex)
+  return match ? match[1].toLowerCase() : null
+}
+
+/**
+ * Check if domain is a personal email provider
+ */
+function isPersonalEmailDomain(domain: string): boolean {
+  return PERSONAL_EMAIL_DOMAINS.has(domain.toLowerCase())
+}
+
+/**
+ * Convert domain to website URL
+ * Example: koeppen-du.de → https://www.koeppen-du.de
+ */
+function convertDomainToWebsiteUrl(domain: string): string {
+  return `https://www.${domain}`
 }
 
 export class ContactEnrichmentService {
@@ -37,7 +71,7 @@ export class ContactEnrichmentService {
       // 1. Get the contact and validate ownership
       const { data: contact, error: contactError } = await supabase
         .from('contacts')
-        .select('id, website, company, enrichment_status, enrichment_data')
+        .select('id, website, email, company, enrichment_status, enrichment_data')
         .eq('id', contactId)
         .eq('user_id', userId)
         .single()
@@ -52,37 +86,91 @@ export class ContactEnrichmentService {
         }
       }
 
-      // 2. Validate website URL exists
-      if (!contact.website) {
-        console.error('❌ No website URL found for contact')
+      // 2. Determine enrichment strategy: website-first, then email fallback
+      let websiteUrl: string
+      let enrichmentSource: 'website' | 'email' = 'website'
+
+      if (contact.website) {
+        // Strategy 1: Use existing website URL
+        try {
+          websiteUrl = PerplexityService.normalizeWebsiteUrl(contact.website)
+          console.log(`🌐 Using existing website URL: ${websiteUrl}`)
+        } catch (error) {
+          console.error('❌ Invalid website URL format:', contact.website)
+          return {
+            success: false,
+            error: 'Invalid website URL format',
+            contact_id: contactId,
+            website_url: contact.website
+          }
+        }
+        // Verify accessibility; if not reachable, treat as no website
+        const access = await PerplexityService.verifyWebsiteAccessible(websiteUrl)
+        if (!access.ok) {
+          console.warn('⚠️ Provided website appears inaccessible, will attempt email-derived domain if available')
+          websiteUrl = '' as any
+        }
+      }
+
+      if (!websiteUrl && contact.email) {
+        // Strategy 2: Extract domain from email and convert to website URL
+        const domain = extractDomainFromEmail(contact.email)
+
+        if (!domain) {
+          console.error('❌ Invalid email format:', contact.email)
+          return {
+            success: false,
+            error: 'Invalid email format',
+            contact_id: contactId,
+            website_url: ''
+          }
+        }
+
+        if (isPersonalEmailDomain(domain)) {
+          console.error('❌ Personal email domain detected:', domain)
+          return {
+            success: false,
+            error: 'Personal email domain - no business website to enrich',
+            contact_id: contactId,
+            website_url: ''
+          }
+        }
+
+        // Try with and without www variant, verifying accessibility
+        const candidate1 = convertDomainToWebsiteUrl(domain)
+        const candidate2 = `https://${domain}`
+        const access1 = await PerplexityService.verifyWebsiteAccessible(candidate1)
+        const access2 = access1.ok ? access1 : await PerplexityService.verifyWebsiteAccessible(candidate2)
+
+        if (access1.ok || access2.ok) {
+          websiteUrl = (access1.ok ? access1.finalUrl : access2.finalUrl) || (access1.ok ? candidate1 : candidate2)
+          enrichmentSource = 'email'
+          console.log(`📧 Derived and verified website URL from email ${contact.email}: ${websiteUrl}`)
+        } else {
+          console.warn('⚠️ Derived website from email appears inaccessible; skipping website enrichment')
+          return {
+            success: false,
+            error: 'Could not verify a valid company website from email domain',
+            contact_id: contactId,
+            website_url: ''
+          }
+        }
+      } else {
+        console.error('❌ No website URL or email found for contact')
         return {
           success: false,
-          error: 'No website URL found for this contact',
+          error: 'No website URL or business email found for this contact',
           contact_id: contactId,
           website_url: ''
         }
       }
 
-      // 3. Normalize and validate URL
-      let websiteUrl: string
-      try {
-        websiteUrl = PerplexityService.normalizeWebsiteUrl(contact.website)
-      } catch (error) {
-        console.error('❌ Invalid website URL:', contact.website)
-        return {
-          success: false,
-          error: 'Invalid website URL format',
-          contact_id: contactId,
-          website_url: contact.website
-        }
-      }
+      console.log(`🌐 Analyzing website: ${websiteUrl} (source: ${enrichmentSource})`)
 
-      console.log(`🌐 Analyzing website: ${websiteUrl}`)
-
-      // 4. Update status to processing
+      // 3. Update status to processing
       await this.updateEnrichmentStatus(contactId, 'pending')
 
-      // 5. Analyze website with Perplexity
+      // 4. Analyze website with Perplexity
       const enrichmentData = await this.perplexityService.analyzeWebsite(websiteUrl)
 
       // If nothing useful was extracted, mark as failed and do not label as enriched
@@ -105,7 +193,7 @@ export class ContactEnrichmentService {
         }
       }
 
-      // 6. Save enrichment data to database and overwrite company field
+      // 5. Save enrichment data to database and overwrite company field
       const { error: updateError } = await supabase
         .from('contacts')
         .update({
@@ -129,12 +217,13 @@ export class ContactEnrichmentService {
         }
       }
 
-      console.log('✅ Contact enrichment completed successfully')
+      console.log(`✅ Contact enrichment completed successfully (source: ${enrichmentSource})`)
       return {
         success: true,
         data: enrichmentData,
         contact_id: contactId,
-        website_url: websiteUrl
+        website_url: websiteUrl,
+        enrichment_source: enrichmentSource
       }
 
     } catch (error) {
@@ -196,13 +285,15 @@ export class ContactEnrichmentService {
     canEnrich: boolean
     reason?: string
     hasWebsite: boolean
+    hasBusinessEmail: boolean
     currentStatus?: string
+    enrichmentSource?: 'website' | 'email'
   }> {
     const supabase = await createServerSupabaseClient()
 
     const { data: contact, error } = await supabase
       .from('contacts')
-      .select('website, enrichment_status')
+      .select('website, email, enrichment_status')
       .eq('id', contactId)
       .eq('user_id', userId)
       .single()
@@ -211,18 +302,52 @@ export class ContactEnrichmentService {
       return {
         canEnrich: false,
         reason: 'Contact not found',
-        hasWebsite: false
+        hasWebsite: false,
+        hasBusinessEmail: false
       }
     }
 
     const hasWebsite = !!contact.website
     const isProcessing = contact.enrichment_status === 'pending'
 
+    // Check if contact has a business email (non-personal domain)
+    let hasBusinessEmail = false
+    let businessEmailDomain: string | null = null
+
+    if (contact.email) {
+      businessEmailDomain = extractDomainFromEmail(contact.email)
+      hasBusinessEmail = !!(businessEmailDomain && !isPersonalEmailDomain(businessEmailDomain))
+    }
+
+    // Contact can be enriched if it has either a website OR a business email
+    const canEnrich = (hasWebsite || hasBusinessEmail) && !isProcessing
+
+    // Determine enrichment source and reason
+    let reason: string | undefined
+    let enrichmentSource: 'website' | 'email' | undefined
+
+    if (isProcessing) {
+      reason = 'Already processing'
+    } else if (!hasWebsite && !hasBusinessEmail) {
+      if (!contact.email) {
+        reason = 'No website URL or email address'
+      } else if (businessEmailDomain && isPersonalEmailDomain(businessEmailDomain)) {
+        reason = 'Personal email domain detected'
+      } else {
+        reason = 'Invalid email format'
+      }
+    } else {
+      // Determine which source will be used
+      enrichmentSource = hasWebsite ? 'website' : 'email'
+    }
+
     return {
-      canEnrich: hasWebsite && !isProcessing,
-      reason: !hasWebsite ? 'No website URL' : isProcessing ? 'Already processing' : undefined,
+      canEnrich,
+      reason,
       hasWebsite,
-      currentStatus: contact.enrichment_status
+      hasBusinessEmail,
+      currentStatus: contact.enrichment_status,
+      enrichmentSource
     }
   }
 
