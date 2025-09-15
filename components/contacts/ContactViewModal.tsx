@@ -23,7 +23,9 @@ import {
   Hash,
   Clock4,
   Award,
-  FileText
+  FileText,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseCompanyName } from '@/lib/contact-utils'
@@ -52,6 +54,15 @@ export function ContactViewModal({
   // Notes state management
   const [notes, setNotes] = useState<string>('')
   const [notesLoading, setNotesLoading] = useState(false)
+  const [campaignsLoading, setCampaignsLoading] = useState(false)
+  const [campaignHistory, setCampaignHistory] = useState<any[]>([])
+  const [campaignPage, setCampaignPage] = useState(1)
+  const [campaignPagination, setCampaignPagination] = useState<{
+    page: number
+    limit: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  } | null>(null)
 
   useEffect(() => {
     const fetchLatest = async () => {
@@ -87,6 +98,35 @@ export function ContactViewModal({
     }
     fetchLatest()
   }, [isOpen, contact?.id])
+
+  // Load campaign history for the contact when opening or page changes
+  useEffect(() => {
+    const loadCampaigns = async () => {
+      if (!isOpen || !contact?.id) return
+      try {
+        setCampaignsLoading(true)
+        const resp = await fetch(`/api/contacts/${contact.id}/campaigns?page=${campaignPage}&limit=5`)
+        if (resp.ok) {
+          const json = await resp.json()
+          setCampaignHistory(json.campaigns || [])
+          setCampaignPagination(json.pagination || null)
+        } else {
+          setCampaignHistory([])
+          setCampaignPagination(null)
+        }
+      } finally {
+        setCampaignsLoading(false)
+      }
+    }
+    loadCampaigns()
+  }, [isOpen, contact?.id, campaignPage])
+
+  // Reset pagination when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCampaignPage(1)
+    }
+  }, [isOpen])
 
   const hydratedContact: Contact = latestContact || contact
   
@@ -1283,55 +1323,71 @@ export function ContactViewModal({
                 <Send className="h-4 w-4 text-gray-500" />
                 <h3 className="text-lg font-medium text-gray-900">Campaign History</h3>
               </div>
-              
-              {/* TODO: This will be populated with actual campaign data */}
-              <div className="text-center py-8 bg-gray-50 rounded-lg">
-                <Send className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600 mb-2">No campaign history</p>
-                <p className="text-sm text-gray-500">This contact hasn't been included in any campaigns yet</p>
-              </div>
-
-              {/* Example of what campaign history would look like when implemented */}
-              {false && (
+              {campaignsLoading ? (
+                <div className="text-center py-8 text-gray-500">Loading campaigns…</div>
+              ) : campaignHistory.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <Send className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 mb-2">No campaign history</p>
+                  <p className="text-sm text-gray-500">This contact hasn't been included in any campaigns yet</p>
+                </div>
+              ) : (
                 <div className="space-y-3">
-                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="font-semibold text-blue-900">Welcome Series Campaign</h4>
-                        <p className="text-sm text-blue-700">3-step email sequence</p>
+                  {campaignHistory.map((c: any) => (
+                    <div key={c.id} className="p-4 bg-white rounded-lg border">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{c.name}</h4>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Joined {new Date(c.joined_at).toLocaleDateString()} • Step {c.current_step || 0}
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="text-xs">{c.status}</Badge>
                       </div>
-                      <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
-                        Completed
-                      </Badge>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-xs text-gray-700">
+                        <div>Sent: <span className="font-medium">{c.emails_sent || 0}</span></div>
+                        <div>Opened: <span className="font-medium">{c.emails_opened || 0}</span></div>
+                        <div>Clicked: <span className="font-medium">{c.emails_clicked || 0}</span></div>
+                        <div>Replied: <span className="font-medium">{c.emails_replied || 0}</span></div>
+                      </div>
+                      {(c.last_sent_at || c.last_open_at || c.last_reply_at || c.last_click_at) && (
+                        <div className="text-xs text-gray-500 mt-2">
+                          {c.last_sent_at && <span className="mr-3">Last sent: {new Date(c.last_sent_at).toLocaleString()}</span>}
+                          {c.last_open_at && <span className="mr-3">Last open: {new Date(c.last_open_at).toLocaleString()}</span>}
+                          {c.last_click_at && <span className="mr-3">Last click: {new Date(c.last_click_at).toLocaleString()}</span>}
+                          {c.last_reply_at && <span>Last reply: {new Date(c.last_reply_at).toLocaleString()}</span>}
+                        </div>
+                      )}
                     </div>
-                    
-                    <div className="space-y-2 mt-3">
-                      <div className="flex items-center justify-between p-2 bg-white rounded border">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm">Email 1: Welcome & Introduction</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span>Sent 2 days ago</span>
-                          <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
-                            Opened
-                          </Badge>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between p-2 bg-white rounded border">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm">Email 2: Product Features</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span>Sent 1 day ago</span>
-                          <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
-                            Delivered
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Pagination Controls */}
+              {campaignPagination && (campaignPagination.hasNextPage || campaignPagination.hasPrevPage) && !campaignsLoading && (
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="text-sm text-gray-600">
+                    Page {campaignPagination.page}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!campaignPagination.hasPrevPage}
+                      onClick={() => setCampaignPage(campaignPage - 1)}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!campaignPagination.hasNextPage}
+                      onClick={() => setCampaignPage(campaignPage + 1)}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               )}
