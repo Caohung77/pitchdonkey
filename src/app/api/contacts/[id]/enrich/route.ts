@@ -17,16 +17,19 @@ export const POST = withAuth(async (request: NextRequest, user, { params }: { pa
 
     // Check if contact can be enriched
     const canEnrich = await enrichmentService.canEnrichContact(contactId, user.id)
-    
+
     if (!canEnrich.canEnrich) {
       console.log(`❌ Cannot enrich contact ${contactId}: ${canEnrich.reason}`)
+      // Business-rule validation: return 200 with success=false so clients can handle gracefully
       return createSuccessResponse({
         success: false,
         error: canEnrich.reason,
         canEnrich: false,
         hasWebsite: canEnrich.hasWebsite,
-        currentStatus: canEnrich.currentStatus
-      }, 400)
+        hasBusinessEmail: canEnrich.hasBusinessEmail,
+        currentStatus: canEnrich.currentStatus,
+        enrichmentSource: canEnrich.enrichmentSource
+      }, 200)
     }
 
     // Perform enrichment
@@ -34,12 +37,13 @@ export const POST = withAuth(async (request: NextRequest, user, { params }: { pa
 
     if (!result.success) {
       console.log(`❌ Enrichment failed for contact ${contactId}: ${result.error}`)
+      // Operational failure but not a protocol error: return 200 with success=false
       return createSuccessResponse({
         success: false,
         error: result.error,
         contact_id: result.contact_id,
         website_url: result.website_url
-      }, 400)
+      }, 200)
     }
 
     console.log(`✅ Enrichment completed successfully for contact ${contactId}`)
@@ -49,7 +53,8 @@ export const POST = withAuth(async (request: NextRequest, user, { params }: { pa
       message: 'Contact enriched successfully',
       contact_id: result.contact_id,
       website_url: result.website_url,
-      enrichment_data: result.data
+      enrichment_data: result.data,
+      enrichment_source: result.enrichment_source
     })
 
   } catch (error) {
@@ -82,6 +87,8 @@ export const GET = withAuth(async (request: NextRequest, user, { params }: { par
       enrichment_updated_at: enrichmentData.enrichment_updated_at,
       can_enrich: canEnrich.canEnrich,
       has_website: canEnrich.hasWebsite,
+      has_business_email: canEnrich.hasBusinessEmail,
+      enrichment_source: canEnrich.enrichmentSource,
       reason: canEnrich.reason
     })
 

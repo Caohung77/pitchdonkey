@@ -48,7 +48,12 @@ export class ApiClient {
       let errorMessage = `API Error: ${response.status} ${response.statusText}`
       try {
         const errorData = await response.json()
-        console.error('API Error Response:', errorData)
+        // Only log structured error bodies; avoid noisy empty objects
+        if (errorData && typeof errorData === 'object' && Object.keys(errorData).length > 0) {
+          console.error('API Error Response:', errorData)
+        } else {
+          console.error(`API Error ${response.status}: Empty or unstructured error body`)
+        }
 
         // Handle both plain errors and our API envelope: { success, data, error, message }
         const topLevelError = (errorData && (errorData.error || errorData.message || errorData.details)) as string | undefined
@@ -67,8 +72,6 @@ export class ApiClient {
           if (hints.length) {
             errorMessage = `${errorMessage} - ${hints.join(' | ')}`
           }
-        } else if (errorData && typeof errorData === 'object' && Object.keys(errorData).length === 0) {
-          // Empty object body — keep the default message
         }
       } catch (e) {
         // If we can't parse the error response, try text
