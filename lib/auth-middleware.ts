@@ -157,7 +157,14 @@ export function withAuth<T extends any[]>(
           { status: 403 }
         )
       }
-      
+
+      if (error instanceof RateLimitError) {
+        return NextResponse.json(
+          { error: error.message, code: 'RATE_LIMIT_EXCEEDED' },
+          { status: 429 }
+        )
+      }
+
       console.error('Unexpected auth error:', error)
       return NextResponse.json(
         { error: 'Internal server error', code: 'INTERNAL_ERROR' },
