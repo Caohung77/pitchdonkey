@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer'
 
 export const POST = withAuth(async (request: NextRequest, { user, supabase }, { params }) => {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { to, subject, message } = body
 
@@ -84,18 +84,86 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
           }
         }
 
-      } else if (account.provider === 'gmail' || account.provider === 'outlook') {
-        // For OAuth providers, we would use their respective APIs
+      } else if (account.provider === 'gmail') {
+        // Use Gmail API for sending
+        console.log('📧 Gmail send-test: Starting email send process...')
+        console.log('📧 Account details:', {
+          id: account.id,
+          email: account.email,
+          provider: account.provider,
+          hasAccessToken: !!account.access_token,
+          hasRefreshToken: !!account.refresh_token,
+          tokenExpiry: account.token_expires_at
+        })
+
+        const { createGmailIMAPSMTPService } = await import('@/lib/server/gmail-imap-smtp-server')
+
+        const tokens = {
+          access_token: account.access_token,
+          refresh_token: account.refresh_token,
+          expires_at: new Date(account.token_expires_at).getTime(),
+          scope: 'https://mail.google.com/ https://www.googleapis.com/auth/gmail.send',
+          token_type: 'Bearer'
+        }
+
+        console.log('📧 Creating Gmail service with tokens expiring at:', new Date(tokens.expires_at).toISOString())
+        const gmailService = await createGmailIMAPSMTPService(tokens, account.email)
+        console.log('✅ Gmail service created successfully')
+
+        const emailOptions = {
+          to,
+          subject,
+          text: message,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">Test Email from ColdReach Pro</h2>
+              <div style="white-space: pre-wrap; padding: 20px; background: #f9f9f9; border-radius: 8px; margin: 20px 0;">
+                ${message.replace(/\n/g, '<br>')}
+              </div>
+              <p style="color: #666; font-size: 12px;">This is a test email sent via Gmail IMAP/SMTP integration.</p>
+            </div>
+          `
+        }
+
+        console.log('📧 Sending email with options:', {
+          to: emailOptions.to,
+          subject: emailOptions.subject,
+          hasText: !!emailOptions.text,
+          hasHtml: !!emailOptions.html
+        })
+
+        const result = await gmailService.sendEmail(emailOptions)
+
+        console.log('📧 Send result:', {
+          messageId: result.messageId,
+          response: result.response?.substring(0, 100) + '...'
+        })
+
+        sendResult = {
+          success: true,
+          message: 'Test email sent successfully via Gmail API',
+          messageId: result.messageId || `gmail-${Date.now()}`,
+          from: account.email,
+          to,
+          details: {
+            provider: 'gmail',
+            service: 'Gmail IMAP/SMTP',
+            result
+          }
+        }
+
+      } else if (account.provider === 'outlook') {
+        // For Outlook OAuth, we would use Microsoft Graph API
         // For now, return a mock success response
         sendResult = {
           success: true,
-          message: `Test email would be sent via ${account.provider} OAuth`,
-          messageId: `mock-${Date.now()}@${account.provider}.com`,
+          message: `Test email would be sent via Outlook OAuth`,
+          messageId: `mock-${Date.now()}@outlook.com`,
           from: account.email,
           to,
           details: {
             provider: account.provider,
-            note: 'OAuth email sending not yet implemented'
+            note: 'Outlook OAuth email sending not yet implemented'
           }
         }
 

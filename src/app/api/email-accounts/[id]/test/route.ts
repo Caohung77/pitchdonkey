@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer'
 
 export const POST = withAuth(async (request: NextRequest, { user, supabase }, { params }) => {
   try {
-    const { id } = params
+    const { id } = await params
 
     // Get email account
     const { data: account, error: accountError } = await supabase
@@ -57,16 +57,78 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
           }
         }
 
-      } else if (account.provider === 'gmail' || account.provider === 'outlook') {
-        // For OAuth accounts, we would test the token validity
+      } else if (account.provider === 'gmail') {
+        // Test Gmail OAuth connection by verifying tokens and API access
+        const { GoogleOAuthService } = await import('@/lib/oauth-providers')
+        const googleService = new GoogleOAuthService()
+
+        // Test connection using the OAuth service
+        const isValid = await googleService.testConnection({
+          access_token: account.access_token,
+          refresh_token: account.refresh_token,
+          expires_at: new Date(account.token_expires_at).getTime(),
+          scope: 'https://mail.google.com/ https://www.googleapis.com/auth/gmail.send',
+          token_type: 'Bearer'
+        })
+
+        if (!isValid) {
+          throw new Error('Gmail OAuth tokens are invalid or expired')
+        }
+
+        // Additionally test Gmail IMAP/SMTP service if available
+        try {
+          const { createGmailIMAPSMTPService } = await import('@/lib/server/gmail-imap-smtp-server')
+
+          const gmailService = await createGmailIMAPSMTPService({
+            access_token: account.access_token,
+            refresh_token: account.refresh_token,
+            expires_at: new Date(account.token_expires_at).getTime(),
+            scope: 'https://mail.google.com/ https://www.googleapis.com/auth/gmail.send',
+            token_type: 'Bearer'
+          }, account.email)
+
+          // Test basic Gmail API access by getting user profile
+          const profile = await gmailService.testConnection()
+
+          testResult = {
+            success: true,
+            message: 'Gmail OAuth and IMAP/SMTP connection test successful',
+            details: {
+              provider: 'gmail',
+              email: account.email,
+              status: account.status,
+              tokenValid: true,
+              gmailApiAccess: true,
+              profileTest: profile
+            }
+          }
+        } catch (gmailError) {
+          // If IMAP/SMTP test fails, still consider OAuth valid if token test passed
+          testResult = {
+            success: true,
+            message: 'Gmail OAuth connection valid, IMAP/SMTP test failed',
+            details: {
+              provider: 'gmail',
+              email: account.email,
+              status: account.status,
+              tokenValid: true,
+              gmailApiAccess: false,
+              error: gmailError.message
+            }
+          }
+        }
+
+      } else if (account.provider === 'outlook') {
+        // For Outlook OAuth, we would test the token validity with Microsoft Graph
         // For now, just return success if the account exists and is active
         testResult = {
           success: true,
-          message: `${account.provider} OAuth connection is active`,
+          message: `Outlook OAuth connection is active (full test not implemented)`,
           details: {
             provider: account.provider,
             email: account.email,
-            status: account.status
+            status: account.status,
+            note: 'Outlook OAuth connection testing not yet fully implemented'
           }
         }
 

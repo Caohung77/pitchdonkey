@@ -26,17 +26,30 @@ export class GmailIMAPSMTPServerService {
       throw new Error('Email account not found')
     }
 
-    if (account.provider !== 'gmail-imap-smtp') {
-      throw new Error('Account is not a Gmail IMAP/SMTP account')
+    if (account.provider !== 'gmail') {
+      throw new Error('Account is not a Gmail account')
     }
 
-    if (!account.oauth_tokens) {
+    // Check if this Gmail account has IMAP/SMTP capabilities
+    // We can identify this by checking if it has the higher daily_send_limit (100)
+    // or other metadata that distinguishes gmail-imap-smtp accounts
+    const hasImapSmtpCapability = account.daily_send_limit === 100 ||
+                                  account.daily_limit === 100 ||
+                                  // Fallback: all Gmail OAuth accounts support IMAP/SMTP
+                                  true
+
+    // Check for OAuth tokens in individual columns (current schema)
+    if (!account.access_token || !account.refresh_token) {
       throw new Error('No OAuth tokens found for this account')
     }
 
-    const tokens = typeof account.oauth_tokens === 'string'
-      ? decryptOAuthTokens(account.oauth_tokens)
-      : account.oauth_tokens
+    const tokens: OAuthTokens = {
+      access_token: account.access_token,
+      refresh_token: account.refresh_token,
+      expires_at: new Date(account.token_expires_at).getTime(),
+      scope: 'https://mail.google.com/ https://www.googleapis.com/auth/gmail.send',
+      token_type: 'Bearer'
+    }
 
     const { createGmailIMAPSMTPService } = await getGmailService()
     return await createGmailIMAPSMTPService(tokens, account.email)

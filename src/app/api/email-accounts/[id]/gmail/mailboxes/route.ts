@@ -3,10 +3,10 @@ import { GmailIMAPSMTPServerService } from '@/lib/server/gmail-imap-smtp-server'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const accountId = params.id
+    const { id: accountId } = await params
     const gmailService = new GmailIMAPSMTPServerService()
 
     const mailboxes = await gmailService.getGmailMailboxes(accountId)

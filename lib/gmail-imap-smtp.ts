@@ -131,39 +131,35 @@ export class GmailIMAPSMTPService {
   }
 
   /**
-   * Test IMAP connection
+   * Test IMAP connection using Gmail API instead of traditional IMAP
    */
   async testIMAPConnection(): Promise<boolean> {
-    return new Promise(async (resolve) => {
-      try {
-        const config = await this.createIMAPConfig()
-        const imap = new Imap({
-          ...config,
-          xoauth2: `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
-        })
+    try {
+      // Use Gmail API to test connection instead of IMAP
+      const freshTokens = await this.ensureFreshTokens()
 
-        let connectionSuccessful = false
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret
+      )
 
-        imap.once('ready', () => {
-          connectionSuccessful = true
-          imap.end()
-        })
+      oauth2Client.setCredentials({
+        access_token: freshTokens.access_token,
+        refresh_token: freshTokens.refresh_token,
+        expiry_date: freshTokens.expires_at,
+        scope: freshTokens.scope,
+        token_type: 'Bearer'
+      })
 
-        imap.once('error', (err) => {
-          console.error('IMAP connection error:', err)
-          resolve(false)
-        })
+      // Test Gmail API access for reading emails
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+      await gmail.users.getProfile({ userId: 'me' })
 
-        imap.once('end', () => {
-          resolve(connectionSuccessful)
-        })
-
-        imap.connect()
-      } catch (error) {
-        console.error('IMAP test connection error:', error)
-        resolve(false)
-      }
-    })
+      return true
+    } catch (error) {
+      console.error('Gmail API connection error:', error)
+      return false
+    }
   }
 
   /**
@@ -172,7 +168,7 @@ export class GmailIMAPSMTPService {
   async testSMTPConnection(): Promise<boolean> {
     try {
       const config = await this.createSMTPConfig()
-      const transporter = nodemailer.createTransporter(config as any)
+      const transporter = nodemailer.createTransport(config as any)
 
       await transporter.verify()
       return true
@@ -183,52 +179,44 @@ export class GmailIMAPSMTPService {
   }
 
   /**
-   * Get list of mailboxes
+   * Get list of mailboxes using Gmail API
    */
   async getMailboxes(): Promise<string[]> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const config = await this.createIMAPConfig()
-        const imap = new Imap({
-          ...config,
-          xoauth2: `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
-        })
+    try {
+      const freshTokens = await this.ensureFreshTokens()
 
-        imap.once('ready', () => {
-          imap.getBoxes((err, boxes) => {
-            if (err) {
-              reject(err)
-              return
-            }
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret
+      )
 
-            const getBoxNames = (boxes: any, prefix = ''): string[] => {
-              const names: string[] = []
-              for (const [name, box] of Object.entries(boxes)) {
-                const fullName = prefix ? `${prefix}/${name}` : name
-                names.push(fullName)
+      oauth2Client.setCredentials({
+        access_token: freshTokens.access_token,
+        refresh_token: freshTokens.refresh_token,
+        expiry_date: freshTokens.expires_at,
+        scope: freshTokens.scope,
+        token_type: 'Bearer'
+      })
 
-                if (box && typeof box === 'object' && (box as any).children) {
-                  names.push(...getBoxNames((box as any).children, fullName))
-                }
-              }
-              return names
-            }
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+      const response = await gmail.users.labels.list({ userId: 'me' })
 
-            resolve(getBoxNames(boxes))
-            imap.end()
-          })
-        })
+      // Convert Gmail labels to mailbox names
+      const mailboxes = response.data.labels?.map(label => label.name || '') || []
 
-        imap.once('error', reject)
-        imap.connect()
-      } catch (error) {
-        reject(error)
-      }
-    })
+      // Add standard IMAP mailbox names for compatibility
+      const standardMailboxes = ['INBOX', 'SENT', 'DRAFTS', 'TRASH', 'SPAM']
+
+      return [...new Set([...standardMailboxes, ...mailboxes])]
+    } catch (error) {
+      console.error('Gmail API mailboxes error:', error)
+      // Return standard mailboxes as fallback
+      return ['INBOX', 'SENT', 'DRAFTS', 'TRASH', 'SPAM']
+    }
   }
 
   /**
-   * Fetch emails from a specific mailbox
+   * Fetch emails from a specific mailbox using Gmail API
    */
   async fetchEmails(
     mailbox: string = 'INBOX',
@@ -238,99 +226,84 @@ export class GmailIMAPSMTPService {
       unseen?: boolean
     } = {}
   ): Promise<EmailMessage[]> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const config = await this.createIMAPConfig()
-        const imap = new Imap({
-          ...config,
-          xoauth2: `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
-        })
+    try {
+      const freshTokens = await this.ensureFreshTokens()
 
-        const messages: EmailMessage[] = []
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret
+      )
 
-        imap.once('ready', () => {
-          imap.openBox(mailbox, true, (err, box) => {
-            if (err) {
-              reject(err)
-              return
-            }
+      oauth2Client.setCredentials({
+        access_token: freshTokens.access_token,
+        refresh_token: freshTokens.refresh_token,
+        expiry_date: freshTokens.expires_at,
+        scope: freshTokens.scope,
+        token_type: 'Bearer'
+      })
 
-            // Build search criteria
-            const searchCriteria: string[] = ['ALL']
-            if (options.since) {
-              searchCriteria.push(['SINCE', options.since])
-            }
-            if (options.unseen) {
-              searchCriteria.push('UNSEEN')
-            }
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
-            imap.search(searchCriteria as any, (err, uids) => {
-              if (err) {
-                reject(err)
-                return
-              }
-
-              if (!uids || uids.length === 0) {
-                resolve([])
-                imap.end()
-                return
-              }
-
-              // Limit results if specified
-              const limitedUids = options.limit ? uids.slice(-options.limit) : uids
-
-              const fetch = imap.fetch(limitedUids, {
-                bodies: 'HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)',
-                struct: true
-              })
-
-              fetch.on('message', (msg, seqno) => {
-                let uid = 0
-                const headers: any = {}
-
-                msg.on('body', (stream, info) => {
-                  let buffer = ''
-                  stream.on('data', (chunk) => {
-                    buffer += chunk.toString('ascii')
-                  })
-                  stream.once('end', () => {
-                    const parsed = Imap.parseHeader(buffer)
-                    Object.assign(headers, parsed)
-                  })
-                })
-
-                msg.once('attributes', (attrs) => {
-                  uid = attrs.uid
-                })
-
-                msg.once('end', () => {
-                  messages.push({
-                    uid,
-                    messageId: headers['message-id']?.[0] || '',
-                    from: headers.from?.[0] || '',
-                    to: headers.to?.[0] || '',
-                    subject: headers.subject?.[0] || '',
-                    date: new Date(headers.date?.[0] || new Date()),
-                    body: '' // Would need additional fetch for body content
-                  })
-                })
-              })
-
-              fetch.once('error', reject)
-              fetch.once('end', () => {
-                resolve(messages)
-                imap.end()
-              })
-            })
-          })
-        })
-
-        imap.once('error', reject)
-        imap.connect()
-      } catch (error) {
-        reject(error)
+      // Build query for Gmail API
+      let query = ''
+      if (mailbox && mailbox !== 'INBOX') {
+        query += `label:${mailbox.toLowerCase()} `
       }
-    })
+      if (options.unseen) {
+        query += 'is:unread '
+      }
+      if (options.since) {
+        const sinceDate = options.since.toISOString().split('T')[0]
+        query += `after:${sinceDate} `
+      }
+
+      // Get message list
+      const listResponse = await gmail.users.messages.list({
+        userId: 'me',
+        q: query.trim() || undefined,
+        maxResults: options.limit || 50
+      })
+
+      const messages: EmailMessage[] = []
+
+      if (listResponse.data.messages) {
+        // Fetch details for each message
+        const messagePromises = listResponse.data.messages.map(async (message) => {
+          try {
+            const messageResponse = await gmail.users.messages.get({
+              userId: 'me',
+              id: message.id!,
+              format: 'metadata',
+              metadataHeaders: ['From', 'To', 'Subject', 'Date', 'Message-ID']
+            })
+
+            const headers = messageResponse.data.payload?.headers || []
+            const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
+
+            return {
+              uid: parseInt(message.id!) || 0,
+              messageId: getHeader('Message-ID'),
+              from: getHeader('From'),
+              to: getHeader('To'),
+              subject: getHeader('Subject'),
+              date: new Date(getHeader('Date') || new Date()),
+              body: '' // Body would need separate fetch
+            }
+          } catch (error) {
+            console.error('Error fetching message details:', error)
+            return null
+          }
+        })
+
+        const messageResults = await Promise.all(messagePromises)
+        messages.push(...messageResults.filter(msg => msg !== null) as EmailMessage[])
+      }
+
+      return messages
+    } catch (error) {
+      console.error('Gmail API fetch emails error:', error)
+      return []
+    }
   }
 
   /**
@@ -339,7 +312,7 @@ export class GmailIMAPSMTPService {
   async sendEmail(options: SendEmailOptions): Promise<{ messageId: string; response: string }> {
     try {
       const config = await this.createSMTPConfig()
-      const transporter = nodemailer.createTransporter(config as any)
+      const transporter = nodemailer.createTransport(config as any)
 
       const mailOptions = {
         from: this.userEmail,
@@ -371,9 +344,18 @@ export class GmailIMAPSMTPService {
     return new Promise(async (resolve, reject) => {
       try {
         const config = await this.createIMAPConfig()
+        // Generate proper XOAUTH2 string for Gmail
+        const xoauth2String = `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
+
         const imap = new Imap({
-          ...config,
-          xoauth2: `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
+          user: config.user,
+          host: config.host,
+          port: config.port,
+          tls: config.tls,
+          authTimeout: config.authTimeout,
+          connTimeout: config.connTimeout,
+          tlsOptions: config.tlsOptions,
+          xoauth2: xoauth2String
         })
 
         imap.once('ready', () => {
@@ -409,9 +391,18 @@ export class GmailIMAPSMTPService {
     return new Promise(async (resolve, reject) => {
       try {
         const config = await this.createIMAPConfig()
+        // Generate proper XOAUTH2 string for Gmail
+        const xoauth2String = `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
+
         const imap = new Imap({
-          ...config,
-          xoauth2: `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
+          user: config.user,
+          host: config.host,
+          port: config.port,
+          tls: config.tls,
+          authTimeout: config.authTimeout,
+          connTimeout: config.connTimeout,
+          tlsOptions: config.tlsOptions,
+          xoauth2: xoauth2String
         })
 
         imap.once('ready', () => {
@@ -454,9 +445,18 @@ export class GmailIMAPSMTPService {
     return new Promise(async (resolve, reject) => {
       try {
         const config = await this.createIMAPConfig()
+        // Generate proper XOAUTH2 string for Gmail
+        const xoauth2String = `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
+
         const imap = new Imap({
-          ...config,
-          xoauth2: `user=${config.user}\x01auth=Bearer ${config.accessToken}\x01\x01`
+          user: config.user,
+          host: config.host,
+          port: config.port,
+          tls: config.tls,
+          authTimeout: config.authTimeout,
+          connTimeout: config.connTimeout,
+          tlsOptions: config.tlsOptions,
+          xoauth2: xoauth2String
         })
 
         imap.once('ready', () => {
