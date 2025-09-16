@@ -87,76 +87,53 @@ export class ContactEnrichmentService {
       }
 
       // 2. Determine enrichment strategy: website-first, then email fallback
-      let websiteUrl: string
+      let websiteUrl: string | null = null
       let enrichmentSource: 'website' | 'email' = 'website'
 
+      // Try Strategy 1: existing website
       if (contact.website) {
-        // Strategy 1: Use existing website URL
         try {
-          websiteUrl = PerplexityService.normalizeWebsiteUrl(contact.website)
-          console.log(`🌐 Using existing website URL: ${websiteUrl}`)
+          const normalized = PerplexityService.normalizeWebsiteUrl(contact.website)
+          console.log(`🌐 Using existing website URL: ${normalized}`)
+          const access = await PerplexityService.verifyWebsiteAccessible(normalized)
+          if (access.ok) {
+            websiteUrl = access.finalUrl || normalized
+            enrichmentSource = 'website'
+            console.log('✅ Website is accessible')
+          } else {
+            console.warn('⚠️ Provided website appears inaccessible, will attempt email-derived domain if available')
+          }
         } catch (error) {
           console.error('❌ Invalid website URL format:', contact.website)
-          return {
-            success: false,
-            error: 'Invalid website URL format',
-            contact_id: contactId,
-            website_url: contact.website
-          }
-        }
-        // Verify accessibility; if not reachable, treat as no website
-        const access = await PerplexityService.verifyWebsiteAccessible(websiteUrl)
-        if (!access.ok) {
-          console.warn('⚠️ Provided website appears inaccessible, will attempt email-derived domain if available')
-          websiteUrl = '' as any
+          // Fall through to email strategy
         }
       }
 
+      // If no usable website yet, try Strategy 2: derive from business email
       if (!websiteUrl && contact.email) {
-        // Strategy 2: Extract domain from email and convert to website URL
         const domain = extractDomainFromEmail(contact.email)
-
         if (!domain) {
           console.error('❌ Invalid email format:', contact.email)
-          return {
-            success: false,
-            error: 'Invalid email format',
-            contact_id: contactId,
-            website_url: ''
-          }
-        }
-
-        if (isPersonalEmailDomain(domain)) {
+        } else if (isPersonalEmailDomain(domain)) {
           console.error('❌ Personal email domain detected:', domain)
-          return {
-            success: false,
-            error: 'Personal email domain - no business website to enrich',
-            contact_id: contactId,
-            website_url: ''
-          }
-        }
-
-        // Try with and without www variant, verifying accessibility
-        const candidate1 = convertDomainToWebsiteUrl(domain)
-        const candidate2 = `https://${domain}`
-        const access1 = await PerplexityService.verifyWebsiteAccessible(candidate1)
-        const access2 = access1.ok ? access1 : await PerplexityService.verifyWebsiteAccessible(candidate2)
-
-        if (access1.ok || access2.ok) {
-          websiteUrl = (access1.ok ? access1.finalUrl : access2.finalUrl) || (access1.ok ? candidate1 : candidate2)
-          enrichmentSource = 'email'
-          console.log(`📧 Derived and verified website URL from email ${contact.email}: ${websiteUrl}`)
         } else {
-          console.warn('⚠️ Derived website from email appears inaccessible; skipping website enrichment')
-          return {
-            success: false,
-            error: 'Could not verify a valid company website from email domain',
-            contact_id: contactId,
-            website_url: ''
+          const candidate1 = convertDomainToWebsiteUrl(domain)
+          const candidate2 = `https://${domain}`
+          const access1 = await PerplexityService.verifyWebsiteAccessible(candidate1)
+          const access2 = access1.ok ? access1 : await PerplexityService.verifyWebsiteAccessible(candidate2)
+          if (access1.ok || access2.ok) {
+            websiteUrl = (access1.ok ? access1.finalUrl : access2.finalUrl) || (access1.ok ? candidate1 : candidate2)
+            enrichmentSource = 'email'
+            console.log(`📧 Derived and verified website URL from email ${contact.email}: ${websiteUrl}`)
+          } else {
+            console.warn('⚠️ Derived website from email appears inaccessible')
           }
         }
-      } else {
-        console.error('❌ No website URL or email found for contact')
+      }
+
+      // If still no usable website, return a business-rule failure
+      if (!websiteUrl) {
+        console.error('❌ No usable website URL found (neither existing nor derived)')
         return {
           success: false,
           error: 'No website URL or business email found for this contact',
