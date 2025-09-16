@@ -1,5 +1,9 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { encryptOAuthTokens, decryptOAuthTokens, encryptSMTPConfig, decryptSMTPConfig } from './encryption'
+import type { OAuthTokens } from './oauth-providers'
+
+// Type-only imports to avoid pulling in Node.js modules on client
+type GmailIMAPSMTPService = import('./gmail-imap-smtp').GmailIMAPSMTPService
 
 export interface EmailProvider {
   id: string
@@ -21,9 +25,17 @@ export const EMAIL_PROVIDERS: EmailProvider[] = [
     authUrl: '/api/email-accounts/oauth/gmail',
   },
   {
+    id: 'gmail-imap-smtp',
+    name: 'Gmail IMAP/SMTP',
+    type: 'oauth',
+    icon: '📬',
+    description: 'Full Gmail access with IMAP and SMTP capabilities',
+    authUrl: '/api/email-accounts/oauth/gmail?provider=gmail-imap-smtp',
+  },
+  {
     id: 'outlook',
     name: 'Outlook',
-    type: 'oauth', 
+    type: 'oauth',
     icon: '📮',
     description: 'Connect your Outlook/Hotmail account',
     authUrl: '/api/email-accounts/oauth/outlook',
@@ -80,7 +92,17 @@ export class EmailAccountService {
     if (config.oauth_tokens) {
       accountData.access_token = config.oauth_tokens.access_token
       accountData.refresh_token = config.oauth_tokens.refresh_token
-      accountData.token_expires_at = new Date(config.oauth_tokens.expires_at * 1000).toISOString()
+
+      // Fix: expires_at is already in milliseconds, don't multiply by 1000
+      const expiresAt = config.oauth_tokens.expires_at
+      accountData.token_expires_at = new Date(expiresAt).toISOString()
+
+      console.log('💾 Storing OAuth tokens:', {
+        expiresAt,
+        expiryDate: new Date(expiresAt).toISOString(),
+        hasAccessToken: !!config.oauth_tokens.access_token,
+        hasRefreshToken: !!config.oauth_tokens.refresh_token
+      })
     }
 
     // Handle SMTP config - store in individual columns according to supabase-setup.sql
@@ -199,8 +221,6 @@ export class EmailAccountService {
   }
 
   async testEmailConnection(accountId: string) {
-    // This would implement actual connection testing
-    // For now, we'll simulate a test
     const { data: account } = await this.supabase
       .from('email_accounts')
       .select('*')
@@ -209,7 +229,42 @@ export class EmailAccountService {
 
     if (!account) throw new Error('Email account not found')
 
-    // Simulate connection test
+    // For Gmail IMAP/SMTP, make API call to server-side test
+    if (account.provider === 'gmail-imap-smtp') {
+      try {
+        const response = await fetch(`/api/email-accounts/${accountId}/test-gmail-connection`, {
+          method: 'POST',
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to test Gmail connection')
+        }
+
+        const result = await response.json()
+        return {
+          success: result.success,
+          message: result.message,
+          details: {
+            provider: account.provider,
+            email: account.email,
+            status: result.success ? 'connected' : 'failed',
+            ...result.details
+          },
+        }
+      } catch (error) {
+        return {
+          success: false,
+          message: `Connection test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          details: {
+            provider: account.provider,
+            email: account.email,
+            status: 'failed',
+          },
+        }
+      }
+    }
+
+    // Fallback for other providers (simulate test)
     return {
       success: true,
       message: 'Connection test successful',
@@ -219,5 +274,98 @@ export class EmailAccountService {
         status: 'connected',
       },
     }
+  }
+
+  /**
+   * Get mailboxes for a Gmail IMAP/SMTP account (via API)
+   */
+  async getGmailMailboxes(accountId: string): Promise<string[]> {
+    const response = await fetch(`/api/email-accounts/${accountId}/gmail/mailboxes`)
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch Gmail mailboxes')
+    }
+
+    const data = await response.json()
+    return data.mailboxes
+  }
+
+  /**
+   * Fetch emails for a Gmail IMAP/SMTP account (via API)
+   */
+  async fetchGmailEmails(
+    accountId: string,
+    mailbox: string = 'INBOX',
+    options: {
+      limit?: number
+      since?: Date
+      unseen?: boolean
+    } = {}
+  ) {
+    const params = new URLSearchParams({
+      mailbox,
+      ...options.limit && { limit: options.limit.toString() },
+      ...options.since && { since: options.since.toISOString() },
+      ...options.unseen && { unseen: 'true' }
+    })
+
+    const response = await fetch(`/api/email-accounts/${accountId}/gmail/emails?${params}`)
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch Gmail emails')
+    }
+
+    const data = await response.json()
+    return data.emails
+  }
+
+  /**
+   * Send email using Gmail IMAP/SMTP account (via API)
+   */
+  async sendGmailEmail(
+    accountId: string,
+    options: {
+      to: string | string[]
+      cc?: string | string[]
+      bcc?: string | string[]
+      subject: string
+      text?: string
+      html?: string
+      attachments?: Array<{
+        filename: string
+        path?: string
+        content?: Buffer | string
+        contentType?: string
+      }>
+    }
+  ) {
+    const response = await fetch(`/api/email-accounts/${accountId}/gmail/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(options)
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to send Gmail email')
+    }
+
+    return await response.json()
+  }
+
+  /**
+   * Get email count for Gmail IMAP/SMTP account (via API)
+   */
+  async getGmailEmailCount(accountId: string, mailbox: string = 'INBOX') {
+    const params = new URLSearchParams({ mailbox })
+    const response = await fetch(`/api/email-accounts/${accountId}/gmail/count?${params}`)
+
+    if (!response.ok) {
+      throw new Error('Failed to get Gmail email count')
+    }
+
+    const data = await response.json()
+    return data.count
   }
 }

@@ -29,6 +29,8 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProvider> = {
     scopes: [
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.modify', // For marking emails as read, deleting, etc.
+      'https://mail.google.com/', // Full Gmail access including IMAP/SMTP
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile'
     ],
@@ -55,6 +57,15 @@ export class GoogleOAuthService {
   constructor(redirectBase?: string) {
     const defaultBase = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     const redirectUri = `${redirectBase || defaultBase}/api/email-accounts/oauth/gmail/callback`
+
+    console.log('🔧 GoogleOAuthService constructor:', {
+      redirectBase,
+      defaultBase,
+      redirectUri,
+      clientId: OAUTH_PROVIDERS.gmail.clientId?.substring(0, 20) + '...',
+      hasClientSecret: !!OAUTH_PROVIDERS.gmail.clientSecret
+    })
+
     this.oauth2Client = new google.auth.OAuth2(
       OAUTH_PROVIDERS.gmail.clientId,
       OAUTH_PROVIDERS.gmail.clientSecret,
@@ -63,23 +74,59 @@ export class GoogleOAuthService {
   }
 
   generateAuthUrl(state: string): string {
-    return this.oauth2Client.generateAuthUrl({
+    const authParams = {
       access_type: 'offline',
       scope: OAUTH_PROVIDERS.gmail.scopes,
       state,
       prompt: 'consent', // Force consent to get refresh token
       include_granted_scopes: true
+    }
+
+    console.log('🔗 OAuth URL parameters:', {
+      scopes: OAUTH_PROVIDERS.gmail.scopes,
+      state: state.substring(0, 20) + '...',
+      clientId: OAUTH_PROVIDERS.gmail.clientId?.substring(0, 20) + '...'
     })
+
+    const authUrl = this.oauth2Client.generateAuthUrl(authParams)
+    console.log('🌐 Generated OAuth URL:', authUrl.substring(0, 200) + '...')
+
+    return authUrl
   }
 
   async exchangeCodeForTokens(code: string): Promise<OAuthTokens> {
     try {
       const { tokens } = await this.oauth2Client.getToken(code)
-      
+
+      // Fix timestamp handling - ensure it's a valid timestamp
+      let expiresAt = Date.now() + 3600000 // Default to 1 hour from now
+
+      if (tokens.expiry_date) {
+        const expiry = typeof tokens.expiry_date === 'number' ? tokens.expiry_date : parseInt(tokens.expiry_date)
+
+        // Validate the timestamp is reasonable (between now and 100 years from now)
+        const now = Date.now()
+        const maxFuture = now + (100 * 365 * 24 * 60 * 60 * 1000) // 100 years
+
+        if (expiry > now && expiry < maxFuture) {
+          expiresAt = expiry
+        } else {
+          console.warn('Invalid expiry_date from Google:', tokens.expiry_date, 'using default')
+        }
+      }
+
+      console.log('🔑 Token exchange successful:', {
+        hasAccessToken: !!tokens.access_token,
+        hasRefreshToken: !!tokens.refresh_token,
+        originalExpiry: tokens.expiry_date,
+        processedExpiry: expiresAt,
+        expiryDate: new Date(expiresAt).toISOString()
+      })
+
       return {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
-        expires_at: tokens.expiry_date || Date.now() + 3600000,
+        expires_at: expiresAt,
         scope: tokens.scope || OAUTH_PROVIDERS.gmail.scopes.join(' '),
         token_type: tokens.token_type || 'Bearer'
       }
@@ -96,11 +143,28 @@ export class GoogleOAuthService {
       })
 
       const { credentials } = await this.oauth2Client.refreshAccessToken()
-      
+
+      // Fix timestamp handling for refresh tokens too
+      let expiresAt = Date.now() + 3600000 // Default to 1 hour from now
+
+      if (credentials.expiry_date) {
+        const expiry = typeof credentials.expiry_date === 'number' ? credentials.expiry_date : parseInt(credentials.expiry_date)
+
+        // Validate the timestamp is reasonable
+        const now = Date.now()
+        const maxFuture = now + (100 * 365 * 24 * 60 * 60 * 1000) // 100 years
+
+        if (expiry > now && expiry < maxFuture) {
+          expiresAt = expiry
+        } else {
+          console.warn('Invalid expiry_date from Google refresh:', credentials.expiry_date, 'using default')
+        }
+      }
+
       return {
         access_token: credentials.access_token,
         refresh_token: credentials.refresh_token || refreshToken,
-        expires_at: credentials.expiry_date || Date.now() + 3600000,
+        expires_at: expiresAt,
         scope: credentials.scope || OAUTH_PROVIDERS.gmail.scopes.join(' '),
         token_type: credentials.token_type || 'Bearer'
       }

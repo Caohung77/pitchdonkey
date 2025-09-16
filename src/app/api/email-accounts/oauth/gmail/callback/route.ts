@@ -28,9 +28,17 @@ export const GET = withAuth(async (request: NextRequest, { user }) => {
     }
 
     const { userId, provider } = parseOAuthState(state)
-    
-    // Verify user matches state
-    if (userId !== user.id || provider !== 'gmail') {
+
+    console.log('📧 Gmail OAuth Callback:', {
+      userId,
+      provider,
+      userIdMatch: userId === user.id,
+      validProvider: provider === 'gmail' || provider === 'gmail-imap-smtp'
+    })
+
+    // Verify user matches state (accept both gmail and gmail-imap-smtp)
+    if (userId !== user.id || (provider !== 'gmail' && provider !== 'gmail-imap-smtp')) {
+      console.error('❌ OAuth validation failed:', { userId, expectedUserId: user.id, provider })
       return NextResponse.redirect(`${request.nextUrl.origin}/dashboard/email-accounts?error=oauth_invalid`)
     }
 
@@ -42,15 +50,19 @@ export const GET = withAuth(async (request: NextRequest, { user }) => {
     // Get user information from Google
     const userInfo = await googleService.getUserInfo(tokens.access_token)
 
-    // Check if email account already exists
+    // Check if email account already exists for this provider type
     const { createServerSupabaseClient } = await import('@/lib/supabase-server')
     const supabase = createServerSupabaseClient()
+
+    // Note: Use 'gmail' for both gmail and gmail-imap-smtp since DB constraint only allows 'gmail'
+    const dbProvider = provider === 'gmail-imap-smtp' ? 'gmail' : provider
+
     const { data: existingAccounts } = await supabase
       .from('email_accounts')
       .select('id')
       .eq('user_id', user.id)
       .eq('email', userInfo.email)
-      .eq('provider', 'gmail')
+      .eq('provider', dbProvider) // Use the DB-compatible provider
       // Note: 'is_active' field doesn't exist in actual schema, using status instead
       .eq('status', 'active')
 
@@ -58,19 +70,46 @@ export const GET = withAuth(async (request: NextRequest, { user }) => {
       return NextResponse.redirect(`${request.nextUrl.origin}/dashboard/email-accounts?error=account_exists`)
     }
 
-    // Create email account with OAuth tokens
-    const emailService = new EmailAccountService()
-    await emailService.createEmailAccount(user.id, {
-      provider: 'gmail',
+    // Create email account with OAuth tokens using server-side client to bypass RLS
+
+    const accountData = {
+      user_id: user.id,
+      provider: dbProvider,
       email: userInfo.email,
-      // Note: 'name' field doesn't exist in actual database schema
-      oauth_tokens: tokens,
-      settings: {
-        daily_limit: 50,
-        delay_between_emails: 60,
-        warm_up_enabled: true,
-      },
+      status: 'pending',
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      token_expires_at: new Date(tokens.expires_at).toISOString(),
+      // Store additional metadata for gmail-imap-smtp accounts
+      ...(provider === 'gmail-imap-smtp' && {
+        daily_send_limit: 100, // Higher limit for IMAP/SMTP accounts
+      })
+    }
+
+    console.log('💾 Creating email account:', {
+      userId: user.id,
+      originalProvider: provider,
+      dbProvider: dbProvider,
+      email: userInfo.email,
+      expiresAt: tokens.expires_at,
+      expiryDate: new Date(tokens.expires_at).toISOString()
     })
 
-    return NextResponse.redirect(`${request.nextUrl.origin}/dashboard/email-accounts?success=gmail_connected`)
+    console.log('📝 Account data being inserted:', JSON.stringify(accountData, null, 2))
+
+    const { data: newAccount, error: insertError } = await supabase
+      .from('email_accounts')
+      .insert(accountData)
+      .select()
+      .single()
+
+    if (insertError) {
+      console.error('❌ Failed to create email account:', insertError)
+      throw new Error(`Failed to create email account: ${insertError.message}`)
+    }
+
+    console.log('✅ Successfully created email account:', newAccount.id)
+
+    const successType = provider === 'gmail-imap-smtp' ? 'gmail_imap_smtp_connected' : 'gmail_connected'
+    return NextResponse.redirect(`${request.nextUrl.origin}/dashboard/email-accounts?success=${successType}`)
 })
