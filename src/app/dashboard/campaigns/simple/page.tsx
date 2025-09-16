@@ -672,7 +672,7 @@ export default function SimpleCampaignPage() {
 
                 {/* Daily Send Limit */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">Daily Send Limit *</nlabel>
+                  <label className="block text-sm font-medium mb-2">Daily Send Limit *</label>
                   <div className="grid grid-cols-5 gap-2">
                     {[10,20,30,40,50].map(v => (
                       <button
