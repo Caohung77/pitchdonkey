@@ -44,7 +44,7 @@ export async function GET(
     }
 
     // Generate DNS records
-    const spfRecord = SPFGenerator.generateForSMTP(domain, account.email.split('@')[1])
+    const spfRecord = SPFGenerator.generateForProviders(domain, ['gmail'])
     const dkimResult = DKIMGenerator.generateForDomain(domain)
     const dmarcRecord = DMARCGenerator.generateBasicRecord(domain, `reports@${domain}`)
 
