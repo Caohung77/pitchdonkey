@@ -30,8 +30,11 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       }, { status: 500 })
     }
 
+    // Filter out soft-deleted if present; otherwise include all
+    const safe = (accounts || []).filter((a: any) => !('deleted_at' in a) || a.deleted_at === null)
+
     // Add domain field to each account by extracting from email
-    const accountsWithDomain = (accounts || []).map(account => {
+    const accountsWithDomain = safe.map(account => {
       try {
         const domain = extractDomainFromEmail(account.email)
         return {
