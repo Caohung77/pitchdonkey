@@ -257,25 +257,55 @@ export class CampaignProcessor {
 
       console.log(`👥 Found ${contacts.length} contacts to email`)
 
-      // Get the user's email accounts (simple campaigns use the first active SMTP account)
-      const { data: emailAccounts, error: emailAccountError } = await supabase
-        .from('email_accounts')
-        .select('*')
-        .eq('user_id', campaign.user_id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: true })
-        .limit(1)
-
-      if (emailAccountError) {
-        throw new Error(`Failed to get email account: ${emailAccountError.message}`)
+      // Choose email account: honor campaign.from_email_account_id if provided
+      let emailAccount: any = null
+      if (campaign.from_email_account_id) {
+        const { data: acc, error: eaErr } = await supabase
+          .from('email_accounts')
+          .select('*')
+          .eq('user_id', campaign.user_id)
+          .eq('id', campaign.from_email_account_id)
+          .eq('status', 'active')
+          .single()
+        if (eaErr || !acc) {
+          throw new Error('Selected email account is not available')
+        }
+        emailAccount = acc
+      } else {
+        const { data: emailAccounts, error: emailAccountError } = await supabase
+          .from('email_accounts')
+          .select('*')
+          .eq('user_id', campaign.user_id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: true })
+          .limit(1)
+        if (emailAccountError || !emailAccounts || emailAccounts.length === 0) {
+          throw new Error('No active email account found for this user')
+        }
+        emailAccount = emailAccounts[0]
       }
+      console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)      
 
-      if (!emailAccounts || emailAccounts.length === 0) {
-        throw new Error('No active email account found for this user')
+      // Enforce per-campaign daily limit (10/20/30/40/50)
+      const dailyLimit = Number(campaign.daily_send_limit) || 50
+      const startOfDay = new Date()
+      startOfDay.setHours(0,0,0,0)
+      const { data: sentTodayRows } = await supabase
+        .from('email_tracking')
+        .select('sent_at')
+        .eq('campaign_id', campaign.id)
+        .gte('sent_at', startOfDay.toISOString())
+      const sentToday = (sentTodayRows || []).length
+      const remainingToday = Math.max(0, dailyLimit - sentToday)
+      if (remainingToday <= 0) {
+        console.log(`⏳ Daily limit reached for campaign ${campaign.id}: ${dailyLimit}/day`)
+        return
       }
-
-      const emailAccount = emailAccounts[0]
-      console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)
+      // Limit contacts batch to remaining quota
+      if (contacts.length > remainingToday) {
+        console.log(`⚖️ Limiting send batch to daily quota: ${remainingToday} of ${contacts.length}`)
+        contacts = contacts.slice(0, remainingToday)
+      }
 
       let emailsSent = 0
       let emailsFailed = 0

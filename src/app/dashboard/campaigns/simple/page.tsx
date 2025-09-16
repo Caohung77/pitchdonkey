@@ -37,6 +37,8 @@ interface SimpleCampaignData {
   send_immediately: boolean
   scheduled_date?: string
   timezone: string
+  from_email_account_id?: string
+  daily_send_limit?: number
 }
 
 interface ContactList {
@@ -64,8 +66,11 @@ export default function SimpleCampaignPage() {
     html_content: '',
     contact_list_ids: [],
     send_immediately: true,
-    timezone: ''
+    timezone: '',
+    from_email_account_id: '',
+    daily_send_limit: 50
   })
+  const [emailAccounts, setEmailAccounts] = useState<any[]>([])
   const [contactLists, setContactLists] = useState<ContactList[]>([])
   const [contactListsWithContacts, setContactListsWithContacts] = useState<Array<ContactList & { contacts?: Array<{ id: string; first_name: string; last_name: string; company_name: string; email: string }> }>>([])
   const [loading, setLoading] = useState(false)
@@ -164,6 +169,16 @@ export default function SimpleCampaignPage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       }))
     }
+    // Load email accounts
+    ;(async () => {
+      try {
+        const resp = await ApiClient.get('/api/email-accounts')
+        const accs = resp?.data || resp
+        setEmailAccounts(Array.isArray(accs) ? accs : (accs?.data || []))
+      } catch (e) {
+        console.error('Failed to load email accounts:', e)
+      }
+    })()
   }, [])
 
   // Fetch contacts when selected lists change
@@ -305,6 +320,12 @@ export default function SimpleCampaignPage() {
           if (!validateSchedule()) {
             newErrors.scheduled_date = scheduleError || 'Invalid schedule'
           }
+        }
+        if (!campaignData.from_email_account_id) {
+          newErrors.from_email_account_id = 'Please select an email account'
+        }
+        if (![10,20,30,40,50].includes(Number(campaignData.daily_send_limit))) {
+          newErrors.daily_send_limit = 'Choose 10, 20, 30, 40, or 50 per day'
         }
         break
     }
@@ -629,6 +650,45 @@ export default function SimpleCampaignPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Email Account Selection */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Email Account *</label>
+                  <select
+                    className={`w-full px-3 py-2 border rounded-md ${errors.from_email_account_id ? 'border-red-500' : 'border-gray-300'}`}
+                    value={campaignData.from_email_account_id}
+                    onChange={(e) => setCampaignData(prev => ({ ...prev, from_email_account_id: e.target.value }))}
+                  >
+                    <option value="">Select an email account…</option>
+                    {emailAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.email} {acc.provider ? `(${acc.provider})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.from_email_account_id && (
+                    <p className="text-red-500 text-sm mt-1">{errors.from_email_account_id}</p>
+                  )}
+                </div>
+
+                {/* Daily Send Limit */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Daily Send Limit *</nlabel>
+                  <div className="grid grid-cols-5 gap-2">
+                    {[10,20,30,40,50].map(v => (
+                      <button
+                        key={v}
+                        type="button"
+                        className={`px-3 py-2 border rounded-md text-sm ${campaignData.daily_send_limit === v ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+                        onClick={() => setCampaignData(prev => ({ ...prev, daily_send_limit: v }))}
+                      >
+                        {v}/day
+                      </button>
+                    ))}
+                  </div>
+                  {errors.daily_send_limit && (
+                    <p className="text-red-500 text-sm mt-1">{errors.daily_send_limit}</p>
+                  )}
+                </div>
                 <div className="space-y-3">
                   <div className="flex items-center space-x-3">
                     <input

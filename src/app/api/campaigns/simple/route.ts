@@ -15,6 +15,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       send_immediately,
       scheduled_date,
       timezone,
+      from_email_account_id,
+      daily_send_limit,
       status: providedStatus,
       personalized_emails = {} // Map of contact_id -> { subject, content }
     } = body
@@ -61,6 +63,30 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       }
     }
 
+    // Validate chosen email account
+    if (!from_email_account_id) {
+      return NextResponse.json({ error: 'Email account is required' }, { status: 400 })
+    }
+    // Ensure only one active/scheduled campaign per email account
+    const { data: existingActive, error: existingErr } = await supabase
+      .from('campaigns')
+      .select('id, name, status')
+      .eq('user_id', user.id)
+      .eq('from_email_account_id', from_email_account_id)
+      .in('status', ['sending', 'scheduled'])
+      .limit(1)
+
+    if (existingErr) {
+      return NextResponse.json({ error: 'Failed to check email account availability' }, { status: 500 })
+    }
+    if (existingActive && existingActive.length > 0) {
+      return NextResponse.json({ error: 'This email account already has a running or scheduled campaign' }, { status: 409 })
+    }
+
+    // Validate daily limit (allowed: 10,20,30,40,50)
+    const allowedDaily = new Set([10,20,30,40,50])
+    const finalDailyLimit = allowedDaily.has(Number(daily_send_limit)) ? Number(daily_send_limit) : 50
+
     // Create the simple campaign
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
@@ -81,8 +107,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         send_immediately: send_immediately || false,
         scheduled_date: scheduled_date || null,
         timezone: timezone || 'UTC',
-        // Set default values for required fields
-        daily_send_limit: 50,
+        // New: sending controls
+        from_email_account_id,
+        daily_send_limit: finalDailyLimit,
         track_opens: true,
         track_clicks: true,
         track_replies: true,
