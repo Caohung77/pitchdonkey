@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { EmailAccountService } from '@/lib/email-providers'
 import { GoogleOAuthService, parseOAuthState, validateOAuthState } from '@/lib/oauth-providers'
-import { handleApiError, AuthenticationError } from '@/lib/errors'
+import { withAuth } from '@/lib/auth-middleware'
 
 // GET /api/email-accounts/oauth/gmail/callback - Handle Gmail OAuth callback
-export async function GET(request: NextRequest) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      throw new AuthenticationError()
-    }
+export const GET = withAuth(async (request: NextRequest, { user }) => {
 
     const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
@@ -52,6 +43,8 @@ export async function GET(request: NextRequest) {
     const userInfo = await googleService.getUserInfo(tokens.access_token)
 
     // Check if email account already exists
+    const { createServerSupabaseClient } = await import('@/lib/supabase-server')
+    const supabase = createServerSupabaseClient()
     const { data: existingAccounts } = await supabase
       .from('email_accounts')
       .select('id')
@@ -80,8 +73,4 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.redirect(`${request.nextUrl.origin}/dashboard/email-accounts?success=gmail_connected`)
-  } catch (error) {
-    console.error('Gmail OAuth callback error:', error)
-    return NextResponse.redirect(`${request.nextUrl.origin}/dashboard/email-accounts?error=oauth_failed`)
-  }
-}
+})
