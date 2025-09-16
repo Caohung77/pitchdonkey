@@ -52,11 +52,13 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProvider> = {
 export class GoogleOAuthService {
   private oauth2Client: any
 
-  constructor() {
+  constructor(redirectBase?: string) {
+    const defaultBase = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+    const redirectUri = `${redirectBase || defaultBase}/api/email-accounts/oauth/gmail/callback`
     this.oauth2Client = new google.auth.OAuth2(
       OAUTH_PROVIDERS.gmail.clientId,
       OAUTH_PROVIDERS.gmail.clientSecret,
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005'}/api/email-accounts/oauth/gmail/callback`
+      redirectUri
     )
   }
 

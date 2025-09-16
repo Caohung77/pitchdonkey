@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
       throw new AuthenticationError()
     }
 
-    const googleService = new GoogleOAuthService()
+    const origin = request.nextUrl.origin
+    const googleService = new GoogleOAuthService(origin)
     const state = generateOAuthState(user.id, 'gmail')
     const authUrl = googleService.generateAuthUrl(state)
 

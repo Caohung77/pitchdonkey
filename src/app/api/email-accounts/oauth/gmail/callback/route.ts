@@ -44,7 +44,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Exchange authorization code for tokens
-    const googleService = new GoogleOAuthService()
+    const origin = request.nextUrl.origin
+    const googleService = new GoogleOAuthService(origin)
     const tokens = await googleService.exchangeCodeForTokens(code)
     
     // Get user information from Google
