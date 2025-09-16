@@ -70,6 +70,7 @@ export class DNSLookupService {
       )
       
       if (!dkimRecord) {
+        console.warn(`[DKIM] No TXT with v=DKIM1 found at ${dkimDomain}. Raw TXT:`, txtRecords)
         return {
           record: null,
           responseTime,

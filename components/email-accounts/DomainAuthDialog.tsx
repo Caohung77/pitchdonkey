@@ -98,7 +98,10 @@ export default function DomainAuthDialog({ domain }: DomainAuthDialogProps) {
     setError('')
 
     try {
-      const data = await ApiClient.post(`/api/domains/${encodeURIComponent(domain)}/verify`, {})
+      // Pass the DKIM selector we show in the UI so verification checks the exact record the user created
+      const payload: any = {}
+      if (dkimSelector) payload.dkim_selector = dkimSelector
+      const data = await ApiClient.post(`/api/domains/${encodeURIComponent(domain)}/verify`, payload)
       setStatus(data.status)
     } catch (error) {
       console.error('Error verifying domain:', error)
