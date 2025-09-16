@@ -17,6 +17,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       .from('email_accounts')
       .select('*')
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     console.log('Database query result:', { accounts: accounts?.length || 0, error })

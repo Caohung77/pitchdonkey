@@ -226,7 +226,7 @@ export const DELETE = withAuth(async (
     const { data: activeCampaigns, error: campaignError } = await supabase
       .from('campaigns')
       .select('id, name')
-      .eq('sender_email_account_id', id)
+      .eq('from_email_account_id', id)
       .in('status', ['active', 'sending', 'scheduled'])
       .limit(5)
 
