@@ -203,20 +203,10 @@ export const DELETE = withAuth(async (
   { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
-    // Rate limiting with explicit error handling
-    try {
-      await withRateLimit(user, 10, 60000) // 10 deletes per minute
-    } catch (rateLimitError: any) {
-      console.error('Rate limit exceeded for user:', user.id, rateLimitError)
-      return NextResponse.json({
-        error: 'Rate limit exceeded. Please wait before trying again.',
-        code: 'RATE_LIMIT_EXCEEDED'
-      }, { status: 429 })
-    }
-
+    await withRateLimit(user, 10, 60000) // 10 deletes per minute
+    
     const { id } = await params
-    console.log('DELETE request for email account:', { accountId: id, userId: user.id })
-
+    
     // First, verify the account exists and belongs to the user
     const { data: existingAccount, error: fetchError } = await supabase
       .from('email_accounts')
@@ -226,42 +216,24 @@ export const DELETE = withAuth(async (
       .single()
 
     if (fetchError || !existingAccount) {
-      console.error('Email account not found or fetch error:', { accountId: id, fetchError, existingAccount })
       return NextResponse.json({
         error: 'Email account not found',
         code: 'NOT_FOUND'
       }, { status: 404 })
     }
 
-    console.log('Email account found:', { accountId: id, email: existingAccount.email, status: existingAccount.status })
+    // Check for active campaigns using this email account
+    const { data: activeCampaigns, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('id, name')
+      .eq('from_email_account_id', id)
+      .in('status', ['active', 'sending', 'scheduled'])
+      .limit(5)
 
-    // Check for active campaigns using this email account (support legacy/new columns)
-    let activeCampaigns: any[] | null = null
-    try {
-      const q1 = await supabase
-        .from('campaigns')
-        .select('id, name')
-        .eq('from_email_account_id', id)
-        .in('status', ['active', 'sending', 'scheduled'])
-        .limit(5)
-      if (q1.error) throw q1.error
-      activeCampaigns = q1.data || []
-    } catch (e1: any) {
-      console.warn('Primary campaign check failed (from_email_account_id). Trying legacy column…', e1?.message)
-      try {
-        const q2 = await supabase
-          .from('campaigns')
-          .select('id, name')
-          .eq('sender_email_account_id', id)
-          .in('status', ['active', 'sending', 'scheduled'])
-          .limit(5)
-        if (!q2.error) activeCampaigns = q2.data || []
-      } catch (e2) {
-        console.warn('Legacy campaign check also failed:', e2)
-      }
+    if (campaignError) {
+      console.warn('Could not check for active campaigns:', campaignError)
+      // Continue with deletion but log the warning
     }
-
-    console.log('Campaign check result:', { accountId: id, activeCampaignsCount: activeCampaigns?.length || 0, activeCampaigns })
 
     if (activeCampaigns && activeCampaigns.length > 0) {
       return NextResponse.json({
@@ -273,27 +245,23 @@ export const DELETE = withAuth(async (
       }, { status: 400 })
     }
 
-    // Soft delete (if column exists), else hard delete
-    console.log('Proceeding with delete for account:', { accountId: id, userId: user.id })
-    const soft = await supabase
+    // Soft delete by setting deleted_at
+    const { error: deleteError } = await supabase
       .from('email_accounts')
-      .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
       .eq('user_id', user.id)
-    if (soft.error) {
-      console.warn('Soft delete failed; performing hard delete:', soft.error?.message)
-      const hard = await supabase
-        .from('email_accounts')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id)
-      if (hard.error) {
-        console.error('Error deleting email account:', { accountId: id, deleteError: hard.error })
-        return NextResponse.json({ error: 'Failed to delete email account', code: 'DELETE_ERROR' }, { status: 500 })
-      }
-    }
 
-    console.log('Email account deleted (soft or hard):', { accountId: id, userId: user.id })
+    if (deleteError) {
+      console.error('Error deleting email account:', deleteError)
+      return NextResponse.json({
+        error: 'Failed to delete email account',
+        code: 'DELETE_ERROR'
+      }, { status: 500 })
+    }
 
     const response = NextResponse.json({
       success: true,

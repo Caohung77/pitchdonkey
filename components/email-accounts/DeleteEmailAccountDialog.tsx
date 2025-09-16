@@ -33,46 +33,31 @@ export default function DeleteEmailAccountDialog({ account, onAccountDeleted }: 
     try {
       setIsDeleting(true)
       setError('')
-
-      console.log('🔄 Starting email account deletion:', { accountId: account.id, email: account.email })
-
+      
       const response = await ApiClient.delete(`/api/email-accounts/${account.id}`)
-
-      console.log('✅ Delete response received:', response)
-
+      
       if (response.success) {
         // Close dialog and notify parent
         setOpen(false)
         onAccountDeleted()
         console.log('✅ Email account deleted successfully')
       } else {
-        console.log('❌ Delete failed with response error:', response.error)
         throw new Error(response.error || 'Failed to delete email account')
       }
-
+      
     } catch (error: any) {
-      console.error('❌ Error deleting email account:', {
-        originalError: error,
-        errorMessage: error.message,
-        errorType: typeof error,
-        accountId: account.id
-      })
-
-      // Extract the actual error message from the caught error
-      const errorMessage = error.message || 'Failed to delete email account. Please try again.'
-      console.log('🔍 Processing error message:', {
-        originalMessage: errorMessage,
-        includes401: errorMessage.includes('sign in again'),
-        includesAuth: errorMessage.includes('Authentication required'),
-        includesNotFound: errorMessage.includes('NOT_FOUND'),
-        includesRateLimit: errorMessage.includes('Rate limit exceeded') || errorMessage.includes('RATE_LIMIT'),
-        includesCampaigns: errorMessage.includes('CAMPAIGNS_ACTIVE') || errorMessage.includes('active campaign')
-      })
-
-      // Use the exact error message from the API client, which should already be user-friendly
-      // The API client handles status codes and returns appropriate messages
-      setError(errorMessage)
-
+      console.error('Error deleting email account:', error)
+      
+      // Handle specific error cases
+      if (error.message?.includes('NOT_FOUND')) {
+        setError('Email account not found. It may have already been deleted.')
+      } else if (error.message?.includes('RATE_LIMIT')) {
+        setError('Too many requests. Please wait a moment before trying again.')
+      } else if (error.message?.includes('CAMPAIGNS_ACTIVE') || error.message?.includes('active campaign')) {
+        setError('Cannot delete this account because it has active campaigns. Please pause or stop all campaigns using this account first.')
+      } else {
+        setError(error.message || 'Failed to delete email account. Please try again.')
+      }
     } finally {
       setIsDeleting(false)
     }
@@ -98,7 +83,7 @@ export default function DeleteEmailAccountDialog({ account, onAccountDeleted }: 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
+        <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mt-3">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
             <div className="text-sm text-amber-800">
@@ -115,7 +100,6 @@ export default function DeleteEmailAccountDialog({ account, onAccountDeleted }: 
             </div>
           </div>
         </div>
-
         
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-md p-3">
