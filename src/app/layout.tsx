@@ -6,7 +6,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'ColdReach Pro - Automated Cold Email Outreach Platform',
+  title: 'Eisbrief - Automated Cold Email Outreach Platform',
   description: 'Scale your sales with AI-powered personalization, smart scheduling, and deliverability protection.',
 }
 

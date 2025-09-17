@@ -70,10 +70,8 @@ export function CampaignProgressBar({
   const openRate = progress.delivered > 0 ? Math.round((progress.opened / progress.delivered) * 100) : 0
   const queuedEmails = Math.max(0, progress.total - progress.sent - progress.failed)
 
-  // Effective status for UI: if fully processed, show completed regardless of stale DB status
-  const isFullyProcessed = progress.total > 0 && (progress.sent + progress.failed) >= progress.total
-  const effectiveStatus: 'draft' | 'scheduled' | 'sending' | 'running' | 'paused' | 'stopped' | 'completed' | 'archived' =
-    isFullyProcessed ? 'completed' : campaign.status
+  // Use actual campaign status from database - don't override status based on progress calculations
+  // This ensures campaigns show correct status: 'sending'/'running' for active campaigns, 'completed' only when actually finished
 
   // Real-time subscription for campaign updates + auto-refresh during sending
   useEffect(() => {
@@ -104,7 +102,7 @@ export function CampaignProgressBar({
 
     // Auto-refresh every 10 seconds when campaign is actively sending
     let refreshInterval: NodeJS.Timeout | null = null
-    if (effectiveStatus === 'sending' || effectiveStatus === 'running') {
+    if (campaign.status === 'sending' || campaign.status === 'running') {
       refreshInterval = setInterval(() => {
         console.log(`🔄 Auto-refreshing progress for sending campaign ${campaign.id}`)
         fetchLatestProgress()
@@ -163,7 +161,7 @@ export function CampaignProgressBar({
       console.log(`🔍 fetchLatestProgress for campaign ${campaign.id}: current status = ${campaign.status}`)
       
       // FOR COMPLETED CAMPAIGNS: Use historical data, don't recalculate total_contacts
-      if (effectiveStatus === 'completed') {
+      if (campaign.status === 'completed') {
         console.log(`✅ Skipping contact count recalculation for completed campaign - using original data`)
         
         // Count actual emails from tracking table using timestamp fields
@@ -241,8 +239,9 @@ export function CampaignProgressBar({
         console.log(`📊 Real progress for campaign ${campaign.id}:`, newProgress)
         setProgress(newProgress)
         
-        // AUTO-COMPLETION CHECK: If 100% complete but status is still 'sending', refresh campaign status
-        if (newProgress.sent >= newProgress.total && newProgress.total > 0 && (campaign.status === 'sending' || campaign.status === 'running')) {
+        // AUTO-COMPLETION CHECK: If 100% complete but status is still 'sending' or 'running', refresh campaign status
+        const isFullyProcessed = newProgress.total > 0 && (newProgress.sent + newProgress.failed) >= newProgress.total
+        if (isFullyProcessed && (campaign.status === 'sending' || campaign.status === 'running')) {
           console.log(`🎉 Campaign ${campaign.id} reached 100% (${newProgress.sent}/${newProgress.total}) but status is '${campaign.status}' - checking for completion`)
           
           // IMMEDIATE CHECK: Don't wait, check database immediately
@@ -373,7 +372,7 @@ export function CampaignProgressBar({
 
   // Get status icon and color
   const getStatusDisplay = () => {
-    switch (effectiveStatus) {
+    switch (campaign.status) {
       case 'sending':
       case 'running':
         return {
@@ -428,7 +427,7 @@ export function CampaignProgressBar({
           {isLoading && (
             <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
           )}
-          {(effectiveStatus === 'sending' || effectiveStatus === 'running') && (
+          {(campaign.status === 'sending' || campaign.status === 'running') && (
             <button
               onClick={() => {
                 fetchLatestProgress()
@@ -467,15 +466,15 @@ export function CampaignProgressBar({
           value={completionPercentage} 
           className="h-2"
           indicatorClassName={
-            effectiveStatus === 'sending' || effectiveStatus === 'running' 
-              ? 'bg-blue-500 transition-all duration-500' 
-              : effectiveStatus === 'completed' 
-                ? 'bg-green-500' 
+            campaign.status === 'sending' || campaign.status === 'running'
+              ? 'bg-blue-500 transition-all duration-500'
+              : campaign.status === 'completed'
+                ? 'bg-green-500'
                 : 'bg-gray-400'
           }
         />
         
-        {queuedEmails > 0 && (effectiveStatus === 'sending' || effectiveStatus === 'running') && (
+        {queuedEmails > 0 && (campaign.status === 'sending' || campaign.status === 'running') && (
           <div className="text-xs text-gray-500">
             {queuedEmails} emails queued for sending
           </div>

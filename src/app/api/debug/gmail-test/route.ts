@@ -31,7 +31,7 @@ export const POST = async (request: NextRequest) => {
     console.log('  provider:', account.provider)
     console.log('  status:', account.status)
     console.log('  to: banbau@gmx.net')
-    console.log('  subject: Gmail IMAP/SMTP Integration Test - ColdReach Pro')
+    console.log('  subject: Gmail IMAP/SMTP Integration Test - Eisbrief')
     console.log('  hasTokens:', !!(account.access_token && account.refresh_token))
     console.log('}')
 
@@ -86,7 +86,7 @@ export const POST = async (request: NextRequest) => {
     console.log('🔍 Step 5: Sending test email...')
     const emailOptions = {
       to: 'banbau@gmx.net',
-      subject: 'Gmail IMAP/SMTP Integration Test - ColdReach Pro',
+      subject: 'Gmail IMAP/SMTP Integration Test - Eisbrief',
       text: `Test email sent at ${new Date().toISOString()}
 
 This is a test email to verify Gmail SMTP integration is working correctly.
@@ -116,7 +116,7 @@ If you receive this email, the integration is working!`,
 
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
           <p style="font-size: 12px; color: #999;">
-            Sent via ColdReach Pro Gmail Integration Test<br>
+            Sent via Eisbrief Gmail Integration Test<br>
             ${new Date().toISOString()}
           </p>
         </div>

@@ -219,7 +219,7 @@ function ContactsPageContent() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <Mail className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900">ColdReach Pro</span>
+              <span className="ml-2 text-xl font-bold text-gray-900">Eisbrief</span>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">

@@ -121,7 +121,7 @@ export default function EmailAccountsPage() {
     const to = prompt('Enter email address to send test to:', email)
     if (!to) return
 
-    const subject = prompt('Enter subject:', 'Test Email from ColdReach Pro')
+    const subject = prompt('Enter subject:', 'Test Email from Eisbrief')
     if (!subject) return
 
     const message = prompt('Enter message:', 'This is a test email to verify that email sending is working correctly.')

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -22,8 +23,13 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
-              <Zap className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-2xl font-bold text-gray-900">ColdReach Pro</span>
+              <Image
+                src="/images/eisbrief-logo.png"
+                alt="Eisbrief Logo"
+                width={120}
+                height={40}
+                className="h-10 w-auto"
+              />
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/auth/signin">
@@ -71,7 +77,7 @@ export default function HomePage() {
           <div className="bg-white rounded-lg shadow-xl p-2 max-w-4xl mx-auto">
             <img 
               src="/api/placeholder/800/500" 
-              alt="ColdReach Pro Dashboard"
+              alt="Eisbrief Dashboard"
               className="w-full rounded-lg"
             />
           </div>
@@ -258,8 +264,13 @@ export default function HomePage() {
           <div className="grid md:grid-cols-3 gap-8">
             {/* Brand */}
             <div className="flex items-center">
-              <Zap className="h-6 w-6 text-blue-400" />
-              <span className="ml-2 text-lg font-semibold">PitchDonkey</span>
+              <Image
+                src="/images/eisbrief-logo.png"
+                alt="Eisbrief Logo"
+                width={100}
+                height={32}
+                className="h-8 w-auto"
+              />
             </div>
 
             {/* Links */}
@@ -276,7 +287,7 @@ export default function HomePage() {
             {/* Copyright */}
             <div className="flex flex-col justify-end text-right">
               <div className="text-sm text-gray-400">
-                © 2024 PitchDonkey. Built with Next.js and TypeScript.
+                © 2024 Eisbrief. Built with Next.js and TypeScript.
               </div>
             </div>
           </div>

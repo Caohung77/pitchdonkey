@@ -60,7 +60,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
         })
 
         const info = await transporter.sendMail({
-          from: `"ColdReach Pro" <${account.email}>`,
+          from: `"Eisbrief" <${account.email}>`,
           to,
           subject,
           text: message,
@@ -116,7 +116,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
           text: message,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333;">Test Email from ColdReach Pro</h2>
+              <h2 style="color: #333;">Test Email from Eisbrief</h2>
               <div style="white-space: pre-wrap; padding: 20px; background: #f9f9f9; border-radius: 8px; margin: 20px 0;">
                 ${message.replace(/\n/g, '<br>')}
               </div>

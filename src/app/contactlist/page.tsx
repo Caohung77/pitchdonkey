@@ -208,7 +208,7 @@ function ContactListPageContent() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <Mail className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900">ColdReach Pro</span>
+              <span className="ml-2 text-xl font-bold text-gray-900">Eisbrief</span>
               <span className="ml-4 text-sm text-gray-500">- Contact List (New)</span>
             </div>
             <div className="flex items-center space-x-4">

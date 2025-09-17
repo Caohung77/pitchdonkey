@@ -1,0 +1,17 @@
+<svg width="390" height="133" viewBox="0 0 390 133" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Eisbrief">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#60a5fa"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <path d="M20 15h56a8 8 0 0 1 8 8v48c0 18-12 24-22 24-7 0-12-3-15-6-3 3-8 6-15 6-10 0-22-6-22-24V23a8 8 0 0 1 8-8z" fill="url(#g)"/>
+    <path d="M22 28l26 20a10 10 0 0 0 12 0l26-20" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+    <g transform="translate(42,34)">
+      <circle cx="14" cy="14" r="12" fill="#ffffff99"/>
+      <path d="M14 4v20M4 14h20M7 7l14 14M21 7L7 21" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    </g>
+  </g>
+  <text x="110" y="88" font-family="Inter, ui-sans-serif, system-ui, -apple-system" font-size="64" font-weight="700" fill="#1d4ed8">Eisbrief</text>
+</svg>

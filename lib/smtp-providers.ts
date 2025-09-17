@@ -321,13 +321,13 @@ export class SMTPService {
       const info = await transporter.sendMail({
         from: config.username,
         to,
-        subject: 'ColdReach Pro - SMTP Test Email',
+        subject: 'Eisbrief - SMTP Test Email',
         text: 'This is a test email to verify your SMTP configuration is working correctly.',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #2563eb;">SMTP Configuration Test</h2>
             <p>Congratulations! Your SMTP configuration is working correctly.</p>
-            <p>This test email was sent from ColdReach Pro to verify your email account setup.</p>
+            <p>This test email was sent from Eisbrief to verify your email account setup.</p>
             <hr style="border: 1px solid #e5e7eb; margin: 20px 0;">
             <p style="color: #6b7280; font-size: 14px;">
               If you didn't expect this email, you can safely ignore it.

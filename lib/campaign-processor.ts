@@ -381,18 +381,18 @@ export class CampaignProcessor {
           personalizedContent = this.personalizeContent(personalizedContent, contact, campaignContact?.ai_personalization_used)
 
           // Extract sender name from campaign description (mandatory field)
-          let senderName = 'ColdReach Pro' // Fallback for legacy campaigns
+          let senderName = 'Eisbrief' // Fallback for legacy campaigns
           try {
             const descriptionData = JSON.parse(campaign.description || '{}')
             senderName = descriptionData.sender_name
             if (!senderName) {
               console.warn(`⚠️ Campaign ${campaign.id} has no sender_name, using fallback`)
-              senderName = (emailAccount as any).name || 'ColdReach Pro'
+              senderName = (emailAccount as any).name || 'Eisbrief'
             }
           } catch {
             // If description is not JSON, this is likely a legacy campaign
             console.warn(`⚠️ Campaign ${campaign.id} has invalid description format, using email account name`)
-            senderName = (emailAccount as any).name || 'ColdReach Pro'
+            senderName = (emailAccount as any).name || 'Eisbrief'
           }
 
           // Create email tracking record FIRST to get the tracking_pixel_id
@@ -527,11 +527,70 @@ export class CampaignProcessor {
    */
   private async processSequenceCampaign(campaign: any): Promise<void> {
     console.log(`📈 Processing sequence campaign: ${campaign.name}`)
-    
-    // Use the existing CampaignExecutionEngine for sequence campaigns
-    // TODO: Fix CampaignExecutionEngine method reference
-    // await CampaignExecutionEngine.executeCampaign(campaign.id)
-    console.log(`⚠️ Campaign execution skipped for campaign ${campaign.id} - method needs fixing`)
+
+    const supabase = createServerSupabaseClient()
+
+    try {
+      // Check if campaign execution already exists
+      const { data: existingExecution, error: executionError } = await supabase
+        .from('campaign_executions')
+        .select('*')
+        .eq('campaign_id', campaign.id)
+        .single()
+
+      let executionId: string
+
+      if (executionError || !existingExecution) {
+        console.log(`🎬 Initializing new campaign execution for ${campaign.id}`)
+
+        // Get campaign with its contacts
+        const { data: campaignWithContacts, error: campaignError } = await supabase
+          .from('campaigns')
+          .select(`
+            *,
+            campaign_contacts(contact_id)
+          `)
+          .eq('id', campaign.id)
+          .single()
+
+        if (campaignError || !campaignWithContacts) {
+          throw new Error('Failed to get campaign with contacts')
+        }
+
+        // Extract contact IDs
+        const contactIds = campaignWithContacts.campaign_contacts?.map((cc: any) => cc.contact_id) || []
+
+        if (contactIds.length === 0) {
+          console.log(`⚠️ No contacts found for sequence campaign ${campaign.id}`)
+          return
+        }
+
+        console.log(`👥 Found ${contactIds.length} contacts for sequence campaign`)
+
+        // Initialize campaign execution using the CampaignExecutionEngine
+        const execution = await CampaignExecutionEngine.initializeCampaign(
+          campaignWithContacts,
+          contactIds,
+          supabase
+        )
+
+        executionId = execution.id
+        console.log(`✅ Campaign execution initialized with ID: ${executionId}`)
+      } else {
+        executionId = existingExecution.id
+        console.log(`🔄 Using existing campaign execution: ${executionId}`)
+      }
+
+      // Process the next batch of emails
+      console.log(`⚡ Processing next batch for execution ${executionId}`)
+      await CampaignExecutionEngine.processNextBatch(executionId, supabase)
+
+      console.log(`✅ Sequence campaign processing completed for ${campaign.name}`)
+
+    } catch (error) {
+      console.error(`❌ Error processing sequence campaign ${campaign.id}:`, error)
+      throw error
+    }
   }
 
   /**

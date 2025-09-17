@@ -180,8 +180,7 @@ export default function DashboardLayout({
         <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
           <div className="flex h-16 items-center justify-between px-4 border-b">
             <div className="flex items-center">
-              <Zap className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold">ColdReach Pro</span>
+              <img src="/images/eisbrief-logo.png" alt="Eisbrief" className="h-8 w-auto max-w-[120px]" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none'}} />
             </div>
             <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(false)}>
               <X className="h-5 w-5" />
@@ -214,8 +213,7 @@ export default function DashboardLayout({
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex h-16 items-center px-4 border-b">
-            <Zap className="h-8 w-8 text-blue-600" />
-            <span className="ml-2 text-xl font-bold">ColdReach Pro</span>
+            <img src="/images/eisbrief-logo.png" alt="Eisbrief" className="h-8 w-auto max-w-[120px]" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none'}} />
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
             {navigation.map((item) => {

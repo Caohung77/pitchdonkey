@@ -6,10 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ApiClient } from '@/lib/api-client'
-import { 
-  Plus, 
-  Search, 
-  Filter, 
+import {
+  Plus,
+  Search,
+  Filter,
   MoreHorizontal,
   Play,
   Pause,
@@ -23,7 +23,10 @@ import {
   AlertCircle,
   Clock,
   Square,
-  List
+  List,
+  AtSign,
+  CalendarDays,
+  Send
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -59,6 +62,16 @@ interface Campaign {
   updated_at?: string
   contact_lists?: string[]
   list_names?: string[]
+  from_email_account_id?: string
+  email_accounts?: {
+    id: string
+    email: string
+    display_name?: string
+    provider: string
+  }
+  created_at?: string
+  start_date?: string
+  end_date?: string
 }
 
 const STATUS_COLORS = {
@@ -81,6 +94,13 @@ const STATUS_ICONS = {
   stopped: '🛑',
   completed: '✅',
   archived: '📦'
+}
+
+const PROVIDER_ICONS = {
+  gmail: '📧',
+  outlook: '📬',
+  smtp: '📮',
+  'gmail-imap-smtp': '📧'
 }
 
 export default function CampaignsPage() {
@@ -587,11 +607,11 @@ export default function CampaignsPage() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-3">
                       <h3 className="text-lg font-semibold">{campaign.name}</h3>
-                      
+
                       {/* Contact List Badge */}
                       {campaign.list_names && campaign.list_names.length > 0 ? (
-                        <Badge 
-                          variant="outline" 
+                        <Badge
+                          variant="outline"
                           className="text-xs bg-green-50 text-green-700 border-green-200"
                         >
                           <List className="h-3 w-3 mr-1" />
@@ -601,16 +621,16 @@ export default function CampaignsPage() {
                       ) : (
                         /* Fallback - check if campaign has any list-related data */
                         (campaign as any).contact_list_name ? (
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className="text-xs bg-green-50 text-green-700 border-green-200"
                           >
                             <List className="h-3 w-3 mr-1" />
                             {(campaign as any).contact_list_name}
                           </Badge>
                         ) : (campaign as any).list_name ? (
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className="text-xs bg-green-50 text-green-700 border-green-200"
                           >
                             <List className="h-3 w-3 mr-1" />
@@ -618,8 +638,8 @@ export default function CampaignsPage() {
                           </Badge>
                         ) : (
                           /* Temporary fallback showing Handwerk 5 for demonstration */
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className="text-xs bg-green-50 text-green-700 border-green-200"
                           >
                             <List className="h-3 w-3 mr-1" />
@@ -627,6 +647,67 @@ export default function CampaignsPage() {
                           </Badge>
                         )
                       )}
+                    </div>
+
+                    {/* Campaign Info Row - Email Account & Date */}
+                    <div className="flex items-center space-x-4 mb-3 text-sm text-gray-600">
+                      {/* Email Account */}
+                      {campaign.email_accounts ? (
+                        <div className="flex items-center space-x-1">
+                          <AtSign className="h-3 w-3" />
+                          <span>{PROVIDER_ICONS[campaign.email_accounts.provider] || '📧'}</span>
+                          <span className="font-medium">
+                            {campaign.email_accounts.display_name || campaign.email_accounts.email}
+                          </span>
+                          {campaign.email_accounts.display_name && (
+                            <span className="text-gray-400">({campaign.email_accounts.email})</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-1 text-gray-400">
+                          <AtSign className="h-3 w-3" />
+                          <span>No email account</span>
+                        </div>
+                      )}
+
+                      {/* Campaign Date */}
+                      <div className="flex items-center space-x-1">
+                        {campaign.status === 'scheduled' && campaign.scheduled_date ? (
+                          <>
+                            <Calendar className="h-3 w-3" />
+                            <span>Scheduled: {formatDateTime(campaign.scheduled_date)}</span>
+                          </>
+                        ) : campaign.status === 'sending' || campaign.status === 'running' ? (
+                          campaign.start_date ? (
+                            <>
+                              <Send className="h-3 w-3" />
+                              <span>Started: {formatDateTime(campaign.start_date)}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-3 w-3" />
+                              <span>Sending now</span>
+                            </>
+                          )
+                        ) : campaign.status === 'completed' ? (
+                          campaign.end_date ? (
+                            <>
+                              <CalendarDays className="h-3 w-3" />
+                              <span>Completed: {formatDateTime(campaign.end_date)}</span>
+                            </>
+                          ) : (
+                            <>
+                              <CalendarDays className="h-3 w-3" />
+                              <span>Completed recently</span>
+                            </>
+                          )
+                        ) : (
+                          <>
+                            <CalendarDays className="h-3 w-3" />
+                            <span>Created: {formatDateTime(campaign.created_at || campaign.createdAt)}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                     
                     {campaign.description && (

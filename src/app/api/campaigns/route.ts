@@ -23,7 +23,8 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         emails_replied,
         contact_list_ids,
         email_subject,
-        html_content
+        html_content,
+        from_email_account_id
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -310,9 +311,35 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       })
     )
 
+    // Fetch email account information for campaigns that have email accounts
+    const emailAccountIds = [...new Set(campaignsWithStats
+      .map(c => c.from_email_account_id)
+      .filter(Boolean))]
+
+    let emailAccountsMap = {}
+    if (emailAccountIds.length > 0) {
+      const { data: emailAccounts } = await supabase
+        .from('email_accounts')
+        .select('id, email, display_name, provider')
+        .in('id', emailAccountIds)
+
+      if (emailAccounts) {
+        emailAccountsMap = emailAccounts.reduce((acc, account) => {
+          acc[account.id] = account
+          return acc
+        }, {})
+      }
+    }
+
+    // Add email account info to campaigns
+    const campaignsWithEmailAccounts = campaignsWithStats.map(campaign => ({
+      ...campaign,
+      email_accounts: campaign.from_email_account_id ? emailAccountsMap[campaign.from_email_account_id] : null
+    }))
+
     return NextResponse.json({
       success: true,
-      data: campaignsWithStats
+      data: campaignsWithEmailAccounts
     })
 
   } catch (error) {

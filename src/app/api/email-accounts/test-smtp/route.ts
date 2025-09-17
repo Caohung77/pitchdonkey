@@ -52,8 +52,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
           const info = await transporter.sendMail({
             from: username,
             to: testEmail,
-            subject: 'ColdReach Pro - SMTP Test Email',
-            text: `This is a test email sent from ColdReach Pro to verify your SMTP configuration.
+            subject: 'Eisbrief - SMTP Test Email',
+            text: `This is a test email sent from Eisbrief to verify your SMTP configuration.
 
 Configuration Details:
 - Host: ${host}
@@ -67,8 +67,8 @@ Best regards,
 ColdReach Pro Team`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #2563eb;">ColdReach Pro - SMTP Test Email</h2>
-                <p>This is a test email sent from ColdReach Pro to verify your SMTP configuration.</p>
+                <h2 style="color: #2563eb;">Eisbrief - SMTP Test Email</h2>
+                <p>This is a test email sent from Eisbrief to verify your SMTP configuration.</p>
                 
                 <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin: 20px 0;">
                   <h3 style="margin-top: 0;">Configuration Details:</h3>
@@ -84,7 +84,7 @@ ColdReach Pro Team`,
                 
                 <p style="color: #6b7280;">
                   Best regards,<br>
-                  ColdReach Pro Team
+                  Eisbrief Team
                 </p>
               </div>
             `

@@ -51,7 +51,7 @@ export default function SignInPage() {
           <Mail className="h-12 w-12 text-blue-600" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-          Sign in to ColdReach Pro
+          Sign in to Eisbrief
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Or{' '}
