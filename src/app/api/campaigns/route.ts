@@ -38,6 +38,15 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     const campaignsWithStats = await Promise.all(
       (campaigns || []).map(async (campaign) => {
         console.log(`🔍 Processing campaign: ${campaign.name} (status: ${campaign.status})`)
+
+        // Special debug for "scheduled campaign gmail" using Nguyen Brothers
+        if (campaign.name.toLowerCase().includes('gmail') && campaign.name.toLowerCase().includes('scheduled')) {
+          console.log(`🔍 [NGUYEN BROTHERS DEBUG] Campaign details:`)
+          console.log(`  Campaign ID: ${campaign.id}`)
+          console.log(`  Contact list IDs: ${JSON.stringify(campaign.contact_list_ids)}`)
+          console.log(`  Stored total_contacts: ${campaign.total_contacts}`)
+          console.log(`  Current status: ${campaign.status}`)
+        }
         let contactCount = campaign.total_contacts || 0
 
         // ENHANCED: Get contact count with multiple fallback strategies
@@ -222,18 +231,19 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
 
         // Calculate progress and estimated completion
         const processedEmails = emailsSent + emailsFailed
-        const queuedEmails = Math.max(0, contactCount - processedEmails)
-        let completionPercentage = contactCount > 0 ? Math.round((processedEmails / contactCount) * 100) : 0
-        console.log(`  🔢 Calculated percentage: ${completionPercentage}% (${processedEmails}/${contactCount})`)
-        
+        const queuedEmails = Math.max(0, realContactCount - processedEmails)
+        let completionPercentage = realContactCount > 0 ? Math.round((processedEmails / realContactCount) * 100) : 0
+        console.log(`  🔢 Calculated percentage: ${completionPercentage}% (${processedEmails}/${realContactCount})`)
+
         // If campaign is explicitly completed, force 100% to avoid confusion
         if (campaign.status === 'completed') {
           completionPercentage = 100
           console.log(`  ✅ Forced to 100% for completed campaign`)
         }
-        
-        // If fully processed, fix status if necessary
-        const shouldBeCompleted = contactCount > 0 && processedEmails >= contactCount
+
+        // If fully processed, fix status if necessary (but only if campaign was actually running)
+        const shouldBeCompleted = realContactCount > 0 && processedEmails >= realContactCount &&
+                                 (campaign.status === 'sending' || campaign.status === 'running')
         let derivedStatus = campaign.status
         if (shouldBeCompleted && campaign.status !== 'completed') {
           derivedStatus = 'completed'
@@ -279,7 +289,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           name: campaign.name,
           description: campaign.description || '',
           status: derivedStatus,
-          contactCount, // This should show the actual contact list size, not emails sent
+          contactCount: realContactCount, // Use realContactCount for correct count
           emailsSent,
           openRate,
           replyRate,
@@ -289,7 +299,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           scheduledDate: campaign.scheduled_date,
           nextSendAt,
           // Enhanced progress tracking data
-          total_contacts: contactCount, // Ensure both fields show same value
+          total_contacts: realContactCount, // Use realContactCount consistently
           emails_delivered: emailsDelivered,
           emails_opened: emailsOpened,
           emails_clicked: emailsClicked,
@@ -306,7 +316,9 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           updated_at: campaign.updated_at || campaign.created_at,
           // Contact list information
           list_names: listNames,
-          contact_list_ids: campaign.contact_list_ids
+          contact_list_ids: campaign.contact_list_ids,
+          // Email account information
+          from_email_account_id: campaign.from_email_account_id
         }
       })
     )

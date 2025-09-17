@@ -307,33 +307,132 @@ export class GmailIMAPSMTPService {
   }
 
   /**
-   * Send email via SMTP
+   * Send email via Gmail API (not SMTP)
    */
   async sendEmail(options: SendEmailOptions): Promise<{ messageId: string; response: string }> {
     try {
-      const config = await this.createSMTPConfig()
-      const transporter = nodemailer.createTransport(config as any)
+      console.log(`📧 Sending Gmail API email to ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`)
 
-      const mailOptions = {
-        from: this.userEmail,
-        to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
-        cc: options.cc ? (Array.isArray(options.cc) ? options.cc.join(', ') : options.cc) : undefined,
-        bcc: options.bcc ? (Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc) : undefined,
-        subject: options.subject,
-        text: options.text,
-        html: options.html,
-        attachments: options.attachments
+      // Ensure fresh tokens
+      const freshTokens = await this.ensureFreshTokens()
+
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret
+      )
+
+      oauth2Client.setCredentials({
+        access_token: freshTokens.access_token,
+        refresh_token: freshTokens.refresh_token,
+        expiry_date: freshTokens.expires_at,
+        scope: freshTokens.scope,
+        token_type: 'Bearer'
+      })
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+
+      // Prepare email addresses
+      const to = Array.isArray(options.to) ? options.to.join(', ') : options.to
+      const cc = options.cc ? (Array.isArray(options.cc) ? options.cc.join(', ') : options.cc) : undefined
+      const bcc = options.bcc ? (Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc) : undefined
+
+      // Get content
+      const htmlContent = options.html || ''
+      const textContent = options.text || (options.html ? options.html.replace(/<[^>]*>/g, '') : '')
+
+      console.log(`📧 Gmail API HTML content length: ${htmlContent.length} chars`)
+      console.log(`📧 Gmail API text content length: ${textContent.length} chars`)
+      console.log(`📧 Gmail API content preview: ${htmlContent.substring(0, 200)}...`)
+
+      // Generate unique Message-ID
+      const timestamp = Date.now()
+      const random = Math.random().toString(36).substring(2, 15)
+      const messageId = `<${timestamp}.${random}@gmail.com>`
+
+      // Create proper RFC 2822 multipart message
+      const boundary = `----=_Part_${timestamp}_${random}`
+
+      // Build email headers
+      const headers = [
+        `From: ${this.userEmail}`,
+        `To: ${to}`,
+        cc ? `Cc: ${cc}` : null,
+        bcc ? `Bcc: ${bcc}` : null,
+        `Subject: ${options.subject}`,
+        `Message-ID: ${messageId}`,
+        `Date: ${new Date().toUTCString()}`,
+        'MIME-Version: 1.0'
+      ].filter(Boolean)
+
+      // If we have both HTML and text, create multipart message
+      let emailContent: string
+      if (htmlContent && textContent) {
+        emailContent = [
+          ...headers,
+          `Content-Type: multipart/alternative; boundary="${boundary}"`,
+          '',
+          `--${boundary}`,
+          'Content-Type: text/plain; charset=utf-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          textContent,
+          '',
+          `--${boundary}`,
+          'Content-Type: text/html; charset=utf-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          htmlContent,
+          '',
+          `--${boundary}--`
+        ].join('\r\n')
+      } else if (htmlContent) {
+        // HTML only
+        emailContent = [
+          ...headers,
+          'Content-Type: text/html; charset=utf-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          htmlContent
+        ].join('\r\n')
+      } else {
+        // Text only
+        emailContent = [
+          ...headers,
+          'Content-Type: text/plain; charset=utf-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          textContent
+        ].join('\r\n')
       }
 
-      const result = await transporter.sendMail(mailOptions)
+      console.log(`📧 Final email structure length: ${emailContent.length} chars`)
+      console.log(`📧 Email headers preview:`)
+      console.log(emailContent.split('\r\n\r\n')[0])
+
+      // Encode message in base64url format for Gmail API
+      const encodedMessage = Buffer.from(emailContent, 'utf8')
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
+
+      // Send via Gmail API
+      const result = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: {
+          raw: encodedMessage
+        }
+      })
+
+      console.log(`✅ Gmail API email sent successfully: ${result.data.id}`)
 
       return {
-        messageId: result.messageId,
-        response: result.response
+        messageId: result.data.id || `gmail_api_${Date.now()}`,
+        response: `Gmail API success: ${result.data.id}`
       }
     } catch (error) {
-      console.error('Email sending error:', error)
-      throw new Error(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('Gmail API sending error:', error)
+      throw new Error(`Failed to send email via Gmail API: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 

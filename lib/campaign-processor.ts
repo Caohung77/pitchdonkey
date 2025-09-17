@@ -331,37 +331,48 @@ export class CampaignProcessor {
             .single()
           
           if (campaignContactError || !campaignContact) {
-            console.warn(`⚠️ Could not find campaign_contact record for ${contact.id}, will try campaign description fallback`)
+            console.log(`ℹ️ No campaign_contact record for ${contact.id}, using base campaign content (immediate send)`)
 
-            // Fallback: use per-contact personalized content stored in campaign.description
-            try {
-              const desc = JSON.parse(campaign.description || '{}')
-              const map = desc?.personalized_emails || {}
-              const fromMap = map[contact.id]
-              if (fromMap?.subject || fromMap?.content) {
-                if (fromMap.subject) personalizedSubject = fromMap.subject
-                if (fromMap.content) personalizedContent = fromMap.content
-                console.log(`✨ Using fallback personalized content from description for ${contact.first_name} ${contact.last_name}`)
+            // For immediate sends, we should use the base campaign content that was already set
+            // personalizedSubject and personalizedContent are already set from campaign.email_subject and campaign.html_content
 
-                // Best-effort backfill campaign_contacts for analytics/history
-                try {
-                  await supabase
-                    .from('campaign_contacts')
-                    .insert({
-                      campaign_id: campaign.id,
-                      contact_id: contact.id,
-                      status: 'pending',
-                      current_sequence: 1,
-                      personalized_subject: personalizedSubject,
-                      personalized_body: personalizedContent,
-                      ai_personalization_used: true
-                    })
-                } catch (e) {
-                  console.warn('⚠️ Backfill campaign_contacts failed (non-fatal):', (e as any)?.message)
+            // Only try description fallback if the base content is missing
+            if (!personalizedContent || personalizedContent.trim() === '') {
+              console.warn(`⚠️ Base campaign content is missing, trying description fallback for ${contact.id}`)
+
+              try {
+                const desc = JSON.parse(campaign.description || '{}')
+                const map = desc?.personalized_emails || {}
+                const fromMap = map[contact.id]
+                if (fromMap?.subject || fromMap?.content) {
+                  if (fromMap.subject) personalizedSubject = fromMap.subject
+                  if (fromMap.content) personalizedContent = fromMap.content
+                  console.log(`✨ Using fallback personalized content from description for ${contact.first_name} ${contact.last_name}`)
+
+                  // Best-effort backfill campaign_contacts for analytics/history
+                  try {
+                    await supabase
+                      .from('campaign_contacts')
+                      .insert({
+                        campaign_id: campaign.id,
+                        contact_id: contact.id,
+                        status: 'pending',
+                        current_sequence: 1,
+                        personalized_subject: personalizedSubject,
+                        personalized_body: personalizedContent,
+                        ai_personalization_used: true
+                      })
+                  } catch (e) {
+                    console.warn('⚠️ Backfill campaign_contacts failed (non-fatal):', (e as any)?.message)
+                  }
                 }
+              } catch (e) {
+                console.warn('⚠️ Failed to parse campaign description for fallback content:', e)
               }
-            } catch (e) {
-              // ignore JSON parse error
+            } else {
+              console.log(`✅ Using base campaign HTML content for ${contact.first_name} ${contact.last_name}`)
+              console.log(`📧 Content length: ${personalizedContent.length} chars`)
+              console.log(`📧 Content preview: ${personalizedContent.substring(0, 300)}...`)
             }
           } else {
             // Use personalized content if available
@@ -377,8 +388,15 @@ export class CampaignProcessor {
           }
 
           // Apply standard variable replacement to the personalized content
+          console.log(`🔧 Before personalization - Contact: ${JSON.stringify({name: contact.first_name + ' ' + contact.last_name, email: contact.email})}`)
+          console.log(`🔧 Before personalization - Subject: ${personalizedSubject}`)
+          console.log(`🔧 Before personalization - Content preview: ${personalizedContent.substring(0, 200)}...`)
+
           personalizedSubject = this.personalizeContent(personalizedSubject, contact, campaignContact?.ai_personalization_used)
           personalizedContent = this.personalizeContent(personalizedContent, contact, campaignContact?.ai_personalization_used)
+
+          console.log(`✅ After personalization - Subject: ${personalizedSubject}`)
+          console.log(`✅ After personalization - Content preview: ${personalizedContent.substring(0, 200)}...`)
 
           // Extract sender name from campaign description (mandatory field)
           let senderName = 'Eisbrief' // Fallback for legacy campaigns

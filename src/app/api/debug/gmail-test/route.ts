@@ -82,60 +82,90 @@ export const POST = async (request: NextRequest) => {
       }, { status: 500 })
     }
 
-    // Test 5: Send email
-    console.log('🔍 Step 5: Sending test email...')
-    const emailOptions = {
-      to: 'banbau@gmx.net',
-      subject: 'Gmail IMAP/SMTP Integration Test - Eisbrief',
-      text: `Test email sent at ${new Date().toISOString()}
+    // Test 5: Send email to both addresses
+    console.log('🔍 Step 5: Sending test emails to both addresses...')
+
+    const testEmails = ['caohung@icloud.com', 'banbau@gmx.net']
+    const results = []
+
+    for (const email of testEmails) {
+      console.log(`📧 Testing email to: ${email}`)
+      const emailOptions = {
+        to: email,
+        subject: `Gmail IMAP/SMTP Integration Test - ${email} - Eisbrief`,
+        text: `Test email sent at ${new Date().toISOString()}
 
 This is a test email to verify Gmail SMTP integration is working correctly.
 
+Recipient: ${email}
 Account: ${account.email}
 Service: Gmail IMAP/SMTP
 Timestamp: ${new Date().toISOString()}
 
 If you receive this email, the integration is working!`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #333;">Gmail IMAP/SMTP Integration Test</h2>
-          <p>Test email sent at <strong>${new Date().toISOString()}</strong></p>
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #333;">Gmail IMAP/SMTP Integration Test</h2>
+            <p>Test email sent at <strong>${new Date().toISOString()}</strong></p>
 
-          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h3 style="margin-top: 0;">Test Details:</h3>
-            <ul>
-              <li><strong>Account:</strong> ${account.email}</li>
-              <li><strong>Service:</strong> Gmail IMAP/SMTP</li>
-              <li><strong>Timestamp:</strong> ${new Date().toISOString()}</li>
-              <li><strong>SMTP Status:</strong> ${smtpWorking ? '✅ Working' : '❌ Failed'}</li>
-              <li><strong>IMAP Status:</strong> ${imapWorking ? '✅ Working' : '❌ Failed'}</li>
-            </ul>
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Test Details:</h3>
+              <ul>
+                <li><strong>Recipient:</strong> ${email}</li>
+                <li><strong>Account:</strong> ${account.email}</li>
+                <li><strong>Service:</strong> Gmail IMAP/SMTP</li>
+                <li><strong>Timestamp:</strong> ${new Date().toISOString()}</li>
+                <li><strong>SMTP Status:</strong> ${smtpWorking ? '✅ Working' : '❌ Failed'}</li>
+                <li><strong>IMAP Status:</strong> ${imapWorking ? '✅ Working' : '❌ Failed'}</li>
+              </ul>
+            </div>
+
+            <p style="color: #666;">If you receive this email, the Gmail integration is working correctly!</p>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="font-size: 12px; color: #999;">
+              Sent via Eisbrief Gmail Integration Test<br>
+              ${new Date().toISOString()}
+            </p>
           </div>
+        `
+      }
 
-          <p style="color: #666;">If you receive this email, the Gmail integration is working correctly!</p>
+      console.log('📧 Sending email with options:', {
+        to: emailOptions.to,
+        subject: emailOptions.subject,
+        hasText: !!emailOptions.text,
+        hasHtml: !!emailOptions.html
+      })
 
-          <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
-          <p style="font-size: 12px; color: #999;">
-            Sent via Eisbrief Gmail Integration Test<br>
-            ${new Date().toISOString()}
-          </p>
-        </div>
-      `
+      try {
+        const result = await gmailService.sendEmail(emailOptions)
+
+        console.log('📧 Send result:', {
+          messageId: result.messageId,
+          response: result.response?.substring(0, 100) + '...'
+        })
+
+        results.push({
+          email: email,
+          success: true,
+          messageId: result.messageId,
+          response: result.response
+        })
+
+        // Add delay between emails to be respectful
+        if (email !== testEmails[testEmails.length - 1]) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      } catch (error) {
+        console.error(`❌ Failed to send to ${email}:`, error)
+        results.push({
+          email: email,
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
     }
-
-    console.log('📧 Sending email with options:', {
-      to: emailOptions.to,
-      subject: emailOptions.subject,
-      hasText: !!emailOptions.text,
-      hasHtml: !!emailOptions.html
-    })
-
-    const result = await gmailService.sendEmail(emailOptions)
-
-    console.log('📧 Send result:', {
-      messageId: result.messageId,
-      response: result.response?.substring(0, 100) + '...'
-    })
 
     // Test 6: Test mailboxes and email reading
     console.log('🔍 Step 6: Testing mailboxes and email reading...')
@@ -174,16 +204,15 @@ If you receive this email, the integration is working!`,
 
     return NextResponse.json({
       success: true,
-      message: 'Email sent successfully',
+      message: 'Emails sent to test addresses',
       details: {
-        messageId: result.messageId,
+        results: results,
         from: account.email,
-        to: 'banbau@gmx.net',
-        subject: emailOptions.subject,
         timestamp: new Date().toISOString(),
         smtpWorking,
         imapWorking,
-        response: result.response
+        totalSent: results.filter(r => r.success).length,
+        totalFailed: results.filter(r => !r.success).length
       }
     })
 
