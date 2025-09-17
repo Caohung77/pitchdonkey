@@ -255,13 +255,29 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Brand */}
             <div className="flex items-center">
               <Zap className="h-6 w-6 text-blue-400" />
-              <span className="ml-2 text-lg font-semibold">ColdReach Pro</span>
+              <span className="ml-2 text-lg font-semibold">PitchDonkey</span>
             </div>
-            <div className="text-sm text-gray-400">
-              © 2024 ColdReach Pro. Built with Next.js and TypeScript.
+
+            {/* Links */}
+            <div className="flex flex-col space-y-2">
+              <h3 className="text-sm font-semibold text-white mb-2">Legal</h3>
+              <Link href="/privacy" className="text-sm text-gray-400 hover:text-white transition-colors">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="text-sm text-gray-400 hover:text-white transition-colors">
+                Terms of Service
+              </Link>
+            </div>
+
+            {/* Copyright */}
+            <div className="flex flex-col justify-end text-right">
+              <div className="text-sm text-gray-400">
+                © 2024 PitchDonkey. Built with Next.js and TypeScript.
+              </div>
             </div>
           </div>
         </div>

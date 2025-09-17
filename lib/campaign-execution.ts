@@ -999,16 +999,51 @@ export class CampaignExecutionEngine {
           trackingId: params.trackingId
         }
 
-      } else if (params.emailAccount.provider === 'gmail') {
-        // Gmail OAuth sending - for now return success but note it needs implementation
-        console.log(`⚠️ Gmail OAuth sending not fully implemented yet`)
-        
-        return {
-          messageId: `gmail_mock_${params.trackingId}`,
-          status: 'sent',
-          provider: 'gmail',
-          trackingId: params.trackingId,
-          note: 'Gmail OAuth implementation needed'
+      } else if (params.emailAccount.provider === 'gmail' || params.emailAccount.provider === 'gmail-imap-smtp') {
+        // Gmail OAuth sending via server-side service
+        console.log(`📧 Sending Gmail email to ${params.to}`)
+
+        try {
+          // Import the server-side Gmail service
+          const { GmailIMAPSMTPServerService } = await import('./server/gmail-imap-smtp-server')
+          const gmailService = new GmailIMAPSMTPServerService()
+
+          // Generate tracking pixel URL for this email
+          const baseUrl =
+            process.env.NEXT_PUBLIC_APP_URL ||
+            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+          const trackingPixelUrl = `${baseUrl}/api/tracking/pixel/${params.trackingId}`
+
+          // Insert tracking pixel into HTML content
+          const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="">`
+
+          // Ensure content has tracking pixel
+          let htmlContent = params.content
+          if (htmlContent.includes('</body>')) {
+            htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`)
+          } else {
+            htmlContent = `${htmlContent}${trackingPixel}`
+          }
+
+          const result = await gmailService.sendGmailEmail(params.emailAccount.id, {
+            to: params.to,
+            subject: params.subject,
+            html: htmlContent,
+            text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version
+          })
+
+          console.log(`✅ Gmail email sent successfully: ${result.messageId}`)
+
+          return {
+            messageId: result.messageId || `gmail_${params.trackingId}`,
+            status: 'sent',
+            provider: 'gmail',
+            trackingId: params.trackingId,
+            details: result
+          }
+        } catch (error) {
+          console.error(`❌ Gmail sending failed:`, error)
+          throw new Error(`Gmail sending failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
 
       } else if (params.emailAccount.provider === 'outlook') {
