@@ -363,6 +363,7 @@ export class CampaignExecutionEngine {
           contact_id: job.contact_id,
           message_id: job.id, // Required unique field
           tracking_pixel_id: job.id, // Use job ID as tracking pixel ID
+          status: 'delivered', // Set status to delivered when successfully sent
           sent_at: new Date().toISOString(),
           // Treat SMTP acceptance as delivery to recipient server
           delivered_at: new Date().toISOString(),

@@ -1,10 +1,18 @@
 import { NextRequest } from 'next/server'
 import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { createServerSupabaseClient } from '@/lib/supabase'
+import { fixedCampaignProcessor } from '@/lib/campaign-processor-fixed'
 
 export const GET = withAuth(async (request: NextRequest, user, { params }) => {
   try {
-    const { id } = params
+    // Ensure any due scheduled batches are flushed before returning analytics
+    try {
+      await fixedCampaignProcessor.processReadyCampaigns()
+    } catch (processorError) {
+      console.warn('⚠️ Auto campaign processing (analytics) skipped:', processorError)
+    }
+
+    const { id } = await params
     const supabase = createServerSupabaseClient()
 
     // Get campaign details
@@ -32,23 +40,34 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
 
     const emails = emailTracking || []
 
-    // Derive state from timestamps to support schemas without a `status` column
+    // Fixed analytics: Derive state from timestamps and status accurately
+    // CRITICAL: Only count emails as "bounced" if they were actually sent first and then bounced
+    // Send failures should NOT be counted as bounces
     const isSent = (e: any) => !!(e.sent_at || e.delivered_at || e.opened_at || e.clicked_at || e.replied_at)
     const isDelivered = (e: any) => !!(e.delivered_at || e.opened_at || e.clicked_at || e.replied_at)
     const isOpened = (e: any) => !!e.opened_at
     const isClicked = (e: any) => !!e.clicked_at
     const isReplied = (e: any) => !!e.replied_at
-    const isBounced = (e: any) => (e.bounced_at || e.bounce_reason) ? true : (e.status === 'bounced')
+    const isFailed = (e: any) => e.status === 'failed' && !e.sent_at // Failed to send (never sent)
+    const isBounced = (e: any) => {
+      // Only count as bounced if:
+      // 1. Email was actually sent (has sent_at timestamp), AND
+      // 2. Has bounce indicators (bounced_at or bounce_reason or status='bounced')
+      const wasSent = !!(e.sent_at || e.delivered_at)
+      const hasBounceIndicators = !!(e.bounced_at || e.bounce_reason || e.status === 'bounced')
+      return wasSent && hasBounceIndicators
+    }
     const isComplained = (e: any) => e.status === 'complained'
 
-    // Calculate analytics
+    // Calculate analytics with accurate counts
     const totalEmails = emails.length
     const sentEmails = emails.filter(isSent).length
     const deliveredEmails = emails.filter(isDelivered).length
     const openedEmails = emails.filter(isOpened).length
     const clickedEmails = emails.filter(isClicked).length
     const repliedEmails = emails.filter(isReplied).length
-    const bouncedEmails = emails.filter(isBounced).length
+    const bouncedEmails = emails.filter(isBounced).length // Only actual bounces
+    const failedEmails = emails.filter(isFailed).length // Send failures
     const complainedEmails = emails.filter(isComplained).length
 
     // Calculate rates
@@ -156,7 +175,8 @@ export const GET = withAuth(async (request: NextRequest, user, { params }) => {
         openedEmails,
         clickedEmails,
         repliedEmails,
-        bouncedEmails,
+        bouncedEmails, // Only actual bounces
+        failedEmails, // Send failures (separate from bounces)
         complainedEmails,
         deliveryRate,
         openRate,

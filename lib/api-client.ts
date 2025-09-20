@@ -56,13 +56,21 @@ export class ApiClient {
     })
     if (!response.ok) {
       let errorMessage = `API Error: ${response.status} ${response.statusText}`
+      console.error('🚨 POST API Request Failed:', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        requestData: typeof data === 'object' ? Object.keys(data).length : 'non-object'
+      })
+
       try {
         const errorData = await response.json()
         // Only log structured error bodies; avoid noisy empty objects
         if (errorData && typeof errorData === 'object' && Object.keys(errorData).length > 0) {
-          console.error('API Error Response:', errorData)
+          console.error('📋 POST API Error Response:', errorData)
         } else {
-          console.error(`API Error ${response.status}: Empty or unstructured error body`)
+          console.error(`📭 POST API Error ${response.status}: Empty or unstructured error body`)
         }
 
         // Handle both plain errors and our API envelope: { success, data, error, message }

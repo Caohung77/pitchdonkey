@@ -383,30 +383,30 @@ export default function SimpleCampaignPage() {
     console.log('🚀 handleLaunch called, current step:', currentStep)
     const isValid = validateStep(currentStep)
     console.log('✅ Validation result:', isValid, 'Errors:', errors)
-    
+
     if (!isValid) {
       console.log('❌ Validation failed, stopping')
       return
     }
 
+    // Convert Map to plain object for API (move outside try block for error logging)
+    const personalizedEmailsObj = {}
+    personalizedEmails.forEach((value, key) => {
+      personalizedEmailsObj[key] = value
+    })
+
+    const payload = {
+      ...campaignData,
+      status: campaignData.send_immediately ? 'sending' : 'scheduled',
+      personalized_emails: personalizedEmailsObj,
+      scheduled_date: campaignData.send_immediately
+        ? undefined
+        : parseLocalDateTime(scheduleDate, scheduleTime).toISOString()
+    }
+
     try {
       setLoading(true)
-      
-      // Convert Map to plain object for API
-      const personalizedEmailsObj = {}
-      personalizedEmails.forEach((value, key) => {
-        personalizedEmailsObj[key] = value
-      })
-      
-      const payload = {
-        ...campaignData,
-        status: campaignData.send_immediately ? 'sending' : 'scheduled',
-        personalized_emails: personalizedEmailsObj,
-        scheduled_date: campaignData.send_immediately
-          ? undefined
-          : parseLocalDateTime(scheduleDate, scheduleTime).toISOString()
-      }
-      
+
       console.log('🚀 Launching campaign with payload:', {
         ...payload,
         html_content: payload.html_content?.substring(0, 100) + '...',
@@ -418,25 +418,25 @@ export default function SimpleCampaignPage() {
           contentPreview: (email as any).content?.substring(0, 100) + '...' || 'none'
         }))
       })
-      
+
       const result = await ApiClient.post('/api/campaigns/simple', payload)
-      
+
       console.log('🚀 Campaign launch result:', result)
-      
+
       // Check for success - handle different API response formats
       const isSuccessful = result.success || result.id || result.data?.id
-      
+
       if (isSuccessful) {
         console.log('✅ Campaign created successfully, showing modal')
         setCampaignResult(result)
         setShowSuccessModal(true)
-        
+
         // VERCEL FIX: If campaign was set to send immediately, trigger processing via separate API call
         if (campaignData.send_immediately) {
           console.log('🔄 Triggering immediate campaign processing...')
           try {
             // Make a separate API call to trigger processing (non-blocking)
-            fetch('/api/campaigns/process', { 
+            fetch('/api/campaigns/process', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' }
             }).catch(error => {
@@ -456,7 +456,7 @@ export default function SimpleCampaignPage() {
         message: error.message,
         stack: error.stack,
         campaignData,
-        payload
+        payload  // Now accessible since it's defined outside the try block
       })
       alert(`Failed to launch campaign: ${error.message || 'Please try again.'}`)
     } finally {

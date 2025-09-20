@@ -99,30 +99,36 @@ export class CampaignProcessor {
       // Filter out campaigns that are already fully processed but status wasn't updated
       const campaignsToProcess = []
       for (const campaign of campaigns) {
-        // Check if campaign already has all emails sent
+        // Check if campaign already has all emails processed (sent OR bounced)
         const { data: emailStats } = await supabase
           .from('email_tracking')
-          .select('sent_at')
+          .select('sent_at, bounced_at')
           .eq('campaign_id', campaign.id)
-        
-        const sentCount = emailStats?.filter(e => e.sent_at !== null).length || 0
+
+        const processedCount = emailStats?.filter(e => e.sent_at !== null).length || 0
         const totalContacts = campaign.total_contacts || 0
-        
-        if (sentCount >= totalContacts && totalContacts > 0) {
-          console.log(`⏭️  Skipping ${campaign.name} - already completed (${sentCount}/${totalContacts} sent)`)
-          
-          // Mark as completed if not already
+
+        if (processedCount >= totalContacts && totalContacts > 0) {
+          console.log(`⏭️  Skipping ${campaign.name} - already completed (${processedCount}/${totalContacts} processed)`)
+
+          // Mark as completed if not already and update statistics
           if (campaign.status !== 'completed') {
+            const sentEmails = emailStats?.filter(e => e.sent_at !== null && e.bounced_at === null).length || 0
+            const bouncedEmails = emailStats?.filter(e => e.bounced_at !== null).length || 0
+
             await supabase
               .from('campaigns')
               .update({
-                status: 'completed'
+                status: 'completed',
+                emails_sent: sentEmails,
+                emails_bounced: bouncedEmails,
+                updated_at: new Date().toISOString()
               })
               .eq('id', campaign.id)
-            console.log(`✅ Marked ${campaign.name} as completed`)
+            console.log(`✅ Marked ${campaign.name} as completed (${sentEmails} sent, ${bouncedEmails} bounced)`)
           }
         } else {
-          console.log(`🔄 Will process ${campaign.name} (${sentCount}/${totalContacts} sent)`)
+          console.log(`🔄 Will process ${campaign.name} (${processedCount}/${totalContacts} processed)`)
           campaignsToProcess.push(campaign)
         }
       }
@@ -311,12 +317,15 @@ export class CampaignProcessor {
       let emailsFailed = 0
 
       // Send emails with delays to avoid rate limits
+      const delayConfig = this.getSendDelayConfig()
+
       for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i]
         
+        const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
+        let trackingPixelId: string | null = null
         try {
-          // Generate tracking ID
-          const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
+          // Generate tracking ID (used for message + tracking fallback)
 
           // Get personalized content from database if available
           let personalizedSubject = campaign.email_subject
@@ -414,27 +423,64 @@ export class CampaignProcessor {
           }
 
           // Create email tracking record FIRST to get the tracking_pixel_id
+          const trackingInsert = {
+            user_id: campaign.user_id,
+            campaign_id: campaign.id,
+            contact_id: contact.id,
+            message_id: trackingId,
+            subject_line: personalizedSubject,
+            email_body: personalizedContent,
+            email_account_id: emailAccount.id,
+            status: 'pending', // explicitly set initial status
+            sent_at: null as string | null // override DB defaults so analytics wait for the actual send
+          }
+
           const { data: trackingRecord, error: trackingError } = await supabase
             .from('email_tracking')
-            .insert({
-              user_id: campaign.user_id,
-              campaign_id: campaign.id,
-              contact_id: contact.id,
-              message_id: trackingId,
-              subject_line: personalizedSubject,
-              email_body: personalizedContent,
-              // Don't set sent_at yet - will be set after successful send
-            })
-            .select('tracking_pixel_id')
+            .insert(trackingInsert)
+            .select('tracking_pixel_id, id')
             .single()
 
-          if (trackingError) {
+          if (trackingError || !trackingRecord) {
             console.error('❌ Error creating tracking record:', trackingError)
             continue // Skip this contact
           }
 
-          const pixelId = trackingRecord.tracking_pixel_id
-          console.log(`📡 Created tracking record with pixel ID: ${pixelId}`)
+          trackingPixelId = trackingRecord.tracking_pixel_id
+          console.log(`📡 Created tracking record with pixel ID: ${trackingPixelId}`)
+
+          const updateTrackingRecord = async (update: Record<string, any>) => {
+            const buildQuery = () => {
+              const query = supabase
+                .from('email_tracking')
+                .update(update)
+              if (trackingPixelId) {
+                return query.eq('tracking_pixel_id', trackingPixelId)
+              }
+              return query.eq('message_id', trackingId)
+            }
+
+            const { error: updateError } = await buildQuery()
+
+            if (updateError) {
+              console.warn('⚠️ Primary email_tracking update failed, retrying with reduced payload:', {
+                error: updateError.message,
+                code: updateError.code
+              })
+
+              // Only remove problematic fields, keep status for tracking
+              const { tracking_pixel_id: _pixel, message_id: _msg, ...minimal } = update
+
+              const { error: fallbackError } = await supabase
+                .from('email_tracking')
+                .update(minimal)
+                .eq(trackingPixelId ? 'tracking_pixel_id' : 'message_id', trackingPixelId || trackingId)
+
+              if (fallbackError) {
+                console.error('❌ email_tracking fallback update failed:', fallbackError)
+              }
+            }
+          }
 
           // Send email with the actual tracking pixel ID
           const result = await this.sendEmail({
@@ -444,21 +490,22 @@ export class CampaignProcessor {
             emailAccount: emailAccount,
             senderName: senderName,
             trackingId: trackingId,
-            pixelId: pixelId  // Add the actual pixel ID
+            pixelId: trackingPixelId || undefined
           })
 
           if (result.status === 'sent') {
             emailsSent++
             console.log(`✅ Email ${i+1}/${contacts.length} sent to ${contact.email}`)
 
-            // Update tracking record with sent+delivered timestamps (SMTP accepted)
-            await supabase
-              .from('email_tracking')
-              .update({
-                sent_at: new Date().toISOString(),
-                delivered_at: new Date().toISOString()
-              })
-              .eq('tracking_pixel_id', pixelId)
+            // Update tracking record with sent+delivered timestamps and status (SMTP accepted)
+            const nowIso = new Date().toISOString()
+            await updateTrackingRecord({
+              status: 'delivered',
+              sent_at: nowIso,
+              delivered_at: nowIso,
+              message_id: result.messageId || trackingId,
+              tracking_pixel_id: trackingPixelId || null
+            })
 
             // Update campaign total_contacts if not set and trigger UI refresh
             await supabase
@@ -476,13 +523,14 @@ export class CampaignProcessor {
             console.log(`❌ Failed to send email ${i+1}/${contacts.length} to ${contact.email}: ${result.error}`)
 
             // Update existing tracking record with failure info
-            await supabase
-              .from('email_tracking')
-              .update({
-                bounced_at: new Date().toISOString(),
-                bounce_reason: result.error
-              })
-              .eq('tracking_pixel_id', pixelId)
+            const nowIso = new Date().toISOString()
+            await updateTrackingRecord({
+              status: 'failed',
+              bounced_at: nowIso,
+              sent_at: nowIso,
+              bounce_reason: result.error || 'Email send failed',
+              tracking_pixel_id: trackingPixelId || null
+            })
 
             // Update campaign total_contacts if not set and trigger UI refresh
             await supabase
@@ -496,16 +544,51 @@ export class CampaignProcessor {
             console.log(`📊 Email ${i+1}/${contacts.length} failed and tracked`)
           }
 
-          // Apply rate limiting delay (30-60 seconds between emails)
+          // Apply rate limiting delay (configurable, defaults to shorter pauses on serverless)
           if (i < contacts.length - 1) { // Don't delay after the last email
-            const delay = Math.random() * 30000 + 30000 // 30-60 seconds
-            console.log(`⏳ Waiting ${Math.round(delay/1000)}s before next email...`)
-            await new Promise(resolve => setTimeout(resolve, delay))
+            const delay = delayConfig.min === delayConfig.max
+              ? delayConfig.min
+              : Math.random() * (delayConfig.max - delayConfig.min) + delayConfig.min
+
+            if (delay > 0) {
+              console.log(`⏳ Waiting ${Math.round(delay/1000)}s before next email...`)
+              await new Promise(resolve => setTimeout(resolve, delay))
+            }
           }
 
         } catch (error) {
           emailsFailed++
           console.error(`❌ Error sending to ${contact.email}:`, error)
+
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          const nowIso = new Date().toISOString()
+          try {
+            const updates: Record<string, any> = {
+              status: 'failed',
+              bounced_at: nowIso,
+              sent_at: nowIso,
+              bounce_reason: errorMessage,
+            }
+            const { error: failUpdateError } = await supabase
+              .from('email_tracking')
+              .update(updates)
+              .eq(trackingPixelId ? 'tracking_pixel_id' : 'message_id', trackingPixelId || trackingId)
+
+            if (failUpdateError) {
+              console.warn('⚠️ Failed to mark tracking record as failed with status column, retrying with reduced payload')
+              const { status: _status, tracking_pixel_id: _pixel, message_id: _msg, ...fallback } = updates
+              const { error: fallbackError } = await supabase
+                .from('email_tracking')
+                .update(fallback)
+                .eq(trackingPixelId ? 'tracking_pixel_id' : 'message_id', trackingPixelId || trackingId)
+
+              if (fallbackError) {
+                console.error('❌ Could not update tracking record after send error:', fallbackError)
+              }
+            }
+          } catch (trackingUpdateError) {
+            console.error('❌ Unexpected error updating tracking record after send failure:', trackingUpdateError)
+          }
           
           // Update campaign total_contacts if not set and trigger UI refresh
           await supabase
@@ -526,9 +609,10 @@ export class CampaignProcessor {
         .from('campaigns')
         .update({
           emails_sent: emailsSent,
-          emails_failed: emailsFailed,
+          emails_bounced: emailsFailed, // Bounced emails are tracked as failures in this context
           total_contacts: contacts.length,
-          status: processedCount >= contacts.length ? 'completed' : (emailsSent > 0 ? 'running' : 'paused')
+          status: processedCount >= contacts.length ? 'completed' : (processedCount > 0 ? 'running' : 'paused'),
+          updated_at: new Date().toISOString()
         })
         .eq('id', campaign.id)
 
@@ -786,6 +870,36 @@ export class CampaignProcessor {
     }
     
     return personalizedContent
+  }
+
+  /**
+   * Determine delay configuration between sends, with overrides for serverless environments
+   */
+  private getSendDelayConfig(): { min: number; max: number } {
+    const parseDelay = (value?: string | number | null) => {
+      if (value === undefined || value === null) return NaN
+      const num = typeof value === 'number' ? value : parseInt(value, 10)
+      return Number.isFinite(num) && num >= 0 ? num : NaN
+    }
+
+    const envMin = parseDelay(process.env.CAMPAIGN_SEND_DELAY_MIN_MS as any)
+    const envMax = parseDelay(process.env.CAMPAIGN_SEND_DELAY_MAX_MS as any)
+
+    if (!Number.isNaN(envMin) && !Number.isNaN(envMax) && envMax >= envMin) {
+      return { min: envMin, max: envMax }
+    }
+
+    const runtime = process.env.NEXT_RUNTIME
+    const isEdgeRuntime = runtime ? runtime !== 'nodejs' : false
+    const isServerless = Boolean(process.env.VERCEL || process.env.SERVERLESS) || isEdgeRuntime
+
+    if (isServerless) {
+      // Tighten delays to stay within serverless execution limits
+      return { min: 1000, max: 2000 }
+    }
+
+    // Default desktop/server delay (30-60 seconds)
+    return { min: 30000, max: 60000 }
   }
 }
 

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withAuth } from '@/lib/auth-middleware'
+import { withAuth } from '@/lib/api-auth'
 import { campaignProcessor } from '@/lib/campaign-processor'
 
 /**
  * Manual campaign processing trigger endpoint
  * This can be used to manually trigger campaign processing for testing
  */
-export const POST = withAuth(async (request: NextRequest, { user, supabase }) => {
+export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     console.log(`🚀 Manual campaign processing triggered by user: ${user.email}`)
 
@@ -31,7 +31,8 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
 /**
  * Get campaign processor status
  */
-export const GET = withAuth(async (request: NextRequest, { user, supabase }) => {
+export const GET = withAuth(async (request: NextRequest, user) => {
+  const supabase = (await import('@/lib/supabase-server')).createServerSupabaseClient()
   try {
     // Get campaigns that would be processed
     const { data: pendingCampaigns, error } = await supabase

@@ -75,28 +75,37 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
       }
     }
     
-    // If no valid session found, return the hardcoded user for now
-    // TODO: Remove this once proper auth is working
-    const fallbackUser = {
-      id: 'ea1f9972-6109-44ec-93d5-05522f49760c',
-      email: 'banbau@gmx.net',
-      aud: 'authenticated',
-      role: 'authenticated',
-      email_confirmed_at: new Date().toISOString(),
-      phone: '',
-      confirmed_at: new Date().toISOString(),
-      last_sign_in_at: new Date().toISOString(),
-      app_metadata: { provider: 'email', providers: ['email'] },
-      user_metadata: {},
-      identities: [],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+    // Development-only fallback user - ONLY for development/testing!
+    if (process.env.NODE_ENV === 'development' && process.env.USE_FALLBACK_AUTH === 'true') {
+      console.warn('🚨 Using fallback auth - DEVELOPMENT ONLY!')
+      const fallbackUser = {
+        id: 'ea1f9972-6109-44ec-93d5-05522f49760c',
+        email: 'banbau@gmx.net',
+        aud: 'authenticated',
+        role: 'authenticated',
+        email_confirmed_at: new Date().toISOString(),
+        phone: '',
+        confirmed_at: new Date().toISOString(),
+        last_sign_in_at: new Date().toISOString(),
+        app_metadata: { provider: 'email', providers: ['email'] },
+        user_metadata: {},
+        identities: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      return {
+        user: fallbackUser as any,
+        error: null,
+        status: 200
+      }
     }
-    
+
+    // No valid authentication found
     return {
-      user: fallbackUser as any,
-      error: null,
-      status: 200
+      user: null,
+      error: 'Unauthorized - no valid authentication found',
+      status: 401
     }
   } catch (error) {
     console.error('Authentication check failed:', error)

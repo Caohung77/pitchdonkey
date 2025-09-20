@@ -40,9 +40,12 @@ This ensures that campaigns scheduled for future delivery are sent automatically
 ```
 
 ### 2. Cron Endpoint (`/api/cron/process-campaigns`)
-- **Frequency**: Daily at 9:00 AM UTC (Hobby) or Every 5 minutes (Pro)
-- **Purpose**: Find and trigger scheduled campaigns that are ready to send
-- **Processing Window**: Past 24 hours (Hobby) or Real-time (Pro)
+- **Frequency**: Daily at 9:00 AM UTC (Vercel Hobby) or Every 5 minutes (Docker Ubuntu)
+- **Purpose**: Find and trigger campaigns that are ready to send
+- **Processing Types**:
+  - 'scheduled' campaigns → Updates to 'sending' when ready
+  - 'sending' campaigns → Processes stuck campaigns directly
+- **Processing Window**: Past 24 hours (Hobby) or Real-time (Docker/Pro)
 - **Authentication**: Uses service role key (bypasses user authentication)
 - **Security**: Verifies requests using `CRON_SECRET` environment variable
 
@@ -51,11 +54,14 @@ This ensures that campaigns scheduled for future delivery are sent automatically
 ### Campaign Lifecycle
 1. **User creates campaign** → Status: `draft`
 2. **User schedules campaign** → Status: `scheduled` + `scheduled_date` set
-3. **Cron job runs** (daily at 9 AM UTC for Hobby plans)
-4. **Cron finds ready campaigns** → `scheduled_date <= now`
-5. **Cron updates status** → `scheduled` → `sending`
-6. **Cron triggers processor** → Campaign processing begins
-7. **Processor sends emails** → Status: `sending` → `completed`
+3. **Cron job runs** (daily at 9 AM UTC for Vercel, every 5min for Docker)
+4. **Cron processes campaigns**:
+   - **Scheduled campaigns**: `scheduled_date <= now` → Update to `sending`
+   - **Sending campaigns**: Process stuck campaigns directly
+5. **Cron triggers processor** → Campaign processing begins
+6. **Processor sends emails** → Status: `sending` → `completed`
+
+**✅ FIXED**: Docker cron now processes both 'scheduled' AND 'sending' campaigns, preventing stuck campaigns.
 
 ### Security Model
 ```typescript
@@ -126,9 +132,40 @@ curl -X POST "https://your-app.vercel.app/api/cron/process-campaigns" \
       "campaignId": "abc123",
       "campaignName": "Product Launch",
       "success": true,
-      "message": "Campaign processing triggered"
+      "message": "Campaign processing triggered",
+      "originalStatus": "scheduled"
     }
-  ]
+  ],
+  "details": {
+    "scheduledCampaigns": 1,
+    "sendingCampaigns": 1
+  }
+}
+```
+
+### 3. Test Docker Cron Specifically
+```bash
+# Test Docker Ubuntu cron functionality
+curl -X GET "https://your-app.vercel.app/api/cron/docker-test" \
+  -H "Authorization: Bearer your_cron_secret"
+
+# Expected response includes detailed campaign analysis:
+{
+  "success": true,
+  "dockerCronWorking": true,
+  "analysis": {
+    "totalCampaigns": 5,
+    "campaignsByStatus": {
+      "scheduled": 2,
+      "sending": 1,
+      "completed": 2
+    },
+    "processingTargets": {
+      "scheduledReadyToSend": 1,
+      "stuckInSending": 1,
+      "totalProcessable": 2
+    }
+  }
 }
 ```
 

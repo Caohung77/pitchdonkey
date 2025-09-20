@@ -67,21 +67,51 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (!from_email_account_id) {
       return NextResponse.json({ error: 'Email account is required' }, { status: 400 })
     }
-    // Ensure only one active/scheduled campaign per email account
+    // Check for existing active/scheduled campaigns per email account
+    console.log(`🔍 Checking for existing campaigns for email account: ${from_email_account_id}`)
+
     const { data: existingActive, error: existingErr } = await supabase
       .from('campaigns')
-      .select('id, name, status')
+      .select('id, name, status, created_at, updated_at')
       .eq('user_id', user.id)
       .eq('from_email_account_id', from_email_account_id)
       .in('status', ['sending', 'scheduled'])
-      .limit(1)
+      .order('created_at', { ascending: false })
+      .limit(5) // Get more for debugging
+
+    console.log('🔍 Existing campaigns check result:', {
+      error: existingErr,
+      foundCampaigns: existingActive?.length || 0,
+      campaigns: existingActive?.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        created_at: c.created_at,
+        updated_at: c.updated_at
+      }))
+    })
 
     if (existingErr) {
+      console.error('❌ Error checking existing campaigns:', existingErr)
       return NextResponse.json({ error: 'Failed to check email account availability' }, { status: 500 })
     }
+
     if (existingActive && existingActive.length > 0) {
-      return NextResponse.json({ error: 'This email account already has a running or scheduled campaign' }, { status: 409 })
+      console.log(`❌ Found ${existingActive.length} active/scheduled campaigns for this email account`)
+      return NextResponse.json({
+        error: 'This email account already has a running or scheduled campaign',
+        details: {
+          conflictingCampaigns: existingActive.map(c => ({
+            id: c.id,
+            name: c.name,
+            status: c.status,
+            created_at: c.created_at
+          }))
+        }
+      }, { status: 409 })
     }
+
+    console.log('✅ No conflicting campaigns found, proceeding with campaign creation')
 
     // Validate daily limit (allowed: 10,20,30,40,50)
     const allowedDaily = new Set([10,20,30,40,50])

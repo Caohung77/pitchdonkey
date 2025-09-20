@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { campaignProcessor } from '@/lib/campaign-processor'
 
 export const GET = withAuth(async (request: NextRequest, user, { params }) => {
   try {
+    // Flush any pending scheduled sends before returning detailed rows
+    try {
+      await campaignProcessor.processReadyCampaigns()
+    } catch (processorError) {
+      console.warn('⚠️ Auto campaign processing (email details) skipped:', processorError)
+    }
+
     const supabase = createServerSupabaseClient()
     const { searchParams } = new URL(request.url)
-    const campaignId = params.id
+    const campaignId = (await params).id
 
     const page = Number(searchParams.get('page') || '1')
     const pageSize = Math.min(Number(searchParams.get('pageSize') || '50'), 200)
