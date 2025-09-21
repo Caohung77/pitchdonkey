@@ -761,7 +761,8 @@ export class CampaignProcessor {
           to: params.to,
           subject: params.subject,
           text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version
-          html: htmlContent
+          html: htmlContent,
+          encoding: 'utf8' // Ensure proper UTF-8 encoding for umlauts
         })
 
         console.log(`✅ Email sent successfully via SMTP: ${info.messageId}`)
@@ -806,6 +807,7 @@ export class CampaignProcessor {
             subject: params.subject,
             html: htmlContent,
             text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version
+            senderName: params.senderName
           })
 
           console.log(`✅ Gmail email sent successfully: ${result.messageId}`)

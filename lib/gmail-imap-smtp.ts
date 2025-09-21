@@ -57,6 +57,7 @@ export interface SendEmailOptions {
   subject: string
   text?: string
   html?: string
+  senderName?: string // Add sender name option
   attachments?: Array<{
     filename: string
     path?: string
@@ -362,13 +363,17 @@ export class GmailIMAPSMTPService {
       // Create proper RFC 2822 multipart message
       const boundary = `----=_Part_${timestamp}_${random}`
 
-      // Build email headers
+      // Build email headers with proper sender name encoding
+      const fromHeader = options.senderName
+        ? `"${options.senderName}" <${this.userEmail}>`
+        : this.userEmail
+
       const headers = [
-        `From: ${this.userEmail}`,
+        `From: ${fromHeader}`,
         `To: ${to}`,
         cc ? `Cc: ${cc}` : null,
         bcc ? `Bcc: ${bcc}` : null,
-        `Subject: ${options.subject}`,
+        `Subject: =?UTF-8?B?${Buffer.from(options.subject, 'utf8').toString('base64')}?=`,
         `Message-ID: ${messageId}`,
         `Date: ${new Date().toUTCString()}`,
         'MIME-Version: 1.0'
