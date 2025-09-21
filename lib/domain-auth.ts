@@ -170,7 +170,12 @@ export class DomainAuthService {
       }
 
       if (record) {
-        updateData[`${type}_record`] = record
+        // Use correct column names based on database schema
+        if (type === 'dkim') {
+          updateData['dkim_public_key'] = record  // DKIM stores raw record in dkim_public_key field
+        } else {
+          updateData[`${type}_record`] = record   // SPF and DMARC use _record suffix
+        }
       }
 
       if (errorMessage) {
@@ -341,9 +346,9 @@ export class DomainAuthService {
    * Update database with verification results
    */
   private async updateVerificationResults(
-    userId: string, 
-    domain: string, 
-    status: DomainVerificationStatus, 
+    userId: string,
+    domain: string,
+    status: DomainVerificationStatus,
     domainAuthId: string
   ): Promise<void> {
     try {
