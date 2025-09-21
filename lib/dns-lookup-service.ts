@@ -65,11 +65,11 @@ export class DNSLookupService {
       const responseTime = Date.now() - startTime
       
       // Find and reconstruct DKIM record (may be split across multiple strings)
-      let dkimRecord = txtRecords.find(record => 
+      const dkimStartRecord = txtRecords.find(record =>
         record.includes('v=DKIM1')
       )
-      
-      if (!dkimRecord) {
+
+      if (!dkimStartRecord) {
         console.warn(`[DKIM] No TXT with v=DKIM1 found at ${dkimDomain}. Raw TXT:`, txtRecords)
         return {
           record: null,
@@ -78,15 +78,19 @@ export class DNSLookupService {
         }
       }
 
-      // If this is a multi-part DKIM record, concatenate all parts
-      // DKIM records are often split when they exceed DNS string limits
-      if (txtRecords.length > 1) {
-        // Find the starting record with v=DKIM1
-        const startIndex = txtRecords.findIndex(record => record.includes('v=DKIM1'))
-        if (startIndex !== -1) {
-          // Concatenate all records from the DKIM start record onward
-          dkimRecord = txtRecords.slice(startIndex).join('').replace(/\s/g, '')
-        }
+      let dkimRecord: string
+
+      // If there's only one TXT record or the first record contains the complete DKIM
+      if (txtRecords.length === 1) {
+        dkimRecord = dkimStartRecord
+      } else {
+        // DKIM records are often split across multiple TXT strings
+        // According to RFC 6376, multiple strings should be concatenated without spaces
+        console.log(`[DKIM] Multi-part DKIM record detected for ${dkimDomain}:`, txtRecords)
+
+        // Join all TXT strings (DNS automatically concatenates them)
+        // Each string in txtRecords is already a separate part of the TXT record
+        dkimRecord = txtRecords.join('')
       }
       
       const parsed = DKIMGenerator.parseRecord(dkimRecord, selector)
