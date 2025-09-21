@@ -122,6 +122,7 @@ export class CampaignProcessor {
                 status: 'completed',
                 emails_sent: sentEmails,
                 emails_bounced: bouncedEmails,
+                end_date: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               })
               .eq('id', campaign.id)
@@ -173,11 +174,14 @@ export class CampaignProcessor {
           return
         }
 
-        // Time to send! Update status to sending
+        // Time to send! Update status to sending and set start date
         const supabase = createServerSupabaseClient()
         await supabase
           .from('campaigns')
-          .update({ status: 'sending' })
+          .update({
+            status: 'sending',
+            start_date: new Date().toISOString()
+          })
           .eq('id', campaign.id)
         
         console.log(`⚡ Scheduled campaign ${campaign.id} is now ready to send`)
@@ -618,15 +622,30 @@ export class CampaignProcessor {
 
       // Update campaign statistics
       const processedCount = emailsSent + emailsFailed
+      const newStatus = processedCount >= contacts.length ? 'completed' : (processedCount > 0 ? 'running' : 'paused')
+
+      // Prepare update data
+      const updateData = {
+        emails_sent: emailsSent,
+        emails_bounced: emailsFailed, // Bounced emails are tracked as failures in this context
+        total_contacts: contacts.length,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      }
+
+      // Set start_date if campaign is starting for the first time
+      if (campaign.status === 'sending' && processedCount > 0) {
+        updateData.start_date = new Date().toISOString()
+      }
+
+      // Set end_date if campaign is completing
+      if (newStatus === 'completed') {
+        updateData.end_date = new Date().toISOString()
+      }
+
       await supabase
         .from('campaigns')
-        .update({
-          emails_sent: emailsSent,
-          emails_bounced: emailsFailed, // Bounced emails are tracked as failures in this context
-          total_contacts: contacts.length,
-          status: processedCount >= contacts.length ? 'completed' : (processedCount > 0 ? 'running' : 'paused'),
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', campaign.id)
 
       console.log(`🎉 Campaign ${campaign.name} completed! Sent: ${emailsSent}, Failed: ${emailsFailed}`)

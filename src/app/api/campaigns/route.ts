@@ -325,7 +325,12 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           list_names: listNames,
           contact_list_ids: campaign.contact_list_ids,
           // Email account information
-          from_email_account_id: campaign.from_email_account_id
+          from_email_account_id: campaign.from_email_account_id,
+          // Add proper date field mapping for frontend
+          created_at: campaign.created_at,
+          start_date: campaign.start_date,
+          end_date: campaign.end_date,
+          scheduled_date: campaign.scheduled_date
         }
       })
     )
@@ -351,10 +356,20 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     }
 
     // Add email account info to campaigns
-    const campaignsWithEmailAccounts = campaignsWithStats.map(campaign => ({
-      ...campaign,
-      email_accounts: campaign.from_email_account_id ? emailAccountsMap[campaign.from_email_account_id] : null
-    }))
+    const campaignsWithEmailAccounts = campaignsWithStats.map(campaign => {
+      const emailAccount = campaign.from_email_account_id ? emailAccountsMap[campaign.from_email_account_id] : null
+
+      // Debug log for email account mapping
+      console.log(`📧 Campaign "${campaign.name}": email_account_id=${campaign.from_email_account_id}, found_account=${!!emailAccount}`)
+      if (emailAccount) {
+        console.log(`  ✅ Email account: ${emailAccount.email} (${emailAccount.provider})`)
+      }
+
+      return {
+        ...campaign,
+        email_accounts: emailAccount
+      }
+    })
 
     return NextResponse.json({
       success: true,
