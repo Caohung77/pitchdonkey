@@ -72,6 +72,10 @@ interface Campaign {
   created_at?: string
   start_date?: string
   end_date?: string
+  // Batch scheduling fields
+  first_batch_sent_at?: string
+  next_batch_send_time?: string
+  current_batch_number?: number
 }
 
 const STATUS_COLORS = {
@@ -678,7 +682,17 @@ export default function CampaignsPage() {
                             <span>Scheduled: {formatDateTime(campaign.scheduled_date)}</span>
                           </>
                         ) : campaign.status === 'sending' || campaign.status === 'running' ? (
-                          campaign.start_date ? (
+                          campaign.next_batch_send_time ? (
+                            <>
+                              <Clock className="h-3 w-3" />
+                              <span>Next batch: {formatDateTime(campaign.next_batch_send_time)}</span>
+                              {campaign.current_batch_number && (
+                                <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">
+                                  Batch #{campaign.current_batch_number}
+                                </span>
+                              )}
+                            </>
+                          ) : campaign.start_date ? (
                             <>
                               <Send className="h-3 w-3" />
                               <span>Started: {formatDateTime(campaign.start_date)}</span>

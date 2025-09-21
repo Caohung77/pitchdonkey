@@ -31,7 +31,10 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         contact_list_ids,
         email_subject,
         html_content,
-        from_email_account_id
+        from_email_account_id,
+        first_batch_sent_at,
+        next_batch_send_time,
+        current_batch_number
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -330,7 +333,11 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           created_at: campaign.created_at,
           start_date: campaign.start_date,
           end_date: campaign.end_date,
-          scheduled_date: campaign.scheduled_date
+          scheduled_date: campaign.scheduled_date,
+          // Batch scheduling fields
+          first_batch_sent_at: campaign.first_batch_sent_at,
+          next_batch_send_time: campaign.next_batch_send_time,
+          current_batch_number: campaign.current_batch_number
         }
       })
     )

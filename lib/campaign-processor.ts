@@ -73,7 +73,12 @@ export class CampaignProcessor {
       console.log('🔎 Querying campaigns with status: sending, scheduled (excluding already completed ones)')
       const { data: campaigns, error } = await supabase
         .from('campaigns')
-        .select('*')
+        .select(`
+          *,
+          first_batch_sent_at,
+          next_batch_send_time,
+          current_batch_number
+        `)
         .in('status', ['sending', 'scheduled'])
         .order('created_at', { ascending: true })
 
@@ -296,25 +301,67 @@ export class CampaignProcessor {
       }
       console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)      
 
-      // Enforce per-campaign daily limit (10/20/30/40/50)
+      // Implement 24-hour interval batch scheduling
       const dailyLimit = Number(campaign.daily_send_limit) || 50
-      const startOfDay = new Date()
-      startOfDay.setHours(0,0,0,0)
-      const { data: sentTodayRows } = await supabase
-        .from('email_tracking')
-        .select('sent_at')
-        .eq('campaign_id', campaign.id)
-        .gte('sent_at', startOfDay.toISOString())
-      const sentToday = (sentTodayRows || []).length
-      const remainingToday = Math.max(0, dailyLimit - sentToday)
-      if (remainingToday <= 0) {
-        console.log(`⏳ Daily limit reached for campaign ${campaign.id}: ${dailyLimit}/day`)
-        return
+      const now = new Date()
+
+      // Check if this is the first batch or a scheduled batch
+      const isFirstBatch = !campaign.first_batch_sent_at
+      const currentBatchNumber = campaign.current_batch_number || 0
+
+      if (isFirstBatch) {
+        // First batch - set initial timing
+        console.log(`🚀 Starting first batch for campaign ${campaign.id}`)
+        const nextBatchTime = new Date(now.getTime() + (24 * 60 * 60 * 1000)) // 24 hours from now
+
+        await supabase
+          .from('campaigns')
+          .update({
+            first_batch_sent_at: now.toISOString(),
+            current_batch_number: 1,
+            next_batch_send_time: nextBatchTime.toISOString()
+          })
+          .eq('id', campaign.id)
+
+        console.log(`⏰ Next batch scheduled for: ${nextBatchTime.toISOString()}`)
+      } else {
+        // Subsequent batches - check if it's time to send
+        if (!campaign.next_batch_send_time) {
+          console.log(`⚠️ Missing next_batch_send_time for campaign ${campaign.id}, skipping`)
+          return
+        }
+
+        const nextBatchTime = new Date(campaign.next_batch_send_time)
+        const batchWindow = this.isWithinBatchSendWindow(nextBatchTime, now)
+
+        if (!batchWindow.canSend) {
+          console.log(`⏳ Campaign ${campaign.id} not ready yet. Next batch in ${Math.round(batchWindow.timeUntilBatch / (60 * 1000))} minutes`)
+          return
+        }
+
+        if (batchWindow.windowStatus === 'overdue') {
+          console.log(`⚠️ Campaign ${campaign.id} batch is ${Math.round(Math.abs(batchWindow.timeUntilBatch) / (60 * 1000))} minutes overdue`)
+        } else {
+          console.log(`✅ Campaign ${campaign.id} batch is ready to send (${batchWindow.windowStatus})`)
+        }
+
+        // Update for next batch (24 hours from original scheduled time)
+        const nextNextBatchTime = new Date(nextBatchTime.getTime() + (24 * 60 * 60 * 1000))
+        await supabase
+          .from('campaigns')
+          .update({
+            current_batch_number: currentBatchNumber + 1,
+            next_batch_send_time: nextNextBatchTime.toISOString()
+          })
+          .eq('id', campaign.id)
+
+        console.log(`📅 Batch ${currentBatchNumber + 1} processing. Next batch: ${nextNextBatchTime.toISOString()}`)
       }
-      // Limit contacts batch to remaining quota
-      if (contacts.length > remainingToday) {
-        console.log(`⚖️ Limiting send batch to daily quota: ${remainingToday} of ${contacts.length}`)
-        contacts = contacts.slice(0, remainingToday)
+
+      // Limit contacts batch to daily quota
+      if (contacts.length > dailyLimit) {
+        console.log(`⚖️ Limiting batch to daily quota: ${dailyLimit} of ${contacts.length} contacts`)
+        contacts = contacts.slice(0, dailyLimit)
       }
 
       let emailsSent = 0
@@ -638,9 +685,11 @@ export class CampaignProcessor {
         updateData.start_date = new Date().toISOString()
       }
 
-      // Set end_date if campaign is completing
+      // Set end_date if campaign is completing and clear batch scheduling
       if (newStatus === 'completed') {
         updateData.end_date = new Date().toISOString()
+        updateData.next_batch_send_time = null // Clear future scheduling
+        console.log(`🎉 Campaign completed! Total batches processed: ${campaign.current_batch_number || 0}`)
       }
 
       await supabase
@@ -918,6 +967,40 @@ export class CampaignProcessor {
   /**
    * Determine delay configuration between sends, with overrides for serverless environments
    */
+  /**
+   * Check if a campaign is within its scheduled batch send window
+   */
+  private isWithinBatchSendWindow(nextBatchTime: Date, now: Date = new Date()): {
+    canSend: boolean;
+    timeUntilBatch: number;
+    windowStatus: 'early' | 'ready' | 'overdue';
+  } {
+    const timeUntilBatch = nextBatchTime.getTime() - now.getTime()
+    const timeWindow = 5 * 60 * 1000 // 5-minute window (configurable)
+
+    if (timeUntilBatch > timeWindow) {
+      return {
+        canSend: false,
+        timeUntilBatch,
+        windowStatus: 'early'
+      }
+    }
+
+    if (timeUntilBatch < -timeWindow) {
+      return {
+        canSend: true, // Allow overdue sends
+        timeUntilBatch,
+        windowStatus: 'overdue'
+      }
+    }
+
+    return {
+      canSend: true,
+      timeUntilBatch,
+      windowStatus: 'ready'
+    }
+  }
+
   private getSendDelayConfig(): { min: number; max: number } {
     const parseDelay = (value?: string | number | null) => {
       if (value === undefined || value === null) return NaN
