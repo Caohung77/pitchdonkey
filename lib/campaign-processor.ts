@@ -322,6 +322,19 @@ export class CampaignProcessor {
       for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i]
         
+        // Check if email already sent to this contact to prevent duplicates
+        const { data: existingTracking } = await supabase
+          .from('email_tracking')
+          .select('id, tracking_pixel_id, status')
+          .eq('campaign_id', campaign.id)
+          .eq('contact_id', contact.id)
+          .single()
+
+        if (existingTracking && existingTracking.status !== 'failed') {
+          console.log(`⏭️ Skipping ${contact.email} - email already sent/delivered (status: ${existingTracking.status})`)
+          continue // Skip this contact
+        }
+
         const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
         let trackingPixelId: string | null = null
         try {
