@@ -33,21 +33,29 @@ export default function DeleteEmailAccountDialog({ account, onAccountDeleted }: 
     try {
       setIsDeleting(true)
       setError('')
-      
+
+      console.log('🔄 Starting delete operation for account:', account.id)
+      console.log('🌐 Full URL being called:', `/api/email-accounts/${account.id}`)
+      console.log('🏠 Current origin:', window.location.origin)
+
       const response = await ApiClient.delete(`/api/email-accounts/${account.id}`)
-      
-      if (response.success) {
-        // Close dialog and notify parent
-        setOpen(false)
-        onAccountDeleted()
-        console.log('✅ Email account deleted successfully')
-      } else {
-        throw new Error(response.error || 'Failed to delete email account')
-      }
-      
+      console.log('📦 Delete response received:', response)
+
+      // The API returns { success: true, message: "..." } on success
+      // If we get here without an error being thrown, the deletion was successful
+      setOpen(false)
+      onAccountDeleted()
+      console.log('✅ Email account deleted successfully')
+
     } catch (error: any) {
-      console.error('Error deleting email account:', error)
-      
+      console.error('❌ Error deleting email account:', {
+        error,
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        cause: error?.cause
+      })
+
       // Handle specific error cases
       if (error.message?.includes('NOT_FOUND')) {
         setError('Email account not found. It may have already been deleted.')
@@ -55,6 +63,10 @@ export default function DeleteEmailAccountDialog({ account, onAccountDeleted }: 
         setError('Too many requests. Please wait a moment before trying again.')
       } else if (error.message?.includes('CAMPAIGNS_ACTIVE') || error.message?.includes('active campaign')) {
         setError('Cannot delete this account because it has active campaigns. Please pause or stop all campaigns using this account first.')
+      } else if (error.message?.includes('Network error')) {
+        setError('Network error. Please check your connection and try again.')
+      } else if (error.message?.includes('No authentication token')) {
+        setError('Please sign in again to continue.')
       } else {
         setError(error.message || 'Failed to delete email account. Please try again.')
       }

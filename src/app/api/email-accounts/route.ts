@@ -12,26 +12,27 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     
     console.log('Rate limiting passed, fetching email accounts...')
     
-    // Get user's email accounts from database
+    // Get user's email accounts from database (exclude soft-deleted accounts)
     const { data: accounts, error } = await supabase
       .from('email_accounts')
       .select('*')
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     console.log('Database query result:', { accounts: accounts?.length || 0, error })
 
     if (error) {
       console.error('Database error fetching email accounts:', error)
-      return NextResponse.json({ 
-        error: 'Failed to fetch email accounts', 
+      return NextResponse.json({
+        error: 'Failed to fetch email accounts',
         code: 'FETCH_ERROR',
-        details: error.message 
+        details: error.message
       }, { status: 500 })
     }
 
-    // Filter out soft-deleted if present; otherwise include all
-    const safe = (accounts || []).filter((a: any) => !('deleted_at' in a) || a.deleted_at === null)
+    // All accounts are already filtered at the database level
+    const safe = accounts || []
 
     // Add domain field to each account by extracting from email
     const accountsWithDomain = safe.map(account => {
@@ -96,12 +97,13 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       }, { status: 400 })
     }
 
-    // Check for duplicate email accounts
+    // Check for duplicate email accounts (excluding soft-deleted accounts)
     const { data: existingAccount } = await supabase
       .from('email_accounts')
       .select('id')
       .eq('user_id', user.id)
       .eq('email', email)
+      .is('deleted_at', null)
       .single()
 
     if (existingAccount) {

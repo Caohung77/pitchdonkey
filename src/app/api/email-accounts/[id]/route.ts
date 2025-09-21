@@ -204,9 +204,15 @@ export const DELETE = withAuth(async (
 ) => {
   try {
     await withRateLimit(user, 10, 60000) // 10 deletes per minute
-    
+
     const { id } = await params
-    
+
+    console.log('🗑️ DELETE email account request:', {
+      accountId: id,
+      userId: user.id,
+      userEmail: user.email
+    })
+
     // First, verify the account exists and belongs to the user
     const { data: existingAccount, error: fetchError } = await supabase
       .from('email_accounts')
@@ -215,7 +221,14 @@ export const DELETE = withAuth(async (
       .eq('user_id', user.id)
       .single()
 
+    console.log('📋 Account lookup result:', {
+      found: !!existingAccount,
+      account: existingAccount,
+      error: fetchError
+    })
+
     if (fetchError || !existingAccount) {
+      console.log('❌ Account not found or access denied')
       return NextResponse.json({
         error: 'Email account not found',
         code: 'NOT_FOUND'
@@ -223,6 +236,7 @@ export const DELETE = withAuth(async (
     }
 
     // Check for active campaigns using this email account
+    console.log('🔍 Checking for active campaigns...')
     const { data: activeCampaigns, error: campaignError } = await supabase
       .from('campaigns')
       .select('id, name')
@@ -230,12 +244,19 @@ export const DELETE = withAuth(async (
       .in('status', ['active', 'sending', 'scheduled'])
       .limit(5)
 
+    console.log('📊 Campaign check result:', {
+      campaignCount: activeCampaigns?.length || 0,
+      campaigns: activeCampaigns,
+      error: campaignError
+    })
+
     if (campaignError) {
       console.warn('Could not check for active campaigns:', campaignError)
       // Continue with deletion but log the warning
     }
 
     if (activeCampaigns && activeCampaigns.length > 0) {
+      console.log('🚫 Cannot delete: active campaigns found')
       return NextResponse.json({
         error: `Cannot delete email account. ${activeCampaigns.length} active campaign(s) are using this account. Please pause or stop these campaigns first.`,
         code: 'CAMPAIGNS_ACTIVE',
@@ -246,6 +267,7 @@ export const DELETE = withAuth(async (
     }
 
     // Soft delete by setting deleted_at
+    console.log('🗑️ Performing soft delete...')
     const { error: deleteError } = await supabase
       .from('email_accounts')
       .update({
@@ -255,19 +277,25 @@ export const DELETE = withAuth(async (
       .eq('id', id)
       .eq('user_id', user.id)
 
+    console.log('📝 Delete operation result:', {
+      success: !deleteError,
+      error: deleteError
+    })
+
     if (deleteError) {
-      console.error('Error deleting email account:', deleteError)
+      console.error('❌ Error deleting email account:', deleteError)
       return NextResponse.json({
         error: 'Failed to delete email account',
         code: 'DELETE_ERROR'
       }, { status: 500 })
     }
 
+    console.log('✅ Email account deleted successfully')
     const response = NextResponse.json({
       success: true,
       message: 'Email account deleted successfully'
     })
-    
+
     return addSecurityHeaders(response)
   } catch (error) {
     console.error('Error deleting email account:', error)
