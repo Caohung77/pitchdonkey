@@ -725,9 +725,10 @@ export class CampaignProcessor {
         })
 
         // Generate tracking pixel URL for this email using the actual pixelId
-        const baseUrl =
-          process.env.NEXT_PUBLIC_APP_URL ||
-          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ?
+            (process.env.VERCEL_URL.startsWith('http') ? process.env.VERCEL_URL : `https://${process.env.VERCEL_URL}`) :
+            'http://localhost:3000')
         const trackingPixelUrl = `${baseUrl}/api/tracking/pixel/${params.pixelId || params.trackingId}`
         console.log(`📡 Using tracking pixel URL: ${trackingPixelUrl}`)
         
@@ -769,9 +770,10 @@ export class CampaignProcessor {
           const gmailService = new GmailIMAPSMTPServerService()
 
           // Generate tracking pixel URL for this email using the actual pixelId
-          const baseUrl =
-            process.env.NEXT_PUBLIC_APP_URL ||
-            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+            (process.env.VERCEL_URL ?
+              (process.env.VERCEL_URL.startsWith('http') ? process.env.VERCEL_URL : `https://${process.env.VERCEL_URL}`) :
+              'http://localhost:3000')
           const trackingPixelUrl = `${baseUrl}/api/tracking/pixel/${params.pixelId || params.trackingId}`
           console.log(`📡 Using tracking pixel URL: ${trackingPixelUrl}`)
 
@@ -804,6 +806,13 @@ export class CampaignProcessor {
           }
         } catch (error) {
           console.error(`❌ Gmail sending failed:`, error)
+          // Additional production debugging
+          console.error(`📋 Environment details:`, {
+            hasVercelUrl: !!process.env.VERCEL_URL,
+            hasAppUrl: !!process.env.NEXT_PUBLIC_APP_URL,
+            baseUrl,
+            isProduction: process.env.NODE_ENV === 'production'
+          })
           return {
             messageId: null,
             status: 'failed',

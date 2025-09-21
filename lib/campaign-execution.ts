@@ -967,9 +967,10 @@ export class CampaignExecutionEngine {
         })
 
         // Generate tracking pixel URL for this email
-        const baseUrl =
-          process.env.NEXT_PUBLIC_APP_URL ||
-          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ?
+            (process.env.VERCEL_URL.startsWith('http') ? process.env.VERCEL_URL : `https://${process.env.VERCEL_URL}`) :
+            'http://localhost:3000')
         const trackingPixelUrl = `${baseUrl}/api/tracking/pixel/${params.trackingId}`
         
         // Insert tracking pixel into HTML content
@@ -1010,9 +1011,10 @@ export class CampaignExecutionEngine {
           const gmailService = new GmailIMAPSMTPServerService()
 
           // Generate tracking pixel URL for this email
-          const baseUrl =
-            process.env.NEXT_PUBLIC_APP_URL ||
-            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+            (process.env.VERCEL_URL ?
+              (process.env.VERCEL_URL.startsWith('http') ? process.env.VERCEL_URL : `https://${process.env.VERCEL_URL}`) :
+              'http://localhost:3000')
           const trackingPixelUrl = `${baseUrl}/api/tracking/pixel/${params.trackingId}`
 
           // Insert tracking pixel into HTML content

@@ -82,7 +82,17 @@ export class GmailIMAPSMTPService {
    * Ensure tokens are fresh before any operation
    */
   private async ensureFreshTokens(): Promise<OAuthTokens> {
-    return await OAuthTokenManager.refreshTokensIfNeeded('gmail', this.tokens)
+    try {
+      const refreshedTokens = await OAuthTokenManager.refreshTokensIfNeeded('gmail', this.tokens)
+      // Update our instance tokens if they were refreshed
+      this.tokens = refreshedTokens
+      return refreshedTokens
+    } catch (error) {
+      console.error('❌ Failed to refresh OAuth tokens:', error)
+      // Try using existing tokens as fallback
+      console.warn('⚠️ Using potentially expired tokens as fallback')
+      return this.tokens
+    }
   }
 
   /**

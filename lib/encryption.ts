@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-32-character-secret-key-here'
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef'
 const ALGORITHM = 'aes-256-gcm'
 
 export class EncryptionService {
