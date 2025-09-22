@@ -5,6 +5,7 @@
 
 import { CampaignExecutionEngine } from './campaign-execution'
 import { createServerSupabaseClient } from './supabase-server'
+import { EmailLinkRewriter } from './email-link-rewriter'
 
 export class CampaignProcessor {
   private static instance: CampaignProcessor | null = null
@@ -554,7 +555,9 @@ export class CampaignProcessor {
             emailAccount: emailAccount,
             senderName: senderName,
             trackingId: trackingId,
-            pixelId: trackingPixelId || undefined
+            pixelId: trackingPixelId || undefined,
+            campaignId: campaign.id,
+            contactId: contact.id
           })
 
           if (result.status === 'sent') {
@@ -787,6 +790,8 @@ export class CampaignProcessor {
     senderName: string
     trackingId: string
     pixelId?: string
+    campaignId?: string
+    contactId?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
     
@@ -805,6 +810,16 @@ export class CampaignProcessor {
           },
         })
 
+        // Rewrite links for click tracking
+        console.log('🔗 Rewriting links for click tracking...')
+        let htmlContent = await EmailLinkRewriter.rewriteLinksForTracking(
+          params.content,
+          params.trackingId,
+          params.to,
+          params.campaignId,
+          params.contactId
+        )
+
         // Generate tracking pixel URL for this email using the actual pixelId
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
           (process.env.VERCEL_URL ?
@@ -817,7 +832,6 @@ export class CampaignProcessor {
         const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="">`
         
         // Ensure content has tracking pixel
-        let htmlContent = params.content
         if (htmlContent.includes('</body>')) {
           htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`)
         } else {
@@ -851,6 +865,16 @@ export class CampaignProcessor {
           const { GmailIMAPSMTPServerService } = await import('./server/gmail-imap-smtp-server')
           const gmailService = new GmailIMAPSMTPServerService()
 
+          // Rewrite links for click tracking
+          console.log('🔗 Rewriting links for click tracking...')
+          let htmlContent = await EmailLinkRewriter.rewriteLinksForTracking(
+            params.content,
+            params.trackingId,
+            params.to,
+            params.campaignId,
+            params.contactId
+          )
+
           // Generate tracking pixel URL for this email using the actual pixelId
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
             (process.env.VERCEL_URL ?
@@ -863,7 +887,6 @@ export class CampaignProcessor {
           const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="">`
 
           // Ensure content has tracking pixel
-          let htmlContent = params.content
           if (htmlContent.includes('</body>')) {
             htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`)
           } else {
