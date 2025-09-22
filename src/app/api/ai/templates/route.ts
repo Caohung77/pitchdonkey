@@ -40,6 +40,12 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       created_at: t.created_at,
       updated_at: t.updated_at,
       is_public: !!t.is_public,
+      // Enhanced campaign fields
+      sender_name: t.sender_name || '',
+      email_purpose: t.email_purpose || '',
+      language: t.language || 'English',
+      generation_options: t.generation_options || { generate_for_all: false, use_contact_info: true },
+      template_type: t.template_type || 'campaign',
     }))
 
     return createSuccessResponse(normalized)
@@ -60,6 +66,13 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const content = (body.content || body.body_template || '').toString()
     const subject = (body.subject || body.subject_template || '').toString()
     const custom_prompt = body.custom_prompt || ''
+
+    // Enhanced campaign fields
+    const sender_name = (body.sender_name || '').trim()
+    const email_purpose = (body.email_purpose || '').trim()
+    const language = body.language || 'English'
+    const generation_options = body.generation_options || { generate_for_all: false, use_contact_info: true }
+    const template_type = body.template_type || 'campaign'
 
     if (!name || !content) {
       throw new Error('Template name and content are required')
@@ -91,6 +104,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
           custom_prompt,
           usage_count: 0,
           is_default: false,
+          // Enhanced campaign fields
+          sender_name,
+          email_purpose,
+          language,
+          generation_options,
+          template_type,
         } as any)
         .select('*')
         .single()
@@ -112,6 +131,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
           variables,
           usage_count: 0,
           is_default: false,
+          // Enhanced campaign fields
+          sender_name,
+          email_purpose,
+          language,
+          generation_options,
+          template_type,
         } as any)
         .select('*')
         .single()

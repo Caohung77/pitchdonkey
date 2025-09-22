@@ -25,8 +25,6 @@ import {
   ChevronRight,
   Search
 } from 'lucide-react'
-import { Save } from 'lucide-react'
-import { SaveTemplateDialog } from './SaveTemplateDialog'
 import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
 import type { AITemplate } from '@/lib/ai-templates'
 
@@ -53,31 +51,48 @@ interface UnifiedEmailContentEditorProps {
   onContentChange: (content: string) => void
   contactLists?: ContactList[]
   onPersonalizedEmailsChange?: (emails: Map<string, { subject: string; content: string }>) => void
+  // Enhanced template fields
+  emailPurpose?: string
+  onEmailPurposeChange?: (purpose: string) => void
+  language?: 'English' | 'German'
+  onLanguageChange?: (language: 'English' | 'German') => void
+  generateForAll?: boolean
+  onGenerateForAllChange?: (generateForAll: boolean) => void
+  useContactInfo?: boolean
+  onUseContactInfoChange?: (useContactInfo: boolean) => void
 }
 
-export function UnifiedEmailContentEditor({ 
-  subject, 
-  htmlContent, 
-  onSubjectChange, 
+export function UnifiedEmailContentEditor({
+  subject,
+  htmlContent,
+  onSubjectChange,
   onContentChange,
   contactLists = [],
-  onPersonalizedEmailsChange
+  onPersonalizedEmailsChange,
+  // Enhanced template fields
+  emailPurpose: externalEmailPurpose,
+  onEmailPurposeChange,
+  language: externalLanguage,
+  onLanguageChange,
+  generateForAll: externalGenerateForAll,
+  onGenerateForAllChange,
+  useContactInfo: externalUseContactInfo,
+  onUseContactInfoChange
 }: UnifiedEmailContentEditorProps) {
   const [selectedContactIndex, setSelectedContactIndex] = useState(0)
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
   const [personalizationInfo, setPersonalizationInfo] = useState<string[]>([])
-  const [generateForAll, setGenerateForAll] = useState(false)
-  const [useContactInfo, setUseContactInfo] = useState(true)
+  const [generateForAll, setGenerateForAll] = useState(externalGenerateForAll || false)
+  const [useContactInfo, setUseContactInfo] = useState(externalUseContactInfo !== false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, isRunning: false })
   const [generatedEmails, setGeneratedEmails] = useState<Map<string, { subject: string; content: string }>>(new Map())
-  const [emailPurpose, setEmailPurpose] = useState('')
-  const [language, setLanguage] = useState<'English' | 'German'>('English')
+  const [emailPurpose, setEmailPurpose] = useState(externalEmailPurpose || '')
+  const [language, setLanguage] = useState<'English' | 'German'>(externalLanguage || 'English')
   const [searchTerm, setSearchTerm] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
   const [templates, setTemplates] = useState<AITemplate[]>([])
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   // Personalized Reason state
   const [isGeneratingReason, setIsGeneratingReason] = useState(false)
@@ -241,6 +256,23 @@ export function UnifiedEmailContentEditor({
       return () => document.removeEventListener('click', handleClickOutside)
     }
   }, [showDropdown])
+
+  // Sync external props with internal state
+  useEffect(() => {
+    if (externalEmailPurpose !== undefined) setEmailPurpose(externalEmailPurpose)
+  }, [externalEmailPurpose])
+
+  useEffect(() => {
+    if (externalLanguage !== undefined) setLanguage(externalLanguage)
+  }, [externalLanguage])
+
+  useEffect(() => {
+    if (externalGenerateForAll !== undefined) setGenerateForAll(externalGenerateForAll)
+  }, [externalGenerateForAll])
+
+  useEffect(() => {
+    if (externalUseContactInfo !== undefined) setUseContactInfo(externalUseContactInfo)
+  }, [externalUseContactInfo])
 
   // Load saved templates
   const loadTemplates = async () => {
@@ -895,7 +927,10 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
             rows={2}
             placeholder="e.g., Introduce our new product that could help streamline their business processes"
             value={emailPurpose}
-            onChange={(e) => setEmailPurpose(e.target.value)}
+            onChange={(e) => {
+              setEmailPurpose(e.target.value)
+              onEmailPurposeChange?.(e.target.value)
+            }}
           />
           <p className="text-xs text-blue-700">
             <strong>Required:</strong> Describe the purpose of your outreach. AI will use this along with contact information to create personalized emails.
@@ -912,7 +947,11 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                 <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Language:</label>
                 <select
                   value={language}
-                  onChange={(e) => setLanguage(e.target.value as 'English' | 'German')}
+                  onChange={(e) => {
+                    const newLanguage = e.target.value as 'English' | 'German'
+                    setLanguage(newLanguage)
+                    onLanguageChange?.(newLanguage)
+                  }}
                   className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[90px]"
                 >
                   <option value="English">English</option>
@@ -926,7 +965,10 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                   type="checkbox"
                   id="generateForAll"
                   checked={generateForAll}
-                  onChange={(e) => setGenerateForAll(e.target.checked)}
+                  onChange={(e) => {
+                    setGenerateForAll(e.target.checked)
+                    onGenerateForAllChange?.(e.target.checked)
+                  }}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label htmlFor="generateForAll" className="flex items-center text-sm font-medium text-gray-700">
@@ -941,7 +983,10 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                   type="checkbox"
                   id="useContactInfo"
                   checked={useContactInfo}
-                  onChange={(e) => setUseContactInfo(e.target.checked)}
+                  onChange={(e) => {
+                    setUseContactInfo(e.target.checked)
+                    onUseContactInfoChange?.(e.target.checked)
+                  }}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label htmlFor="useContactInfo" className="flex items-center text-sm font-medium text-gray-700">
@@ -1149,31 +1194,6 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
                 />
               </div>
 
-              {/* Quick Templates */}
-              <div className="border-b pb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium">Quick Templates</h4>
-                  <Button variant="outline" size="sm" onClick={() => setSaveDialogOpen(true)} className="flex items-center">
-                    <Save className="h-4 w-4 mr-1" /> Save as Template
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => insertTemplate('basic')}>
-                    Basic Template
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => insertTemplate('professional')}>
-                    Professional
-                  </Button>
-                  {templates.map((tpl) => (
-                    <Button key={tpl.id} variant="outline" size="sm" onClick={() => {
-                      if ((tpl as any).subject) onSubjectChange((tpl as any).subject)
-                      onContentChange(tpl.content)
-                    }}>
-                      {tpl.name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
 
 
               {/* Content Editor */}
@@ -1290,13 +1310,6 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
             </CardContent>
           </Card>
       </div>
-      <SaveTemplateDialog
-        open={saveDialogOpen}
-        onOpenChange={(o) => setSaveDialogOpen(o)}
-        subject={subject}
-        content={htmlContent}
-        onSaved={() => loadTemplates()}
-      />
     </div>
   )
 }

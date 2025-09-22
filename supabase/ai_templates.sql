@@ -41,6 +41,18 @@ ADD COLUMN IF NOT EXISTS custom_prompt TEXT;
 ALTER TABLE public.ai_templates
 ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false;
 
+-- Enhanced template fields for complete campaign state
+ALTER TABLE public.ai_templates
+ADD COLUMN IF NOT EXISTS sender_name TEXT;
+ALTER TABLE public.ai_templates
+ADD COLUMN IF NOT EXISTS email_purpose TEXT;
+ALTER TABLE public.ai_templates
+ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'English';
+ALTER TABLE public.ai_templates
+ADD COLUMN IF NOT EXISTS generation_options JSONB DEFAULT '{"generate_for_all": false, "use_contact_info": true}';
+ALTER TABLE public.ai_templates
+ADD COLUMN IF NOT EXISTS template_type TEXT DEFAULT 'campaign';
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_ai_templates_user_id ON public.ai_templates(user_id);
 

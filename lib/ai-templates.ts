@@ -8,12 +8,23 @@ export interface AITemplate {
   description: string
   category: 'cold_outreach' | 'follow_up' | 'introduction' | 'meeting_request' | 'custom'
   content: string
+  subject?: string
+  subject_template?: string
   variables: string[]
   custom_prompt?: string
   is_default: boolean
   usage_count: number
   created_at: string
   updated_at: string
+  // Enhanced campaign fields
+  sender_name?: string
+  email_purpose?: string
+  language?: 'English' | 'German'
+  generation_options?: {
+    generate_for_all: boolean
+    use_contact_info: boolean
+  }
+  template_type?: string
 }
 
 export const DEFAULT_TEMPLATES: Omit<AITemplate, 'id' | 'user_id' | 'created_at' | 'updated_at'>[] = [

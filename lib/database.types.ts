@@ -22,13 +22,18 @@ export type Database = {
           category: string | null
           created_at: string | null
           description: string | null
+          email_purpose: string | null
+          generation_options: Json | null
           id: string
           is_public: boolean | null
+          language: string | null
           max_tokens: number | null
           name: string
+          sender_name: string | null
           subject_template: string
           success_rate: number | null
           temperature: number | null
+          template_type: string | null
           updated_at: string | null
           usage_count: number | null
           user_id: string | null
@@ -41,13 +46,18 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
+          email_purpose?: string | null
+          generation_options?: Json | null
           id?: string
           is_public?: boolean | null
+          language?: string | null
           max_tokens?: number | null
           name: string
+          sender_name?: string | null
           subject_template: string
           success_rate?: number | null
           temperature?: number | null
+          template_type?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string | null
@@ -60,13 +70,18 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
+          email_purpose?: string | null
+          generation_options?: Json | null
           id?: string
           is_public?: boolean | null
+          language?: string | null
           max_tokens?: number | null
           name?: string
+          sender_name?: string | null
           subject_template?: string
           success_rate?: number | null
           temperature?: number | null
+          template_type?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string | null

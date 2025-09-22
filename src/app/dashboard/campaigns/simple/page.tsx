@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ApiClient } from '@/lib/api-client'
 import { UnifiedEmailContentEditor } from '@/components/campaigns/UnifiedEmailContentEditor'
+import { SaveTemplateDialog } from '@/components/campaigns/SaveTemplateDialog'
 import { ViewContactListModal } from '@/components/contacts/ViewContactListModal'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { 
@@ -39,6 +40,11 @@ interface SimpleCampaignData {
   timezone: string
   from_email_account_id?: string
   daily_send_limit?: number
+  // Enhanced template fields
+  email_purpose?: string
+  language?: 'English' | 'German'
+  generate_for_all?: boolean
+  use_contact_info?: boolean
 }
 
 interface ContactList {
@@ -68,7 +74,12 @@ export default function SimpleCampaignPage() {
     send_immediately: true,
     timezone: '',
     from_email_account_id: '',
-    daily_send_limit: 50
+    daily_send_limit: 50,
+    // Enhanced template fields
+    email_purpose: '',
+    language: 'English',
+    generate_for_all: false,
+    use_contact_info: true
   })
   const [emailAccounts, setEmailAccounts] = useState<any[]>([])
   const [contactLists, setContactLists] = useState<ContactList[]>([])
@@ -78,6 +89,8 @@ export default function SimpleCampaignPage() {
   const [personalizedEmails, setPersonalizedEmails] = useState<Map<string, { subject: string; content: string }>>(new Map())
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [campaignResult, setCampaignResult] = useState<any>(null)
+  const [templates, setTemplates] = useState<any[]>([])
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
   
   // Debug personalized emails changes
   useEffect(() => {
@@ -159,9 +172,23 @@ export default function SimpleCampaignPage() {
     return true
   }
 
+  // Load templates
+  const loadTemplates = async () => {
+    try {
+      const res = await fetch('/api/ai/templates')
+      if (res.ok) {
+        const json = await res.json()
+        setTemplates(json.data || [])
+      }
+    } catch (e) {
+      console.warn('Failed to load templates', e)
+    }
+  }
+
   useEffect(() => {
     fetchContactLists()
-    
+    loadTemplates()
+
     // Set default timezone
     if (typeof window !== 'undefined') {
       setCampaignData(prev => ({
@@ -348,6 +375,95 @@ export default function SimpleCampaignPage() {
     return contactLists
       .filter(list => campaignData.contact_list_ids.includes(list.id))
       .reduce((total, list) => total + list.contactCount, 0)
+  }
+
+  // Load template data into campaign
+  const loadTemplate = (template: any) => {
+    // Update all campaign fields from template
+    setCampaignData(prev => ({
+      ...prev,
+      sender_name: template.sender_name || prev.sender_name,
+      email_subject: template.subject || template.subject_template || prev.email_subject,
+      html_content: template.content || template.body_template || prev.html_content,
+      email_purpose: template.email_purpose || prev.email_purpose,
+      language: template.language || prev.language,
+      generate_for_all: template.generation_options?.generate_for_all ?? prev.generate_for_all,
+      use_contact_info: template.generation_options?.use_contact_info ?? prev.use_contact_info
+    }))
+  }
+
+  // Built-in template insertion
+  const insertBuiltInTemplate = (templateType: string) => {
+    const templates = {
+      basic: {
+        subject: "Hello {{first_name}}",
+        content: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #333; font-size: 24px; margin-bottom: 20px;">Hello {{first_name}},</h1>
+
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 15px;">
+              I hope this email finds you well. I wanted to reach out because...
+            </p>
+
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+              [Your message content here]
+            </p>
+
+            <div style="margin: 30px 0;">
+              <a href="#" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Call to Action</a>
+            </div>
+
+            <p style="color: #555; font-size: 16px; line-height: 1.6;">
+              Best regards,<br>
+              {{sender_name}}
+            </p>
+          </div>
+        `
+      },
+      professional: {
+        subject: "Partnership opportunity with {{company}}",
+        content: `
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa; padding: 30px;">
+            <div style="background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <div style="border-left: 4px solid #007bff; padding-left: 20px; margin-bottom: 30px;">
+                <h1 style="color: #2c3e50; font-size: 28px; margin: 0;">Hello {{first_name}},</h1>
+              </div>
+
+              <p style="color: #34495e; font-size: 16px; line-height: 1.8; margin-bottom: 20px;">
+                I hope this message finds you well. I'm reaching out regarding...
+              </p>
+
+              <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin: 25px 0; border-left: 4px solid #28a745;">
+                <p style="color: #2c3e50; font-size: 16px; line-height: 1.6; margin: 0;">
+                  [Highlighted message or key point]
+                </p>
+              </div>
+
+              <div style="text-align: center; margin: 35px 0;">
+                <a href="#" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 35px; text-decoration: none; border-radius: 25px; display: inline-block; font-weight: 600;">Schedule a Call</a>
+              </div>
+
+              <div style="border-top: 1px solid #e9ecef; padding-top: 25px; margin-top: 35px;">
+                <p style="color: #6c757d; font-size: 14px; line-height: 1.6;">
+                  Best regards,<br>
+                  <strong>{{sender_name}}</strong><br>
+                  {{company_name}}
+                </p>
+              </div>
+            </div>
+          </div>
+        `
+      }
+    }
+
+    const template = templates[templateType as keyof typeof templates]
+    if (template) {
+      setCampaignData(prev => ({
+        ...prev,
+        email_subject: template.subject,
+        html_content: template.content
+      }))
+    }
   }
 
   const handleSaveDraft = async () => {
@@ -601,6 +717,34 @@ export default function SimpleCampaignPage() {
       case 1:
         return (
           <div className="space-y-6">
+            {/* Quick Templates Section */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-blue-900">Quick Templates</h4>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSaveTemplateDialogOpen(true)}
+                  className="flex items-center bg-white"
+                >
+                  <Save className="h-4 w-4 mr-1" /> Save as Template
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => insertBuiltInTemplate('basic')} className="bg-white">
+                  Basic Template
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => insertBuiltInTemplate('professional')} className="bg-white">
+                  Professional
+                </Button>
+                {templates.map((tpl) => (
+                  <Button key={tpl.id} variant="outline" size="sm" onClick={() => loadTemplate(tpl)} className="bg-white">
+                    {tpl.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
             {/* Sender Name Field */}
             <div>
               <label htmlFor="sender_name" className="block text-sm font-medium text-gray-700 mb-2">
@@ -628,6 +772,15 @@ export default function SimpleCampaignPage() {
               onContentChange={(content) => setCampaignData(prev => ({ ...prev, html_content: content }))}
               contactLists={contactListsWithContacts}
               onPersonalizedEmailsChange={setPersonalizedEmails}
+              // Enhanced template fields
+              emailPurpose={campaignData.email_purpose}
+              onEmailPurposeChange={(purpose) => setCampaignData(prev => ({ ...prev, email_purpose: purpose }))}
+              language={campaignData.language}
+              onLanguageChange={(language) => setCampaignData(prev => ({ ...prev, language }))}
+              generateForAll={campaignData.generate_for_all}
+              onGenerateForAllChange={(generateForAll) => setCampaignData(prev => ({ ...prev, generate_for_all: generateForAll }))}
+              useContactInfo={campaignData.use_contact_info}
+              onUseContactInfoChange={(useContactInfo) => setCampaignData(prev => ({ ...prev, use_contact_info: useContactInfo }))}
             />
             
             {errors.email_subject && <p className="text-red-500 text-sm">{errors.email_subject}</p>}
@@ -885,10 +1038,6 @@ export default function SimpleCampaignPage() {
             <p className="text-gray-600">Send a single HTML email to your contacts</p>
           </div>
         </div>
-        <Button variant="outline" onClick={handleSaveDraft} disabled={loading}>
-          <Save className="h-4 w-4 mr-2" />
-          Save Draft
-        </Button>
       </div>
 
       {/* Progress Steps */}
@@ -1025,6 +1174,22 @@ export default function SimpleCampaignPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Save Template Dialog */}
+      <SaveTemplateDialog
+        open={saveTemplateDialogOpen}
+        onOpenChange={setSaveTemplateDialogOpen}
+        subject={campaignData.email_subject}
+        content={campaignData.html_content}
+        campaignData={{
+          sender_name: campaignData.sender_name,
+          email_purpose: campaignData.email_purpose || '',
+          language: campaignData.language || 'English',
+          generate_for_all: campaignData.generate_for_all || false,
+          use_contact_info: campaignData.use_contact_info !== false
+        }}
+        onSaved={() => loadTemplates()}
+      />
     </div>
   )
 }

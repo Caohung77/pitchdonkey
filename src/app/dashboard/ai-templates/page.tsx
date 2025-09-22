@@ -262,19 +262,56 @@ function AITemplatesContent() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <div className="bg-gray-50 p-3 rounded text-sm">
-                      <div className="line-clamp-3">
-                        {template.content.substring(0, 150)}...
+                    {/* Campaign Settings Display */}
+                    <div className="bg-gray-50 p-3 rounded text-sm space-y-2">
+                      {template.sender_name && (
+                        <div className="flex items-center text-xs">
+                          <span className="font-medium text-gray-600 w-20">Sender:</span>
+                          <span className="text-gray-800">{template.sender_name}</span>
+                        </div>
+                      )}
+                      {template.email_purpose && (
+                        <div className="flex items-start text-xs">
+                          <span className="font-medium text-gray-600 w-20 flex-shrink-0">Purpose:</span>
+                          <span className="text-gray-800 line-clamp-2">{template.email_purpose}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center">
+                          <span className="font-medium text-gray-600 mr-2">Language:</span>
+                          <Badge variant="outline" className="text-xs">{template.language || 'English'}</Badge>
+                        </div>
+                        {template.generation_options && (
+                          <div className="flex items-center space-x-1">
+                            {template.generation_options.generate_for_all && (
+                              <Badge variant="outline" className="text-xs bg-blue-50">Generate All</Badge>
+                            )}
+                            {template.generation_options.use_contact_info && (
+                              <Badge variant="outline" className="text-xs bg-green-50">Use Contact Info</Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-600 pt-1 border-t">
+                        <span className="font-medium">Subject:</span> {template.subject || template.subject_template || 'No subject'}
                       </div>
                     </div>
-                    
-                    <div className="flex flex-wrap gap-1">
-                      {template.variables.map((variable, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {variable}
-                        </Badge>
-                      ))}
-                    </div>
+
+                    {/* Variables */}
+                    {template.variables.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {template.variables.slice(0, 3).map((variable, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {variable}
+                          </Badge>
+                        ))}
+                        {template.variables.length > 3 && (
+                          <Badge variant="outline" className="text-xs bg-gray-100">
+                            +{template.variables.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex space-x-2">
                       <Button 
@@ -357,7 +394,12 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
     description: '',
     category: 'custom' as const,
     content: '',
-    custom_prompt: '',
+    subject: '',
+    sender_name: '',
+    email_purpose: '',
+    language: 'English' as const,
+    generate_for_all: false,
+    use_contact_info: true,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -371,7 +413,13 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          generation_options: {
+            generate_for_all: formData.generate_for_all,
+            use_contact_info: formData.use_contact_info,
+          },
+        }),
       })
 
       if (!response.ok) {
@@ -395,7 +443,12 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
       description: '',
       category: 'custom',
       content: '',
-      custom_prompt: '',
+      subject: '',
+      sender_name: '',
+      email_purpose: '',
+      language: 'English',
+      generate_for_all: false,
+      use_contact_info: true,
     })
     setError('')
   }
@@ -411,7 +464,7 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
           Create Template
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create AI Template</DialogTitle>
           <DialogDescription>
@@ -425,16 +478,34 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Template Name *</Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="My Custom Template"
-              required
-            />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Template Name *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="My Custom Template"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <select
+                id="category"
+                value={formData.category}
+                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as any }))}
+                className="w-full p-2 border border-gray-300 rounded-md"
+              >
+                <option value="cold_outreach">Cold Outreach</option>
+                <option value="follow_up">Follow Up</option>
+                <option value="introduction">Introduction</option>
+                <option value="meeting_request">Meeting Request</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -447,31 +518,63 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
-            <select
-              id="category"
-              value={formData.category}
-              onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as any }))}
-              className="w-full p-2 border border-gray-300 rounded-md"
-            >
-              <option value="cold_outreach">Cold Outreach</option>
-              <option value="follow_up">Follow Up</option>
-              <option value="introduction">Introduction</option>
-              <option value="meeting_request">Meeting Request</option>
-              <option value="custom">Custom</option>
-            </select>
+          {/* Campaign Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="sender_name">Sender Name</Label>
+              <Input
+                id="sender_name"
+                value={formData.sender_name}
+                onChange={(e) => setFormData(prev => ({ ...prev, sender_name: e.target.value }))}
+                placeholder="John Doe"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="language">Language</Label>
+              <select
+                id="language"
+                value={formData.language}
+                onChange={(e) => setFormData(prev => ({ ...prev, language: e.target.value as 'English' | 'German' }))}
+                className="w-full p-2 border border-gray-300 rounded-md"
+              >
+                <option value="English">English</option>
+                <option value="German">German</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="content">Template Content *</Label>
+            <Label htmlFor="email_purpose">Email Purpose</Label>
+            <textarea
+              id="email_purpose"
+              value={formData.email_purpose}
+              onChange={(e) => setFormData(prev => ({ ...prev, email_purpose: e.target.value }))}
+              placeholder="Describe the purpose of this email template..."
+              className="w-full p-3 border border-gray-300 rounded-md"
+              rows={2}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="subject">Email Subject</Label>
+            <Input
+              id="subject"
+              value={formData.subject}
+              onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+              placeholder="Subject line with {{variables}}"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="content">Email Content *</Label>
             <textarea
               id="content"
               value={formData.content}
               onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              placeholder="Write your template here. Use {variable_name} for personalization..."
-              className="w-full p-3 border border-gray-300 rounded-md"
-              rows={8}
+              placeholder="Write your email template here. Use {{variable_name}} for personalization..."
+              className="w-full p-3 border border-gray-300 rounded-md font-mono text-sm"
+              rows={15}
               required
             />
             <p className="text-xs text-gray-500">
@@ -479,16 +582,31 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="custom_prompt">Custom AI Prompt</Label>
-            <textarea
-              id="custom_prompt"
-              value={formData.custom_prompt}
-              onChange={(e) => setFormData(prev => ({ ...prev, custom_prompt: e.target.value }))}
-              placeholder="Optional: Custom instructions for AI personalization..."
-              className="w-full p-3 border border-gray-300 rounded-md"
-              rows={3}
-            />
+          {/* Generation Options */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">Generation Options</Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="generate_for_all"
+                  checked={formData.generate_for_all}
+                  onChange={(e) => setFormData(prev => ({ ...prev, generate_for_all: e.target.checked }))}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <Label htmlFor="generate_for_all" className="text-sm">Generate for all contacts</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="use_contact_info"
+                  checked={formData.use_contact_info}
+                  onChange={(e) => setFormData(prev => ({ ...prev, use_contact_info: e.target.checked }))}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <Label htmlFor="use_contact_info" className="text-sm">Use contact information</Label>
+              </div>
+            </div>
           </div>
 
           <div className="flex space-x-3 pt-4">
@@ -520,12 +638,12 @@ function CreateTemplateDialog({ onTemplateCreated }: { onTemplateCreated: () => 
   )
 }
 
-function PreviewTemplateModal({ 
-  isOpen, 
-  onClose, 
+function PreviewTemplateModal({
+  isOpen,
+  onClose,
   template,
-  getCategoryColor 
-}: { 
+  getCategoryColor
+}: {
   isOpen: boolean
   onClose: () => void
   template: AITemplate
@@ -534,6 +652,7 @@ function PreviewTemplateModal({
   const [variables, setVariables] = useState<Record<string, string>>({})
   const [preview, setPreview] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [viewMode, setViewMode] = useState<'rendered' | 'code'>('rendered')
 
   // Initialize variables with sample data
   useEffect(() => {
@@ -610,7 +729,7 @@ function PreviewTemplateModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Preview Template: {template.name}</DialogTitle>
           <DialogDescription>
@@ -619,6 +738,44 @@ function PreviewTemplateModal({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Campaign Settings Display */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+            <h3 className="font-medium text-sm text-blue-900">Campaign Settings</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="font-medium text-blue-800">Sender Name:</span>
+                <div className="mt-1 text-blue-700">{template.sender_name || 'Not specified'}</div>
+              </div>
+              <div>
+                <span className="font-medium text-blue-800">Language:</span>
+                <div className="mt-1 text-blue-700">{template.language || 'English'}</div>
+              </div>
+              <div className="md:col-span-2">
+                <span className="font-medium text-blue-800">Email Purpose:</span>
+                <div className="mt-1 text-blue-700">{template.email_purpose || 'Not specified'}</div>
+              </div>
+              <div className="md:col-span-2">
+                <span className="font-medium text-blue-800">Subject:</span>
+                <div className="mt-1 text-blue-700 font-mono text-xs bg-white p-2 rounded border">
+                  {template.subject || template.subject_template || 'No subject'}
+                </div>
+              </div>
+              {template.generation_options && (
+                <div className="md:col-span-2">
+                  <span className="font-medium text-blue-800">Generation Options:</span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {template.generation_options.generate_for_all && (
+                      <Badge className="bg-blue-100 text-blue-800">Generate for All</Badge>
+                    )}
+                    {template.generation_options.use_contact_info && (
+                      <Badge className="bg-green-100 text-green-800">Use Contact Info</Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Variables Input */}
           {template.variables.length > 0 && (
             <div className="space-y-3">
@@ -644,17 +801,48 @@ function PreviewTemplateModal({
 
           {/* Preview */}
           <div className="space-y-2">
-            <h3 className="font-medium text-sm">Preview:</h3>
-            <div className="border rounded-lg p-4 bg-gray-50 min-h-[200px]">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-sm">Preview:</h3>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setViewMode(viewMode === 'rendered' ? 'code' : 'rendered')}
+                  className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+                >
+                  {viewMode === 'rendered' ? 'Show Code' : 'Show Rendered'}
+                </button>
+              </div>
+            </div>
+            <div className="border rounded-lg bg-white min-h-[300px] overflow-hidden">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mr-2" />
                   Generating preview...
                 </div>
+              ) : viewMode === 'rendered' ? (
+                <div className="p-4 bg-gray-100">
+                  <div className="mx-auto max-w-4xl">
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs text-gray-600">
+                        Email Preview
+                      </div>
+                      <div
+                        className="p-6"
+                        dangerouslySetInnerHTML={{ __html: preview }}
+                        style={{
+                          fontFamily: 'Arial, sans-serif',
+                          lineHeight: '1.6',
+                          color: '#333'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
               ) : (
-                <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono">
-                  {preview}
-                </pre>
+                <div className="p-4 bg-gray-50">
+                  <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono overflow-auto">
+                    {preview}
+                  </pre>
+                </div>
               )}
             </div>
           </div>
@@ -675,13 +863,13 @@ function PreviewTemplateModal({
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button 
+          <Button
             onClick={() => {
               navigator.clipboard.writeText(preview)
             }}
           >
             <Copy className="h-4 w-4 mr-2" />
-            Copy Preview
+            Copy {viewMode === 'rendered' ? 'HTML' : 'Code'}
           </Button>
         </div>
       </DialogContent>
@@ -707,7 +895,12 @@ function EditTemplateModal({
     description: template.description || '',
     category: template.category,
     content: template.content,
-    custom_prompt: template.custom_prompt || '',
+    subject: template.subject || template.subject_template || '',
+    sender_name: template.sender_name || '',
+    email_purpose: template.email_purpose || '',
+    language: template.language || 'English',
+    generate_for_all: template.generation_options?.generate_for_all || false,
+    use_contact_info: template.generation_options?.use_contact_info !== false,
   })
   const { addToast } = useToast()
 
@@ -719,7 +912,12 @@ function EditTemplateModal({
         description: template.description || '',
         category: template.category,
         content: template.content,
-        custom_prompt: template.custom_prompt || '',
+        subject: template.subject || template.subject_template || '',
+        sender_name: template.sender_name || '',
+        email_purpose: template.email_purpose || '',
+        language: template.language || 'English',
+        generate_for_all: template.generation_options?.generate_for_all || false,
+        use_contact_info: template.generation_options?.use_contact_info !== false,
       })
       setError('')
     }
@@ -736,7 +934,13 @@ function EditTemplateModal({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          generation_options: {
+            generate_for_all: formData.generate_for_all,
+            use_contact_info: formData.use_contact_info,
+          },
+        }),
       })
 
       if (!response.ok) {
@@ -767,7 +971,12 @@ function EditTemplateModal({
       description: template.description || '',
       category: template.category,
       content: template.content,
-      custom_prompt: template.custom_prompt || '',
+      subject: template.subject || template.subject_template || '',
+      sender_name: template.sender_name || '',
+      email_purpose: template.email_purpose || '',
+      language: template.language || 'English',
+      generate_for_all: template.generation_options?.generate_for_all || false,
+      use_contact_info: template.generation_options?.use_contact_info !== false,
     })
     setError('')
   }
@@ -779,7 +988,7 @@ function EditTemplateModal({
         resetForm()
       }
     }}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Template: {template.name}</DialogTitle>
           <DialogDescription>
@@ -793,16 +1002,37 @@ function EditTemplateModal({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="edit-name">Template Name *</Label>
-            <Input
-              id="edit-name"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="My Custom Template"
-              required
-            />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Template Name *</Label>
+              <Input
+                id="edit-name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="My Custom Template"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-category">Category</Label>
+              <Select
+                value={formData.category}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, category: value as any }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cold_outreach">Cold Outreach</SelectItem>
+                  <SelectItem value="follow_up">Follow Up</SelectItem>
+                  <SelectItem value="introduction">Introduction</SelectItem>
+                  <SelectItem value="meeting_request">Meeting Request</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -815,33 +1045,64 @@ function EditTemplateModal({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-category">Category</Label>
-            <Select 
-              value={formData.category} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, category: value as any }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cold_outreach">Cold Outreach</SelectItem>
-                <SelectItem value="follow_up">Follow Up</SelectItem>
-                <SelectItem value="introduction">Introduction</SelectItem>
-                <SelectItem value="meeting_request">Meeting Request</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Campaign Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-sender_name">Sender Name</Label>
+              <Input
+                id="edit-sender_name"
+                value={formData.sender_name}
+                onChange={(e) => setFormData(prev => ({ ...prev, sender_name: e.target.value }))}
+                placeholder="John Doe"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-language">Language</Label>
+              <Select
+                value={formData.language}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, language: value as 'English' | 'German' }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select language" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="English">English</SelectItem>
+                  <SelectItem value="German">German</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-content">Template Content *</Label>
+            <Label htmlFor="edit-email_purpose">Email Purpose</Label>
+            <Textarea
+              id="edit-email_purpose"
+              value={formData.email_purpose}
+              onChange={(e) => setFormData(prev => ({ ...prev, email_purpose: e.target.value }))}
+              placeholder="Describe the purpose of this email template..."
+              rows={2}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-subject">Email Subject</Label>
+            <Input
+              id="edit-subject"
+              value={formData.subject}
+              onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+              placeholder="Subject line with {{variables}}"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-content">Email Content *</Label>
             <Textarea
               id="edit-content"
               value={formData.content}
               onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              placeholder="Write your template here. Use {variable_name} for personalization..."
-              className="min-h-[200px]"
+              placeholder="Write your email template here. Use {{variable_name}} for personalization..."
+              className="min-h-[400px] font-mono text-sm"
               required
             />
             <p className="text-xs text-gray-500">
@@ -849,15 +1110,31 @@ function EditTemplateModal({
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-custom_prompt">Custom AI Prompt</Label>
-            <Textarea
-              id="edit-custom_prompt"
-              value={formData.custom_prompt}
-              onChange={(e) => setFormData(prev => ({ ...prev, custom_prompt: e.target.value }))}
-              placeholder="Optional: Custom instructions for AI personalization..."
-              rows={3}
-            />
+          {/* Generation Options */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">Generation Options</Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="edit-generate_for_all"
+                  checked={formData.generate_for_all}
+                  onChange={(e) => setFormData(prev => ({ ...prev, generate_for_all: e.target.checked }))}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <Label htmlFor="edit-generate_for_all" className="text-sm">Generate for all contacts</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="edit-use_contact_info"
+                  checked={formData.use_contact_info}
+                  onChange={(e) => setFormData(prev => ({ ...prev, use_contact_info: e.target.checked }))}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <Label htmlFor="edit-use_contact_info" className="text-sm">Use contact information</Label>
+              </div>
+            </div>
           </div>
 
           <div className="flex space-x-3 pt-4">
