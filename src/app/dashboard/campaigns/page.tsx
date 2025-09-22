@@ -78,6 +78,71 @@ interface Campaign {
   current_batch_number?: number
 }
 
+type EmailAccountInfo = {
+  id: string
+  email: string
+  provider?: string | null
+  display_name?: string | null
+  name?: string | null
+  sender_name?: string | null
+  from_name?: string | null
+}
+
+type EmailAccountMap = Record<string, EmailAccountInfo>
+
+const hydrateCampaignsWithEmailAccounts = (
+  campaignsData: Campaign[],
+  accountMap: EmailAccountMap
+): Campaign[] => {
+  if (!campaignsData?.length || !accountMap || Object.keys(accountMap).length === 0) {
+    return campaignsData
+  }
+
+  let modified = false
+
+  const enriched = campaignsData.map((campaign) => {
+    if (campaign.email_accounts && campaign.email_accounts.email) {
+      return campaign
+    }
+
+    const fallbackId =
+      campaign.from_email_account_id ||
+      (campaign as any).email_account_id ||
+      (campaign as any).fromEmailAccountId ||
+      (campaign as any).from_account_id
+
+    if (!fallbackId) {
+      return campaign
+    }
+
+    const account = accountMap[fallbackId]
+    if (!account) {
+      return campaign
+    }
+
+    modified = true
+
+    const displayName =
+      account.display_name ||
+      account.name ||
+      account.sender_name ||
+      account.from_name ||
+      null
+
+    return {
+      ...campaign,
+      email_accounts: {
+        id: account.id,
+        email: account.email,
+        provider: account.provider || campaign.email_accounts?.provider || 'smtp',
+        display_name: displayName ?? undefined,
+      },
+    }
+  })
+
+  return modified ? enriched : campaignsData
+}
+
 const STATUS_COLORS = {
   draft: 'bg-gray-100 text-gray-800',
   scheduled: 'bg-blue-100 text-blue-800',
@@ -110,6 +175,7 @@ const PROVIDER_ICONS = {
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [emailAccountsMap, setEmailAccountsMap] = useState<EmailAccountMap>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState('created_at')
@@ -125,6 +191,97 @@ export default function CampaignsPage() {
   }>({ open: false, campaign: null })
 
   const ITEMS_PER_PAGE = 10
+
+  const parseCampaignsResponse = (payload: any): Campaign[] => {
+    if (!payload) {
+      return []
+    }
+
+    if (Array.isArray(payload)) {
+      return payload as Campaign[]
+    }
+
+    if (payload.success && Array.isArray(payload.data)) {
+      return payload.data as Campaign[]
+    }
+
+    if (payload.data && Array.isArray(payload.data.data)) {
+      return payload.data.data as Campaign[]
+    }
+
+    console.error('API returned unexpected campaigns format:', payload)
+    return []
+  }
+
+  const parseEmailAccountsResponse = (payload: any): EmailAccountInfo[] => {
+    if (!payload) {
+      return []
+    }
+
+    if (Array.isArray(payload)) {
+      return payload as EmailAccountInfo[]
+    }
+
+    if (payload.success && Array.isArray(payload.data)) {
+      return payload.data as EmailAccountInfo[]
+    }
+
+    console.error('API returned unexpected email accounts format:', payload)
+    return []
+  }
+
+  useEffect(() => {
+    fetchInitialData()
+  }, [])
+
+  useEffect(() => {
+    if (!campaigns.length || Object.keys(emailAccountsMap).length === 0) {
+      return
+    }
+
+    setCampaigns((prev) => hydrateCampaignsWithEmailAccounts(prev, emailAccountsMap))
+  }, [emailAccountsMap])
+
+  const fetchInitialData = async () => {
+    try {
+      setLoading(true)
+
+      const [campaignsResult, emailAccountsResult] = await Promise.allSettled([
+        ApiClient.get('/api/campaigns'),
+        ApiClient.get('/api/email-accounts')
+      ])
+
+      let campaignsData: Campaign[] = []
+
+      if (campaignsResult.status === 'fulfilled') {
+        campaignsData = parseCampaignsResponse(campaignsResult.value)
+      } else {
+        console.error('Error fetching campaigns:', campaignsResult.reason)
+      }
+
+      if (emailAccountsResult.status === 'fulfilled') {
+        const accounts = parseEmailAccountsResponse(emailAccountsResult.value)
+        const map = accounts.reduce((acc, account) => {
+          if (account?.id) {
+            acc[account.id] = account
+          }
+          return acc
+        }, {} as EmailAccountMap)
+
+        setEmailAccountsMap(map)
+        campaignsData = hydrateCampaignsWithEmailAccounts(campaignsData, map)
+      } else if (emailAccountsResult.status === 'rejected') {
+        console.error('Error fetching email accounts for campaigns list:', emailAccountsResult.reason)
+      }
+
+      setCampaigns(campaignsData)
+    } catch (error) {
+      console.error('Error fetching initial campaigns data:', error)
+      setCampaigns([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Handle real-time campaign progress updates
   const handleProgressUpdate = (campaignId: string, updatedData: any) => {
@@ -157,27 +314,16 @@ export default function CampaignsPage() {
   }
 
 
-  useEffect(() => {
-    fetchCampaigns()
-  }, [])
-
-  const fetchCampaigns = async () => {
+  const fetchCampaigns = async (options: { silent?: boolean } = {}) => {
+    const { silent = false } = options
     try {
-      setLoading(true)
-      const data = await ApiClient.get('/api/campaigns')
-      
-      // Handle the API response structure - the API returns { success: true, data: campaigns }
-      let campaignsData = []
-      if (data.success && Array.isArray(data.data)) {
-        campaignsData = data.data
-      } else if (Array.isArray(data)) {
-        // Fallback for direct array response
-        campaignsData = data
-      } else {
-        console.error('API returned unexpected data format:', data)
-        campaignsData = []
+      if (!silent) {
+        setLoading(true)
       }
-      
+      const data = await ApiClient.get('/api/campaigns')
+      let campaignsData = parseCampaignsResponse(data)
+      campaignsData = hydrateCampaignsWithEmailAccounts(campaignsData, emailAccountsMap)
+
       setCampaigns(campaignsData)
       
       // Debug log to see what fields are available
@@ -200,7 +346,9 @@ export default function CampaignsPage() {
       console.error('Error fetching campaigns:', error)
       setCampaigns([]) // Set empty array on error
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -666,6 +814,11 @@ export default function CampaignsPage() {
                           {campaign.email_accounts.display_name && (
                             <span className="text-gray-400">({campaign.email_accounts.email})</span>
                           )}
+                        </div>
+                      ) : campaign.from_email_account_id ? (
+                        <div className="flex items-center space-x-1 text-gray-400">
+                          <AtSign className="h-3 w-3" />
+                          <span>Email account unavailable</span>
                         </div>
                       ) : (
                         <div className="flex items-center space-x-1 text-gray-400">

@@ -24,10 +24,10 @@ export default function HomePage() {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
               <Image
-                src="/images/eisbrief-logo.png"
+                src="/images/eisbrief-name-logo.png"
                 alt="Eisbrief Logo"
-                width={120}
-                height={40}
+                width={176}
+                height={60}
                 className="h-10 w-auto"
               />
             </div>
@@ -265,10 +265,10 @@ export default function HomePage() {
             {/* Brand */}
             <div className="flex items-center">
               <Image
-                src="/images/eisbrief-logo.png"
+                src="/images/eisbrief-name-logo.png"
                 alt="Eisbrief Logo"
-                width={100}
-                height={32}
+                width={165}
+                height={56}
                 className="h-8 w-auto"
               />
             </div>
