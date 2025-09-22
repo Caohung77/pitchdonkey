@@ -157,15 +157,15 @@ export async function GET(request: NextRequest) {
 
         // Trigger the FIXED campaign processor for this specific campaign
         try {
-          // Import the FIXED campaign processor dynamically
-          const { fixedCampaignProcessor } = await import('@/lib/campaign-processor-fixed')
+          // Import the working campaign processor (fixed processor has JOIN issues with SMTP)
+          const { campaignProcessor } = await import('@/lib/campaign-processor')
 
           // Process this specific campaign
-          console.log(`🚀 Processing campaign ${campaign.name} with FIXED processor`)
+          console.log(`🚀 Processing campaign ${campaign.name} with working processor`)
 
           // Wait for the processor to complete (instead of background processing)
           // This ensures we catch any errors and report them properly
-          await fixedCampaignProcessor.processReadyCampaigns()
+          await campaignProcessor.processReadyCampaigns()
           
           successCount++
           results.push({
