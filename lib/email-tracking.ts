@@ -423,6 +423,26 @@ export class EmailTracker {
           contact_id: click.contact_id
         })
 
+      // Update email_tracking table with click information
+      // First get the current email tracking record to increment click_count
+      const { data: emailTracking } = await this.supabase
+        .from('email_tracking')
+        .select('click_count')
+        .eq('message_id', click.message_id)
+        .single()
+
+      const currentClickCount = emailTracking?.click_count || 0
+
+      await this.supabase
+        .from('email_tracking')
+        .update({
+          clicked_at: click.clicked_at || now,
+          first_clicked_at: isFirstClick ? now : undefined,
+          last_clicked_at: now,
+          click_count: currentClickCount + 1
+        })
+        .eq('message_id', click.message_id)
+
       // Update contact engagement if first click
       if (isFirstClick && click.contact_id) {
         await this.updateContactEngagement(click.contact_id, 'clicked', now)
