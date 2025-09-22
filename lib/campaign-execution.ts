@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { Campaign, EmailStep, CampaignContact, CampaignUtils } from './campaigns'
 import { ABTestService } from './ab-testing'
+import { EmailLinkRewriter } from './email-link-rewriter'
 
 // Campaign execution interfaces
 export interface CampaignExecution {
@@ -314,7 +315,9 @@ export class CampaignExecutionEngine {
         subject: personalizedSubject,
         content: personalizedContent,
         emailAccount,
-        trackingId: job.id
+        trackingId: job.id,
+        campaignId: job.campaign_id,
+        contactId: job.contact_id
       })
 
       // Update job as sent
@@ -949,10 +952,24 @@ export class CampaignExecutionEngine {
     emailAccount: any
     trackingId: string
     senderName?: string
+    campaignId?: string
+    contactId?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
-    
+
     try {
+      // Generate message ID for tracking
+      const messageId = `${params.trackingId}_${Date.now()}`
+
+      // Rewrite links for click tracking
+      console.log('🔗 Rewriting links for click tracking...')
+      let htmlContent = await EmailLinkRewriter.rewriteLinksForTracking(
+        params.content,
+        messageId,
+        params.to,
+        params.campaignId,
+        params.contactId
+      )
       if (params.emailAccount.provider === 'smtp') {
         // Use Nodemailer for SMTP providers
         const nodemailer = require('nodemailer')
@@ -977,8 +994,7 @@ export class CampaignExecutionEngine {
         // Insert tracking pixel into HTML content
         const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="">`
         
-        // Ensure content has tracking pixel
-        let htmlContent = params.content
+        // Add tracking pixel to the already processed content
         if (htmlContent.includes('</body>')) {
           htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`)
         } else {
@@ -1022,8 +1038,7 @@ export class CampaignExecutionEngine {
           // Insert tracking pixel into HTML content
           const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="">`
 
-          // Ensure content has tracking pixel
-          let htmlContent = params.content
+          // Add tracking pixel to the already processed content
           if (htmlContent.includes('</body>')) {
             htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`)
           } else {

@@ -315,14 +315,20 @@ export class EmailTracker {
     contactId?: string
   ): Promise<string> {
     try {
+      // Auto-initialize supabase client if not provided
+      if (!this.supabase) {
+        const { createServerSupabaseClient } = await import('./supabase-server')
+        this.supabase = createServerSupabaseClient()
+      }
+
       const clickId = this.generateTrackingId()
-      
+
       const clickTracking: ClickTracking = {
         id: clickId,
         messageId,
         recipientEmail,
         originalUrl,
-        trackingUrl: `${process.env.TRACKING_DOMAIN}/click/${clickId}`,
+        trackingUrl: `${process.env.TRACKING_DOMAIN || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/tracking/click/${clickId}`,
         campaignId,
         contactId,
         createdAt: new Date().toISOString(),
@@ -363,6 +369,12 @@ export class EmailTracker {
     ipAddress?: string
   ): Promise<{ success: boolean; redirectUrl: string; firstClick: boolean }> {
     try {
+      // Auto-initialize supabase client if not provided
+      if (!this.supabase) {
+        const { createServerSupabaseClient } = await import('./supabase-server')
+        this.supabase = createServerSupabaseClient()
+      }
+
       // Get click tracking data
       const { data: click, error } = await this.supabase
         .from('click_tracking')
