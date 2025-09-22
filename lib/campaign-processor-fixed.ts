@@ -75,7 +75,7 @@ export class FixedCampaignProcessor {
         .from('campaigns')
         .select(`
           *,
-          email_accounts!inner(
+          email_accounts!from_email_account_id(
             id,
             email,
             provider,
