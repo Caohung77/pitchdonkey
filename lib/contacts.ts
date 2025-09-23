@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { z } from 'zod'
 import { EmailValidationService } from './email-validation'
 import { contactSchema, updateContactSchema, csvContactSchema } from './validations'
+import type { ContactEngagementStatus } from './contact-engagement'
 
 export interface Contact {
   id: string
@@ -421,7 +422,7 @@ export class ContactService {
     if (error) throw error
 
     // Map database fields to frontend expected fields
-    const mappedContacts = (data || []).map(contact => ({
+    let mappedContacts = (data || []).map(contact => ({
       ...contact,
       // Map company field to company_name for frontend compatibility
       company_name: contact.company,
@@ -434,6 +435,8 @@ export class ContactService {
       } : {}),
     }))
 
+    mappedContacts = await this.applyEngagementSnapshots(supabase, mappedContacts)
+
     return {
       contacts: mappedContacts,
       pagination: {
@@ -443,6 +446,141 @@ export class ContactService {
         pages: Math.ceil((count || 0) / limit),
       },
     }
+  }
+
+  private async applyEngagementSnapshots(
+    supabase: Awaited<ReturnType<typeof this.getSupabase>>,
+    contacts: any[]
+  ): Promise<any[]> {
+    if (!contacts.length) return contacts
+
+    const contactIds = contacts.map((contact) => contact.id).filter(Boolean)
+    if (!contactIds.length) return contacts
+
+    const { data: trackingRows, error: trackingError } = await supabase
+      .from('email_tracking')
+      .select('contact_id, sent_at, delivered_at, opened_at, clicked_at, replied_at, bounced_at, complained_at, unsubscribed_at, status')
+      .in('contact_id', contactIds)
+
+    if (trackingError) {
+      console.error('Failed to load email tracking for engagement snapshots:', trackingError)
+      return contacts
+    }
+
+    const trackingByContact = new Map<string, any[]>()
+    for (const row of trackingRows || []) {
+      if (!row.contact_id) continue
+      const arr = trackingByContact.get(row.contact_id) || []
+      arr.push(row)
+      trackingByContact.set(row.contact_id, arr)
+    }
+
+    const now = new Date()
+
+    for (const contact of contacts) {
+      const rows = trackingByContact.get(contact.id) || []
+
+      const sentCount = rows.filter(row => row.sent_at || row.delivered_at || ['sent', 'delivered', 'opened', 'clicked', 'replied'].includes(row.status || '')).length
+      const openCount = rows.filter(row => row.opened_at).length
+      const clickCount = rows.filter(row => row.clicked_at).length
+      const replyCount = rows.filter(row => row.replied_at).length
+      const bounceCount = rows.filter(row => row.status === 'bounced').length
+
+      let lastPositiveAt: Date | null = null
+      for (const row of rows) {
+        const candidates = [row.replied_at, row.clicked_at, row.opened_at]
+        for (const ts of candidates) {
+          if (!ts) continue
+          const date = new Date(ts)
+          if (!lastPositiveAt || date > lastPositiveAt) {
+            lastPositiveAt = date
+          }
+        }
+      }
+
+      const hasBounce = rows.some(row => row.status === 'bounced') || contact.status === 'bounced'
+      const hasComplaint = rows.some(row => row.status === 'complained') || contact.status === 'complained'
+      const hasUnsubscribe = Boolean(contact.unsubscribed_at) || rows.some(row => row.status === 'unsubscribed') || contact.status === 'unsubscribed'
+      const hasHardStop = hasBounce || hasComplaint || hasUnsubscribe
+
+      const openScore = Math.min(openCount * 5, 15)
+      const clickScore = Math.min(clickCount * 20, 60)
+      const replyScore = replyCount * 50
+
+      let score = openScore + clickScore + replyScore
+
+      if (score > 0 && lastPositiveAt) {
+        const diffMs = now.getTime() - lastPositiveAt.getTime()
+        if (diffMs > 0) {
+          const periods = Math.floor(diffMs / (30 * 24 * 60 * 60 * 1000))
+          if (periods > 0) {
+            score = Math.round(score * Math.pow(0.7, periods))
+          }
+        }
+      }
+
+      if (hasHardStop) {
+        score = 0
+      }
+
+      score = Math.max(0, Math.min(100, score))
+
+      let engagementStatus: ContactEngagementStatus = 'not_contacted'
+
+      if (hasHardStop) {
+        engagementStatus = 'bad'
+      } else if (sentCount === 0) {
+        engagementStatus = 'not_contacted'
+      } else {
+        const qualifiesGreen = clickCount > 0 || replyCount > 0 || score >= 50
+        engagementStatus = qualifiesGreen ? 'engaged' : 'pending'
+      }
+
+      const lastPositiveIso = lastPositiveAt ? lastPositiveAt.toISOString() : null
+
+      const needsUpdate = (
+        contact.engagement_status !== engagementStatus ||
+        contact.engagement_score !== score ||
+        contact.engagement_sent_count !== sentCount ||
+        contact.engagement_last_positive_at !== lastPositiveIso ||
+        contact.engagement_open_count !== openCount ||
+        contact.engagement_click_count !== clickCount ||
+        contact.engagement_reply_count !== replyCount ||
+        contact.engagement_bounce_count !== bounceCount
+      )
+
+      if (needsUpdate) {
+        try {
+          await supabase
+            .from('contacts')
+            .update({
+              engagement_status: engagementStatus,
+              engagement_score: score,
+              engagement_sent_count: sentCount,
+              engagement_open_count: openCount,
+              engagement_click_count: clickCount,
+              engagement_reply_count: replyCount,
+              engagement_bounce_count: bounceCount,
+              engagement_last_positive_at: lastPositiveIso,
+              engagement_updated_at: new Date().toISOString()
+            })
+            .eq('id', contact.id)
+        } catch (error) {
+          console.error('Failed to persist engagement snapshot for contact', contact.id, error)
+        }
+      }
+
+      contact.engagement_status = engagementStatus
+      contact.engagement_score = score
+      contact.engagement_sent_count = sentCount
+      contact.engagement_open_count = openCount
+      contact.engagement_click_count = clickCount
+      contact.engagement_reply_count = replyCount
+      contact.engagement_bounce_count = bounceCount
+      contact.engagement_last_positive_at = lastPositiveIso
+    }
+
+    return contacts
   }
 
   async getContactsByIds(userId: string, contactIds: string[]) {

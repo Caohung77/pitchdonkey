@@ -562,6 +562,15 @@ export type Database = {
           updated_at: string | null
           user_id: string | null
           website: string | null
+          engagement_status: string | null
+          engagement_score: number | null
+          engagement_sent_count: number | null
+          engagement_open_count: number | null
+          engagement_click_count: number | null
+          engagement_reply_count: number | null
+          engagement_bounce_count: number | null
+          engagement_last_positive_at: string | null
+          engagement_updated_at: string | null
         }
         Insert: {
           address?: string | null
@@ -641,6 +650,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           website?: string | null
+          engagement_status?: string | null
+          engagement_score?: number | null
+          engagement_sent_count?: number | null
+          engagement_open_count?: number | null
+          engagement_click_count?: number | null
+          engagement_reply_count?: number | null
+          engagement_bounce_count?: number | null
+          engagement_last_positive_at?: string | null
+          engagement_updated_at?: string | null
         }
         Update: {
           address?: string | null
@@ -720,6 +738,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           website?: string | null
+          engagement_status?: string | null
+          engagement_score?: number | null
+          engagement_sent_count?: number | null
+          engagement_open_count?: number | null
+          engagement_click_count?: number | null
+          engagement_reply_count?: number | null
+          engagement_bounce_count?: number | null
+          engagement_last_positive_at?: string | null
+          engagement_updated_at?: string | null
         }
         Relationships: [
           {
