@@ -52,7 +52,7 @@ export async function recalculateContactEngagement(
   const { data: contact, error: contactError } = await supabase
     .from('contacts')
     .select(
-      'id, status, unsubscribed_at, engagement_status, engagement_score, engagement_sent_count, engagement_last_positive_at, engagement_open_count, engagement_click_count, engagement_reply_count, engagement_bounce_count'
+      'id, unsubscribed_at, engagement_status, engagement_score, engagement_sent_count, engagement_last_positive_at, engagement_open_count, engagement_click_count, engagement_reply_count, engagement_bounce_count'
     )
     .eq('id', contactId)
     .single()
@@ -98,8 +98,7 @@ export async function recalculateContactEngagement(
   const hasUnsubscribeEvent = Boolean(contact.unsubscribed_at) ||
     tracking.some((row) => !!row.unsubscribed_at || row.status === 'unsubscribed')
 
-  const hasHardStop = hasBounce || hasComplaint || hasUnsubscribeEvent ||
-    (contact.status && HARD_STOP_STATUSES.has(contact.status))
+  const hasHardStop = hasBounce || hasComplaint || hasUnsubscribeEvent
 
   const openScore = Math.min(openCount * SCORE_LIMITS.open.increment, SCORE_LIMITS.open.cap)
   const clickScore = Math.min(clickCount * SCORE_LIMITS.click.increment, SCORE_LIMITS.click.cap)

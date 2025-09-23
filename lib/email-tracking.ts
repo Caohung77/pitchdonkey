@@ -966,6 +966,16 @@ export class EmailTracker {
           .eq('id', contactId)
       }
 
+      // Trigger engagement recalculation after any email event
+      try {
+        const { recalculateContactEngagement } = await import('./contact-engagement')
+        console.log(`🔄 Triggering engagement recalculation for contact: ${contactId}, event: ${eventType}`)
+        await recalculateContactEngagement(this.supabase, contactId)
+        console.log(`✅ Engagement recalculation completed for contact: ${contactId}`)
+      } catch (engagementError) {
+        console.error('Error recalculating contact engagement:', engagementError)
+      }
+
     } catch (error) {
       console.error('Error updating contact engagement:', error)
     }
