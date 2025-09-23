@@ -20,6 +20,8 @@ interface ContactsPageState {
   searchTerm: string
   statusFilter: string
   enrichmentFilter: string | null
+  engagementFilter: string | null
+  scoreRange: [number, number] | null
   sortBy: string
   sortOrder: 'asc' | 'desc'
   activeTab: string
@@ -33,6 +35,8 @@ function ContactsPageContent() {
     searchTerm: '',
     statusFilter: 'all',
     enrichmentFilter: null,
+    engagementFilter: null,
+    scoreRange: null,
     sortBy: 'updated_at',
     sortOrder: 'desc',
     activeTab: 'contacts'
@@ -51,12 +55,27 @@ function ContactsPageContent() {
     setState(prev => ({ ...prev, enrichmentFilter }))
   }
 
+  const handleEngagementFilterChange = (engagementFilter: string | null) => {
+    setState(prev => ({ ...prev, engagementFilter }))
+  }
+
+  const handleScoreRangeChange = (scoreRange: [number, number] | null) => {
+    setState(prev => ({ ...prev, scoreRange }))
+  }
+
   const handleSortChange = (sortBy: string, sortOrder: 'asc' | 'desc') => {
     setState(prev => ({ ...prev, sortBy, sortOrder }))
   }
 
   const handleClearFilters = () => {
-    setState(prev => ({ ...prev, searchTerm: '', statusFilter: 'all', enrichmentFilter: null }))
+    setState(prev => ({
+      ...prev,
+      searchTerm: '',
+      statusFilter: 'all',
+      enrichmentFilter: null,
+      engagementFilter: null,
+      scoreRange: null
+    }))
   }
 
   // Contact handlers
@@ -175,22 +194,28 @@ function ContactsPageContent() {
               searchTerm={state.searchTerm}
               statusFilter={state.statusFilter}
               enrichmentFilter={state.enrichmentFilter}
+              engagementFilter={state.engagementFilter}
+              scoreRange={state.scoreRange}
               sortBy={state.sortBy}
               sortOrder={state.sortOrder}
               userId={user.id}
               onSearchChange={handleSearchChange}
               onStatusFilterChange={handleStatusFilterChange}
               onEnrichmentFilterChange={handleEnrichmentFilterChange}
+              onEngagementFilterChange={handleEngagementFilterChange}
+              onScoreRangeChange={handleScoreRangeChange}
               onSortChange={handleSortChange}
               onClearFilters={handleClearFilters}
             />
 
             {/* Contacts List */}
-            <ContactsList 
+            <ContactsList
               userId={user.id}
               searchTerm={state.searchTerm}
               statusFilter={state.statusFilter}
               enrichmentFilter={state.enrichmentFilter}
+              engagementFilter={state.engagementFilter}
+              scoreRange={state.scoreRange}
               sortBy={state.sortBy}
               sortOrder={state.sortOrder}
             />

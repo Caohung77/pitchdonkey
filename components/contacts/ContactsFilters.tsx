@@ -16,16 +16,28 @@ interface EnrichmentStats {
   total: number
 }
 
+interface EngagementStats {
+  not_contacted: number
+  pending: number
+  engaged: number
+  bad: number
+  total: number
+}
+
 interface ContactsFiltersProps {
   searchTerm: string
   statusFilter: string
   enrichmentFilter?: string | null
+  engagementFilter?: string | null
+  scoreRange?: [number, number] | null
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
   userId: string
   onSearchChange: (search: string) => void
   onStatusFilterChange: (status: string) => void
   onEnrichmentFilterChange?: (filter: string | null) => void
+  onEngagementFilterChange?: (filter: string | null) => void
+  onScoreRangeChange?: (range: [number, number] | null) => void
   onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
   onClearFilters: () => void
 }
@@ -34,17 +46,22 @@ export function ContactsFilters({
   searchTerm,
   statusFilter,
   enrichmentFilter,
+  engagementFilter,
+  scoreRange,
   sortBy = 'updated_at',
   sortOrder = 'desc',
   userId,
   onSearchChange,
   onStatusFilterChange,
   onEnrichmentFilterChange,
+  onEngagementFilterChange,
+  onScoreRangeChange,
   onSortChange,
   onClearFilters
 }: ContactsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchTerm)
   const [enrichmentStats, setEnrichmentStats] = useState<EnrichmentStats | null>(null)
+  const [engagementStats, setEngagementStats] = useState<EngagementStats | null>(null)
   const [isLoadingStats, setIsLoadingStats] = useState(false)
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -103,7 +120,7 @@ export function ContactsFilters({
     onEnrichmentFilterChange?.(filter)
   }
 
-  const hasActiveFilters = searchTerm || statusFilter !== 'all' || enrichmentFilter
+  const hasActiveFilters = searchTerm || statusFilter !== 'all' || enrichmentFilter || engagementFilter || scoreRange
 
   return (
     <Card className="mb-6">
@@ -138,6 +155,24 @@ export function ContactsFilters({
               <option value="complained">Complained</option>
             </select>
           </div>
+
+          {/* Engagement Filter */}
+          {onEngagementFilterChange && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">Engagement:</span>
+              <select
+                value={engagementFilter || 'all'}
+                onChange={(e) => onEngagementFilterChange(e.target.value === 'all' ? null : e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Engagement</option>
+                <option value="not_contacted">🟦 Not Contacted</option>
+                <option value="pending">🟡 No Response Yet</option>
+                <option value="engaged">🟢 Engaged</option>
+                <option value="bad">🔴 Do Not Contact</option>
+              </select>
+            </div>
+          )}
 
           {/* Sort Dropdown */}
           {onSortChange && (
@@ -187,6 +222,19 @@ export function ContactsFilters({
             {enrichmentFilter && (
               <span className="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-800">
                 Enrichment: {enrichmentFilter}
+              </span>
+            )}
+            {engagementFilter && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full bg-orange-100 text-orange-800">
+                Engagement: {engagementFilter === 'not_contacted' ? '🟦 Not Contacted' :
+                              engagementFilter === 'pending' ? '🟡 No Response Yet' :
+                              engagementFilter === 'engaged' ? '🟢 Engaged' :
+                              engagementFilter === 'bad' ? '🔴 Do Not Contact' : engagementFilter}
+              </span>
+            )}
+            {scoreRange && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">
+                Score: {scoreRange[0]}-{scoreRange[1]}
               </span>
             )}
           </div>

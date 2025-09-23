@@ -82,6 +82,17 @@ export interface Contact {
   // Contact Notes
   notes?: string | null
   notes_updated_at?: string | null
+
+  // Engagement Quality Rating System
+  engagement_status?: 'not_contacted' | 'pending' | 'engaged' | 'bad' | null
+  engagement_score?: number | null
+  engagement_sent_count?: number | null
+  engagement_open_count?: number | null
+  engagement_click_count?: number | null
+  engagement_reply_count?: number | null
+  engagement_bounce_count?: number | null
+  engagement_last_positive_at?: string | null
+  engagement_updated_at?: string | null
 }
 
 export interface EnrichmentData {
@@ -290,6 +301,9 @@ export class ContactService {
       tags?: string[]
       status?: string
       enrichment?: string
+      engagementStatus?: string
+      minScore?: number
+      maxScore?: number
       sortBy?: string
       sortOrder?: 'asc' | 'desc'
     } = {}
@@ -301,6 +315,9 @@ export class ContactService {
       tags,
       status,
       enrichment,
+      engagementStatus,
+      minScore,
+      maxScore,
       sortBy = 'created_at',
       sortOrder = 'desc'
     } = options
@@ -390,6 +407,19 @@ export class ContactService {
           query = query.or('enrichment_status.is.null,enrichment_status.neq.completed').or('linkedin_extraction_status.is.null,linkedin_extraction_status.neq.completed')
           break
       }
+    }
+
+    // Apply engagement filtering
+    if (engagementStatus) {
+      query = query.eq('engagement_status', engagementStatus)
+    }
+
+    // Apply engagement score filtering
+    if (minScore !== undefined) {
+      query = query.gte('engagement_score', minScore)
+    }
+    if (maxScore !== undefined) {
+      query = query.lte('engagement_score', maxScore)
     }
 
     // Apply sorting

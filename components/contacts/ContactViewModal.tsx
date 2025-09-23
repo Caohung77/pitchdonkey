@@ -31,6 +31,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseCompanyName } from '@/lib/contact-utils'
 import { EnrichmentButton } from './EnrichmentButton'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
+import { EngagementBadge } from './EngagementBadge'
+import { EngagementBreakdown } from './EngagementBreakdown'
+import { EngagementTimeline } from './EngagementTimeline'
+import type { ContactEngagementStatus } from '@/lib/contact-engagement'
 import { useEffect, useState } from 'react'
 
 interface ContactViewModalProps {
@@ -322,10 +326,14 @@ export function ContactViewModal({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className={`grid w-full mb-6 ${(hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          <TabsList className={`grid w-full mb-6 ${(hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed' ? 'grid-cols-5' : 'grid-cols-4'}`}>
             <TabsTrigger value="details" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Contact Details
+            </TabsTrigger>
+            <TabsTrigger value="engagement" className="flex items-center gap-2">
+              <Award className="h-4 w-4" />
+              Engagement
             </TabsTrigger>
             {((hasLinkedInData && lp) || hydratedContact.linkedin_extraction_status === 'failed') && (
               <TabsTrigger value="linkedin" className="flex items-center gap-2">
@@ -669,6 +677,83 @@ export function ContactViewModal({
               )}
             </div>
           </div>
+          </TabsContent>
+
+          {/* Engagement Tab */}
+          <TabsContent value="engagement" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Engagement Breakdown */}
+              <div className="lg:col-span-1">
+                <EngagementBreakdown
+                  status={(hydratedContact.engagement_status || 'not_contacted') as ContactEngagementStatus}
+                  score={hydratedContact.engagement_score || 0}
+                  openCount={hydratedContact.engagement_open_count || 0}
+                  clickCount={hydratedContact.engagement_click_count || 0}
+                  replyCount={hydratedContact.engagement_reply_count || 0}
+                  bounceCount={hydratedContact.engagement_bounce_count || 0}
+                  sentCount={hydratedContact.engagement_sent_count || 0}
+                  lastPositiveAt={hydratedContact.engagement_last_positive_at}
+                />
+              </div>
+
+              {/* Engagement Timeline */}
+              <div className="lg:col-span-1">
+                <EngagementTimeline
+                  events={[]}  // We'll populate this with actual email tracking events
+                  maxEvents={15}
+                />
+              </div>
+            </div>
+
+            {/* Quick Actions based on engagement status */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Recommended Actions</h3>
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  const status = hydratedContact.engagement_status || 'not_contacted'
+                  const score = hydratedContact.engagement_score || 0
+
+                  switch (status) {
+                    case 'not_contacted':
+                      return (
+                        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200">
+                          🚀 Ready for first outreach
+                        </Badge>
+                      )
+                    case 'pending':
+                      return (
+                        <>
+                          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
+                            📧 Send follow-up email
+                          </Badge>
+                          <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200">
+                            📞 Try different approach
+                          </Badge>
+                        </>
+                      )
+                    case 'engaged':
+                      return (
+                        <>
+                          <Badge className="bg-green-100 text-green-800 hover:bg-green-200">
+                            🎯 Prioritize for sales
+                          </Badge>
+                          <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-200">
+                            📅 Schedule call
+                          </Badge>
+                        </>
+                      )
+                    case 'bad':
+                      return (
+                        <Badge className="bg-red-100 text-red-800">
+                          🚫 Automatically excluded from campaigns
+                        </Badge>
+                      )
+                    default:
+                      return null
+                  }
+                })()}
+              </div>
+            </div>
           </TabsContent>
 
           {/* LinkedIn Profile Tab */}

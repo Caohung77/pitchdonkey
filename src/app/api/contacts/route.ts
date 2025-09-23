@@ -22,6 +22,9 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     const status = searchParams.get('status') || undefined
     const tags = searchParams.get('tags')?.split(',').filter(Boolean) || undefined
     const enrichment = searchParams.get('enrichment') || undefined
+    const engagementStatus = searchParams.get('engagementStatus') || undefined
+    const minScore = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) : undefined
+    const maxScore = searchParams.get('maxScore') ? parseInt(searchParams.get('maxScore')!) : undefined
     const sortBy = searchParams.get('sortBy') || 'created_at'
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc'
 
@@ -33,6 +36,9 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       status,
       tags,
       enrichment,
+      engagementStatus,
+      minScore,
+      maxScore,
       sortBy,
       sortOrder
     })

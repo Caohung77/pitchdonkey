@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { parseCompanyName } from '@/lib/contact-utils'
 import { EnrichmentBadges } from './EnrichmentBadges'
+import { EngagementBadge } from './EngagementBadge'
+import { EngagementScore } from './EngagementScore'
+import type { ContactEngagementStatus } from '@/lib/contact-engagement'
 import { 
   Mail, 
   Building,
@@ -209,15 +212,22 @@ export function ContactCard({
 
         {/* Meta Information Row */}
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2">
-            {/* Status */}
-            <Badge 
-              variant="secondary" 
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Engagement Status */}
+            <EngagementBadge
+              status={(contact.engagement_status || 'not_contacted') as ContactEngagementStatus}
+              score={contact.engagement_score}
+              size="sm"
+            />
+
+            {/* Contact Status */}
+            <Badge
+              variant="secondary"
               className={`text-xs font-medium px-2 py-1 ${getStatusColor(contact.status)}`}
             >
               {contact.status}
             </Badge>
-            
+
             {/* Enrichment Badges */}
             <EnrichmentBadges contact={contact} size="sm" />
           </div>
@@ -238,6 +248,18 @@ export function ContactCard({
             )}
           </div>
         </div>
+
+        {/* Engagement Score Bar */}
+        {contact.engagement_score !== undefined && contact.engagement_score > 0 && (
+          <div className="mb-3">
+            <EngagementScore
+              score={contact.engagement_score}
+              size="sm"
+              showValue={false}
+              className="opacity-75"
+            />
+          </div>
+        )}
 
         {/* Tags */}
         {contact.tags && contact.tags.length > 0 && (
