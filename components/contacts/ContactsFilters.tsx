@@ -26,7 +26,6 @@ interface EngagementStats {
 
 interface ContactsFiltersProps {
   searchTerm: string
-  statusFilter: string
   enrichmentFilter?: string | null
   engagementFilter?: string | null
   scoreRange?: [number, number] | null
@@ -34,7 +33,6 @@ interface ContactsFiltersProps {
   sortOrder?: 'asc' | 'desc'
   userId: string
   onSearchChange: (search: string) => void
-  onStatusFilterChange: (status: string) => void
   onEnrichmentFilterChange?: (filter: string | null) => void
   onEngagementFilterChange?: (filter: string | null) => void
   onScoreRangeChange?: (range: [number, number] | null) => void
@@ -44,7 +42,6 @@ interface ContactsFiltersProps {
 
 export function ContactsFilters({
   searchTerm,
-  statusFilter,
   enrichmentFilter,
   engagementFilter,
   scoreRange,
@@ -52,7 +49,6 @@ export function ContactsFilters({
   sortOrder = 'desc',
   userId,
   onSearchChange,
-  onStatusFilterChange,
   onEnrichmentFilterChange,
   onEngagementFilterChange,
   onScoreRangeChange,
@@ -120,7 +116,7 @@ export function ContactsFilters({
     onEnrichmentFilterChange?.(filter)
   }
 
-  const hasActiveFilters = searchTerm || statusFilter !== 'all' || enrichmentFilter || engagementFilter || scoreRange
+  const hasActiveFilters = searchTerm || enrichmentFilter || engagementFilter || scoreRange
 
   return (
     <Card className="mb-6">
@@ -139,22 +135,6 @@ export function ContactsFilters({
             </div>
             <Button type="submit">Search</Button>
           </form>
-          
-          {/* Status Filter */}
-          <div className="flex items-center space-x-2">
-            <Filter className="h-4 w-4 text-gray-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => onStatusFilterChange(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="unsubscribed">Unsubscribed</option>
-              <option value="bounced">Bounced</option>
-              <option value="complained">Complained</option>
-            </select>
-          </div>
 
           {/* Engagement Filter */}
           {onEngagementFilterChange && (
@@ -212,11 +192,6 @@ export function ContactsFilters({
             {searchTerm && (
               <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-800">
                 Search: "{searchTerm}"
-              </span>
-            )}
-            {statusFilter !== 'all' && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800">
-                Status: {statusFilter}
               </span>
             )}
             {enrichmentFilter && (

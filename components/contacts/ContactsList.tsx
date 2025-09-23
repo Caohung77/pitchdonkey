@@ -20,7 +20,6 @@ import { Contact } from '@/lib/contacts'
 interface ContactsListProps {
   userId: string
   searchTerm?: string
-  statusFilter?: string
   enrichmentFilter?: string | null
   engagementFilter?: string | null
   scoreRange?: [number, number] | null
@@ -43,7 +42,6 @@ interface ContactsListState {
 export function ContactsList({
   userId,
   searchTerm = '',
-  statusFilter = 'all',
   enrichmentFilter = null,
   engagementFilter = null,
   scoreRange = null,
@@ -189,9 +187,6 @@ export function ContactsList({
       if (searchTerm) {
         params.append('search', searchTerm)
       }
-      if (statusFilter && statusFilter !== 'all') {
-        params.append('status', statusFilter)
-      }
       if (enrichmentFilter) {
         params.append('enrichment', enrichmentFilter)
       }
@@ -245,7 +240,7 @@ export function ContactsList({
   // Effects
   useEffect(() => {
     fetchContacts()
-  }, [userId, searchTerm, statusFilter, enrichmentFilter, engagementFilter, scoreRange, sortBy, sortOrder])
+  }, [userId, searchTerm, enrichmentFilter, engagementFilter, scoreRange, sortBy, sortOrder])
 
   // Render loading state
   if (state.loading) {
@@ -289,7 +284,7 @@ export function ContactsList({
             <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No contacts found</h3>
             <p className="text-gray-600">
-              {searchTerm || statusFilter !== 'all' || enrichmentFilter || engagementFilter || scoreRange
+              {searchTerm || enrichmentFilter || engagementFilter || scoreRange
                 ? 'Try adjusting your search criteria or filters.'
                 : 'Start by importing contacts or adding them manually.'
               }

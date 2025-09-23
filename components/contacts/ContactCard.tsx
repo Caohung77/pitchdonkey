@@ -46,20 +46,6 @@ export function ContactCard({
   onSelect
 }: ContactCardProps) {
   
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800'
-      case 'unsubscribed':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'bounced':
-        return 'bg-red-100 text-red-800'
-      case 'complained':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
 
   const formatName = (contact: Contact) => {
     // Priority 1: First Name + Last Name
@@ -220,13 +206,6 @@ export function ContactCard({
               size="sm"
             />
 
-            {/* Contact Status */}
-            <Badge
-              variant="secondary"
-              className={`text-xs font-medium px-2 py-1 ${getStatusColor(contact.status)}`}
-            >
-              {contact.status}
-            </Badge>
 
             {/* Enrichment Badges */}
             <EnrichmentBadges contact={contact} size="sm" />

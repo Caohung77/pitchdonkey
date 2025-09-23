@@ -18,7 +18,6 @@ import { ToastProvider } from '@/components/ui/toast'
 
 interface ContactsPageState {
   searchTerm: string
-  statusFilter: string
   enrichmentFilter: string | null
   engagementFilter: string | null
   scoreRange: [number, number] | null
@@ -33,7 +32,6 @@ function ContactsPageContent() {
   
   const [state, setState] = useState<ContactsPageState>({
     searchTerm: '',
-    statusFilter: 'all',
     enrichmentFilter: null,
     engagementFilter: null,
     scoreRange: null,
@@ -47,9 +45,6 @@ function ContactsPageContent() {
     setState(prev => ({ ...prev, searchTerm }))
   }
 
-  const handleStatusFilterChange = (statusFilter: string) => {
-    setState(prev => ({ ...prev, statusFilter }))
-  }
 
   const handleEnrichmentFilterChange = (enrichmentFilter: string | null) => {
     setState(prev => ({ ...prev, enrichmentFilter }))
@@ -71,7 +66,6 @@ function ContactsPageContent() {
     setState(prev => ({
       ...prev,
       searchTerm: '',
-      statusFilter: 'all',
       enrichmentFilter: null,
       engagementFilter: null,
       scoreRange: null
@@ -192,7 +186,6 @@ function ContactsPageContent() {
             {/* Search and Filters */}
             <ContactsFilters
               searchTerm={state.searchTerm}
-              statusFilter={state.statusFilter}
               enrichmentFilter={state.enrichmentFilter}
               engagementFilter={state.engagementFilter}
               scoreRange={state.scoreRange}
@@ -200,7 +193,6 @@ function ContactsPageContent() {
               sortOrder={state.sortOrder}
               userId={user.id}
               onSearchChange={handleSearchChange}
-              onStatusFilterChange={handleStatusFilterChange}
               onEnrichmentFilterChange={handleEnrichmentFilterChange}
               onEngagementFilterChange={handleEngagementFilterChange}
               onScoreRangeChange={handleScoreRangeChange}
@@ -212,7 +204,6 @@ function ContactsPageContent() {
             <ContactsList
               userId={user.id}
               searchTerm={state.searchTerm}
-              statusFilter={state.statusFilter}
               enrichmentFilter={state.enrichmentFilter}
               engagementFilter={state.engagementFilter}
               scoreRange={state.scoreRange}

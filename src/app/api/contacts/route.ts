@@ -19,7 +19,6 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
     const search = searchParams.get('search') || undefined
-    const status = searchParams.get('status') || undefined
     const tags = searchParams.get('tags')?.split(',').filter(Boolean) || undefined
     const enrichment = searchParams.get('enrichment') || undefined
     const engagementStatus = searchParams.get('engagementStatus') || undefined
@@ -33,7 +32,6 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       page,
       limit,
       search,
-      status,
       tags,
       enrichment,
       engagementStatus,

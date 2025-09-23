@@ -22,7 +22,6 @@ export interface Contact {
   tags: string[]
   lists?: string[]
   segments: string[]
-  status: 'active' | 'unsubscribed' | 'bounced' | 'complained'
   source?: string
   unsubscribed_at?: string
   last_contacted_at?: string
@@ -106,10 +105,6 @@ export interface EnrichmentData {
 
 export interface ContactStats {
   total: number
-  active: number
-  unsubscribed: number
-  bounced: number
-  by_status: Record<string, number>
   by_tags: Record<string, number>
   enriched_web: number
   enriched_linkedin: number
@@ -151,7 +146,6 @@ export class ContactService {
         user_id: userId,
         ...validatedData,
         email: EmailValidationService.normalizeEmail(validatedData.email),
-        status: 'active',
         custom_fields: validatedData.custom_fields || {},
         tags: validatedData.tags || [],
         source: validatedData.source || 'manual', // Default to manual if not specified
@@ -285,7 +279,6 @@ export class ContactService {
       .select('*')
       .eq('id', contactId)
       .eq('user_id', userId)
-      .neq('status', 'deleted')
       .single()
 
     if (error) throw error
@@ -299,7 +292,6 @@ export class ContactService {
       limit?: number
       search?: string
       tags?: string[]
-      status?: string
       enrichment?: string
       engagementStatus?: string
       minScore?: number
@@ -313,7 +305,6 @@ export class ContactService {
       limit = 50,
       search,
       tags,
-      status,
       enrichment,
       engagementStatus,
       minScore,
@@ -327,7 +318,6 @@ export class ContactService {
       .from('contacts')
       .select('*', { count: 'exact' })
       .eq('user_id', userId)
-      .neq('status', 'deleted')
 
     // Apply filters
     if (search) {
@@ -383,10 +373,6 @@ export class ContactService {
       query = query.or(orParts.join(','))
     }
 
-    if (status && status !== 'all') {
-      query = query.eq('status', status)
-    }
-
     if (tags && tags.length > 0) {
       query = query.overlaps('tags', tags)
     }
@@ -423,23 +409,7 @@ export class ContactService {
     }
 
     // Apply sorting
-    if (sortBy === 'status_priority') {
-      // Custom sorting for status priority
-      const statusPrioritySQL = `
-        CASE status 
-          WHEN 'active' THEN 4
-          WHEN 'unsubscribed' THEN 3  
-          WHEN 'bounced' THEN 2
-          WHEN 'complained' THEN 1
-          ELSE 0
-        END ${sortOrder === 'asc' ? 'ASC' : 'DESC'}
-      `
-      query = query.order('status', { ascending: false, foreignTable: '', referencedTable: '' })
-      // For now, let's use a simpler approach
-      query = query.order('status', { ascending: sortOrder === 'asc' })
-    } else {
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' })
-    }
+    query = query.order(sortBy, { ascending: sortOrder === 'asc' })
 
     // Apply pagination
     const from = (page - 1) * limit
@@ -483,7 +453,6 @@ export class ContactService {
       .select('*')
       .eq('user_id', userId)
       .in('id', contactIds)
-      .neq('status', 'deleted')
 
     if (error) {
       console.error('Error fetching contacts by IDs:', error)
@@ -520,18 +489,13 @@ export class ContactService {
     const supabase = await this.getSupabase()
     const { data, error } = await supabase
       .from('contacts')
-      .select('status, tags, enrichment_status, linkedin_extraction_status')
+      .select('tags, enrichment_status, linkedin_extraction_status')
       .eq('user_id', userId)
-      .neq('status', 'deleted')
 
     if (error) throw error
 
     const stats: ContactStats = {
       total: data.length,
-      active: 0,
-      unsubscribed: 0,
-      bounced: 0,
-      by_status: {},
       by_tags: {},
       enriched_web: 0,
       enriched_linkedin: 0,
@@ -540,13 +504,6 @@ export class ContactService {
     }
 
     data.forEach(contact => {
-      // Count by status
-      stats.by_status[contact.status] = (stats.by_status[contact.status] || 0) + 1
-      
-      if (contact.status === 'active') stats.active++
-      if (contact.status === 'unsubscribed') stats.unsubscribed++
-      if (contact.status === 'bounced') stats.bounced++
-
       // Count by enrichment status
       const isWebEnriched = contact.enrichment_status === 'completed'
       const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed'
@@ -599,7 +556,6 @@ export class ContactService {
         .from('contacts')
         .select('email')
         .eq('user_id', userId)
-        .neq('status', 'deleted')
 
       existingEmails = data?.map(c => EmailValidationService.normalizeEmail(c.email)) || []
     }
@@ -654,8 +610,7 @@ export class ContactService {
           user_id: userId,
           ...validatedContact,
           email: normalizedEmail,
-          status: 'active',
-          custom_fields: validatedContact.custom_fields || {},
+            custom_fields: validatedContact.custom_fields || {},
           tags: validatedContact.tags || [],
           source: source, // Set import source
         })
@@ -715,7 +670,6 @@ export class ContactService {
       .select('id, tags')
       .in('id', contactIds)
       .eq('user_id', userId)
-      .neq('status', 'deleted')
 
     if (selectError) {
       console.error('Error fetching contacts for tag update:', selectError)
@@ -770,7 +724,6 @@ export class ContactService {
       .select('id, tags')
       .in('id', contactIds)
       .eq('user_id', userId)
-      .neq('status', 'deleted')
 
     if (selectError) {
       console.error('Error fetching contacts for tag removal:', selectError)
@@ -852,7 +805,6 @@ export class ContactService {
       .select('id, email, first_name, last_name')
       .eq('user_id', userId)
       .eq('email', normalizedEmail)
-      .neq('status', 'deleted')
 
     if (excludeContactId) {
       query = query.neq('id', excludeContactId)
@@ -934,7 +886,6 @@ export class ContactService {
       .select('*')
       .eq('user_id', userId)
       .eq('email', normalizedEmail)
-      .neq('status', 'deleted')
       .single()
 
     if (error && error.code !== 'PGRST116') {
