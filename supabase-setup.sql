@@ -440,4 +440,54 @@ CREATE TRIGGER update_ai_templates_updated_at BEFORE UPDATE ON public.ai_templat
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;-- Additional trigger to ensure engagement counts stay synchronized
+CREATE OR REPLACE FUNCTION refresh_contact_engagement_counts()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.contact_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  UPDATE contacts
+  SET
+    engagement_sent_count = (
+      SELECT COUNT(*)
+      FROM email_tracking et
+      WHERE et.contact_id = NEW.contact_id
+        AND (et.sent_at IS NOT NULL OR et.delivered_at IS NOT NULL OR et.status IN ('sent','delivered','opened','clicked','replied'))
+    ),
+    engagement_open_count = (
+      SELECT COUNT(*)
+      FROM email_tracking et
+      WHERE et.contact_id = NEW.contact_id
+        AND et.opened_at IS NOT NULL
+    ),
+    engagement_click_count = (
+      SELECT COUNT(*)
+      FROM email_tracking et
+      WHERE et.contact_id = NEW.contact_id
+        AND et.clicked_at IS NOT NULL
+    ),
+    engagement_reply_count = (
+      SELECT COUNT(*)
+      FROM email_tracking et
+      WHERE et.contact_id = NEW.contact_id
+        AND et.replied_at IS NOT NULL
+    ),
+    engagement_bounce_count = (
+      SELECT COUNT(*)
+      FROM email_tracking et
+      WHERE et.contact_id = NEW.contact_id
+        AND (et.bounced_at IS NOT NULL OR et.status = 'bounced')
+    )
+  WHERE id = NEW.contact_id;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_refresh_contact_engagement_counts ON email_tracking;
+CREATE TRIGGER trigger_refresh_contact_engagement_counts
+  AFTER INSERT OR UPDATE ON email_tracking
+  FOR EACH ROW
+  EXECUTE FUNCTION refresh_contact_engagement_counts();

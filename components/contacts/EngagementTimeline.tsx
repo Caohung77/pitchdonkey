@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Mail, MousePointer, MessageSquare, Ban, AlertTriangle } from 'lucide-react'
 
-interface EngagementEvent {
+export interface EngagementEvent {
   type: 'sent' | 'delivered' | 'opened' | 'clicked' | 'replied' | 'bounced' | 'complained' | 'unsubscribed'
   timestamp: string
   details?: string

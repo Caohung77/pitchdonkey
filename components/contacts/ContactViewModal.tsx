@@ -33,7 +33,7 @@ import { EnrichmentButton } from './EnrichmentButton'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { EngagementBadge } from './EngagementBadge'
 import { EngagementBreakdown } from './EngagementBreakdown'
-import { EngagementTimeline } from './EngagementTimeline'
+import { EngagementTimeline, type EngagementEvent } from './EngagementTimeline'
 import type { ContactEngagementStatus } from '@/lib/contact-engagement'
 import { useEffect, useState } from 'react'
 
@@ -67,6 +67,8 @@ export function ContactViewModal({
     hasNextPage: boolean
     hasPrevPage: boolean
   } | null>(null)
+  const [engagementEvents, setEngagementEvents] = useState<EngagementEvent[]>([])
+  const [engagementLoading, setEngagementLoading] = useState(false)
 
   useEffect(() => {
     const fetchLatest = async () => {
@@ -293,6 +295,37 @@ export function ContactViewModal({
       fetchNotes()
     }
   }, [isOpen, hydratedContact.id])
+
+  useEffect(() => {
+    const fetchEngagementEvents = async () => {
+      if (!isOpen || !contact?.id) {
+        setEngagementEvents([])
+        return
+      }
+
+      setEngagementLoading(true)
+      try {
+        const response = await fetch(`/api/contacts/${contact.id}/engagement`)
+        if (!response.ok) {
+          throw new Error(`Failed to load engagement events (${response.status})`)
+        }
+
+        const json = await response.json()
+        if (json.success && Array.isArray(json.events)) {
+          setEngagementEvents(json.events)
+        } else {
+          setEngagementEvents([])
+        }
+      } catch (error) {
+        console.error('Error loading engagement events:', error)
+        setEngagementEvents([])
+      } finally {
+        setEngagementLoading(false)
+      }
+    }
+
+    fetchEngagementEvents()
+  }, [isOpen, contact?.id])
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -699,8 +732,9 @@ export function ContactViewModal({
               {/* Engagement Timeline */}
               <div className="lg:col-span-1">
                 <EngagementTimeline
-                  events={[]}  // We'll populate this with actual email tracking events
+                  events={engagementEvents}
                   maxEvents={15}
+                  className={engagementLoading ? 'opacity-75 animate-pulse' : ''}
                 />
               </div>
             </div>

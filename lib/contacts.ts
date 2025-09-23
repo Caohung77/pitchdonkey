@@ -598,7 +598,7 @@ export class ContactService {
     }
 
     // Map database fields to frontend expected fields
-    const mappedData = (data || []).map(contact => ({
+    let mappedData = (data || []).map(contact => ({
       ...contact,
       // Map company field to company_name for frontend compatibility
       company_name: contact.company,
@@ -611,14 +611,7 @@ export class ContactService {
       } : {}),
     }))
 
-    console.log('🔍 Mapped contact data:', mappedData.slice(0, 3).map(c => ({
-      id: c.id,
-      first_name: c.first_name,
-      last_name: c.last_name,
-      company: c.company,
-      company_name: c.company_name,
-      email: c.email
-    })))
+    mappedData = await this.applyEngagementSnapshots(supabase, mappedData)
 
     return mappedData
   }
