@@ -66,6 +66,11 @@ const updateCampaign = withAuth(async (request: NextRequest, { user, supabase },
     // Handle other updates
     if (body.name) updates.name = body.name
     if (body.description !== undefined) updates.description = body.description
+    if (body.email_subject !== undefined) updates.email_subject = body.email_subject
+    if (body.html_content !== undefined) updates.html_content = body.html_content
+    if (Array.isArray(body.contact_list_ids)) updates.contact_list_ids = body.contact_list_ids
+    if (body.from_email_account_id !== undefined) updates.from_email_account_id = body.from_email_account_id
+    if (body.daily_send_limit !== undefined) updates.daily_send_limit = body.daily_send_limit
     if (body.emailSequence) updates.email_sequence = body.emailSequence
     if (body.aiSettings) updates.ai_settings = body.aiSettings
     
