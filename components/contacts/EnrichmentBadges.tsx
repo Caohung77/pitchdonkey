@@ -10,11 +10,16 @@ interface EnrichmentBadgesProps {
 }
 
 export function EnrichmentBadges({ contact, size = 'sm' }: EnrichmentBadgesProps) {
-  const isWebEnriched = contact.enrichment_status === 'completed'
-  const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed'
-  const isWebPending = contact.enrichment_status === 'pending'
-  const isLinkedInPending = contact.linkedin_extraction_status === 'pending'
-  
+  // Guard against null/undefined contact
+  if (!contact) {
+    return null
+  }
+
+  const isWebEnriched = (contact as any).enrichment_status === 'completed'
+  const isLinkedInEnriched = (contact as any).linkedin_extraction_status === 'completed'
+  const isWebPending = (contact as any).enrichment_status === 'pending'
+  const isLinkedInPending = (contact as any).linkedin_extraction_status === 'pending'
+
   // Don't show anything if no enrichment at all
   if (!isWebEnriched && !isLinkedInEnriched && !isWebPending && !isLinkedInPending) {
     return null
@@ -107,23 +112,25 @@ export function EnrichmentBadges({ contact, size = 'sm' }: EnrichmentBadgesProps
 
 // Utility function to get enrichment status for filtering
 export function getEnrichmentTags(contact: Contact): string[] {
+  if (!contact) return []
+
   const tags: string[] = []
-  
-  const isWebEnriched = contact.enrichment_status === 'completed'
-  const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed'
-  
+
+  const isWebEnriched = (contact as any).enrichment_status === 'completed'
+  const isLinkedInEnriched = (contact as any).linkedin_extraction_status === 'completed'
+
   if (isWebEnriched) tags.push('web-enriched')
   if (isLinkedInEnriched) tags.push('linkedin-enriched')
   if (isWebEnriched && isLinkedInEnriched) tags.push('fully-enriched')
-  
+
   return tags
 }
 
 // Utility function to check if contact matches enrichment filter
 export function matchesEnrichmentFilter(contact: Contact, filter: string): boolean {
-  const isWebEnriched = contact.enrichment_status === 'completed'
-  const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed'
-  
+  const isWebEnriched = (contact as any).enrichment_status === 'completed'
+  const isLinkedInEnriched = (contact as any).linkedin_extraction_status === 'completed'
+
   switch (filter) {
     case 'web-enriched':
       return isWebEnriched

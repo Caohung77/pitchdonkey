@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Users, AlertCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { ContactCard } from './ContactCard'
@@ -10,7 +11,6 @@ import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 import { BulkTagManagementModal } from './BulkTagManagementModal'
 import { BulkListManagementModal } from './BulkListManagementModal'
 import { EditContactModal } from './EditContactModal'
-import { ContactViewModal } from './ContactViewModal'
 import { TagManagementModal } from './TagManagementModal'
 import { Pagination } from '@/components/ui/pagination'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
@@ -48,6 +48,7 @@ export function ContactsList({
   sortBy = 'updated_at',
   sortOrder = 'desc'
 }: ContactsListProps) {
+  const router = useRouter()
   const [state, setState] = useState<ContactsListState>({
     contacts: [],
     loading: true,
@@ -63,9 +64,7 @@ export function ContactsList({
   // UI state
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
-  const [viewingContact, setViewingContact] = useState<Contact | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [contactToDelete, setContactToDelete] = useState<string | null>(null)
   const [tagContactId, setTagContactId] = useState<string | null>(null)
   const [isTagModalOpen, setIsTagModalOpen] = useState(false)
@@ -80,23 +79,8 @@ export function ContactsList({
   const { showToast } = useToast()
 
   // Contact action handlers
-  const handleView = async (contact: Contact) => {
-    try {
-      // Fetch the freshest version from Supabase via our API
-      const resp = await fetch(`/api/contacts?ids=${contact.id}`)
-      if (resp.ok) {
-        const json = await resp.json()
-        const updated = json?.data?.contacts?.[0]
-        setViewingContact(updated || contact)
-      } else {
-        setViewingContact(contact)
-      }
-      setIsViewModalOpen(true)
-    } catch (error) {
-      console.error('Failed to fetch contact details:', error)
-      setViewingContact(contact)
-      setIsViewModalOpen(true)
-    }
+  const handleView = (contact: Contact) => {
+    router.push(`/dashboard/contacts/${contact.id}`)
   }
 
   const handleEdit = (contact: Contact) => {
@@ -344,22 +328,6 @@ export function ContactsList({
             fetchContacts(state.pagination.page)
             setIsEditModalOpen(false)
             setEditingContact(null)
-          }}
-        />
-      )}
-
-      {isViewModalOpen && viewingContact && (
-        <ContactViewModal
-          contact={viewingContact}
-          isOpen={isViewModalOpen}
-          onClose={() => {
-            setIsViewModalOpen(false)
-            setViewingContact(null)
-          }}
-          onEdit={(contact) => {
-            setViewingContact(null)
-            setIsViewModalOpen(false)
-            handleEdit(contact)
           }}
         />
       )}
