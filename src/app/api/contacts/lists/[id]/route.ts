@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth-middleware'
 
 // GET /api/contacts/lists/[id] - Get a specific contact list
-export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: any }) => {
+export const GET = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const p = params && typeof params.then === 'function' ? await params : params
-    const { id } = p || {}
+    const { id } = await params
     if (!id) {
       return NextResponse.json({ error: 'Missing list id' }, { status: 400 })
     }
@@ -63,7 +62,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }, { p
 // PUT /api/contacts/lists/[id] - Update a contact list
 export const PUT = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { name, description, contactIds, tags, isFavorite } = body
 
@@ -116,7 +115,7 @@ export const PUT = withAuth(async (request: NextRequest, { user, supabase }, { p
 // DELETE /api/contacts/lists/[id] - Delete a contact list
 export const DELETE = withAuth(async (request: NextRequest, { user, supabase }, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const { id } = params
+    const { id } = await params
 
     // Delete from database
     const { error: deleteError } = await supabase

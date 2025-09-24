@@ -21,47 +21,102 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }, { p
       )
     }
 
-    if (!contactList.contact_ids || contactList.contact_ids.length === 0) {
+    const rawIds = contactList.contact_ids || []
+    const contactIds = rawIds
+      .filter((id: string | null | undefined) => typeof id === 'string' && id.trim().length > 0)
+      .map((id: string) => id.trim())
+
+    if (contactIds.length === 0) {
       return NextResponse.json({
         success: true,
         data: []
       })
     }
 
-    // Get the actual contacts
-    const { data: contacts, error: contactsError } = await supabase
-      .from('contacts')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        company,
-        position,
-        phone,
-        website,
-        status,
-        tags,
-        created_at,
-        updated_at,
-        enrichment_status
-      `)
-      .in('id', contactList.contact_ids)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
+    const contacts = [] as any[]
+    const chunkSize = 100
 
-    if (contactsError) {
-      console.error('Error fetching contacts:', contactsError)
-      return NextResponse.json(
-        { error: 'Failed to fetch contacts' },
-        { status: 500 }
-      )
+    const fullSelect = `
+      id,
+      first_name,
+      last_name,
+      email,
+      company,
+      position,
+      phone,
+      website,
+      tags,
+      created_at,
+      updated_at,
+      enrichment_status,
+      linkedin_url,
+      linkedin_current_company,
+      linkedin_current_position,
+      linkedin_headline,
+      source,
+      notes
+    `
+
+    const fallbackSelect = `
+      id,
+      first_name,
+      last_name,
+      email,
+      company,
+      position,
+      phone,
+      website,
+      tags,
+      created_at,
+      updated_at
+    `
+
+    const fetchChunk = async (selectFields: string, chunk: string[]) =>
+      supabase
+        .from('contacts')
+        .select(selectFields)
+        .in('id', chunk)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+    for (let i = 0; i < contactIds.length; i += chunkSize) {
+      const chunk = contactIds.slice(i, i + chunkSize)
+
+      let { data: chunkData, error: chunkError } = await fetchChunk(fullSelect, chunk)
+
+      if (chunkError && chunkError.code === '42703') {
+        console.warn('contact engagement columns missing on this database, falling back to basic contact fields')
+        const fallback = await fetchChunk(fallbackSelect, chunk)
+        chunkData = fallback.data
+        chunkError = fallback.error
+      }
+
+      if (chunkError) {
+        console.error('Error fetching contacts chunk:', chunkError)
+        return NextResponse.json(
+          { error: 'Failed to fetch contacts for this list' },
+          { status: 500 }
+        )
+      }
+
+      contacts.push(...(chunkData || []))
     }
+
+    const orderMap = new Map<string, number>()
+    contactIds.forEach((id: string, index: number) => {
+      orderMap.set(id, index)
+    })
+
+    contacts.sort((a, b) => {
+      const orderA = orderMap.get(a.id) ?? 0
+      const orderB = orderMap.get(b.id) ?? 0
+      return orderA - orderB
+    })
 
     return NextResponse.json({
       success: true,
-      data: contacts || [],
-      count: contacts?.length || 0
+      data: contacts,
+      count: contacts.length
     })
 
   } catch (error) {

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Contact List Fix</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 16px 0;
+        }
+        .error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 16px 0;
+        }
+        .info {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 16px 0;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 8px 8px 8px 0;
+        }
+        button:hover { background: #2563eb; }
+        button.success { background: #10b981; }
+        button.success:hover { background: #059669; }
+        .log {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .list-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Contact List Bug Fix Test</h1>
+        <p>Testing the fix for the contact list loading issue where lists showed 0 contacts and returned 500 errors.</p>
+
+        <div class="info">
+            <h3>📋 What was Fixed:</h3>
+            <ul>
+                <li><strong>API Endpoint:</strong> ViewContactListModal now uses the correct endpoint <code>/api/contacts/lists/{id}/contacts</code></li>
+                <li><strong>Error Handling:</strong> Better error handling for 500 errors and invalid responses</li>
+                <li><strong>Contact Count:</strong> Shows actual loaded contact count instead of cached count</li>
+            </ul>
+        </div>
+
+        <button onclick="testContactLists()">🧪 Test Contact Lists</button>
+        <button onclick="testSpecificList()">🎯 Test Specific List</button>
+        <button onclick="clearLog()">🗑️ Clear Log</button>
+    </div>
+
+    <div class="container">
+        <h2>📊 Test Results</h2>
+        <div id="testLog" class="log">Ready to test the contact list fix...\n</div>
+    </div>
+
+    <div class="container" id="listsContainer" style="display:none;">
+        <h2>📋 Available Contact Lists</h2>
+        <div id="listItems"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            logDiv.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('testLog').textContent = 'Log cleared...\n';
+            document.getElementById('listsContainer').style.display = 'none';
+        }
+
+        async function testContactLists() {
+            log('🔍 Testing contact lists API...');
+
+            try {
+                const response = await fetch('/api/contacts/lists');
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.success && data.data) {
+                        const lists = data.data;
+                        log(`✅ Contact lists API working! Found ${lists.length} lists.`, 'success');
+
+                        if (lists.length > 0) {
+                            displayLists(lists);
+                            // Test the first list automatically
+                            log(`🎯 Testing first list: "${lists[0].name}"...`);
+                            await testListContacts(lists[0].id, lists[0].name);
+                        } else {
+                            log('ℹ️ No contact lists found. Create a list first to test.', 'warning');
+                        }
+
+                        return lists;
+                    } else if (Array.isArray(data)) {
+                        log(`✅ Contact lists API working! Found ${data.length} lists (array format).`, 'success');
+                        return data;
+                    } else {
+                        log(`⚠️ Unexpected response format: ${JSON.stringify(data)}`, 'warning');
+                        return [];
+                    }
+                } else {
+                    log(`❌ API error: ${data.error || data.message || 'Unknown error'}`, 'error');
+                    return [];
+                }
+            } catch (error) {
+                log(`❌ API request failed: ${error.message}`, 'error');
+                return [];
+            }
+        }
+
+        async function testListContacts(listId, listName = 'Unknown') {
+            log(`📋 Testing contacts for list: ${listName} (${listId})...`);
+
+            try {
+                const response = await fetch(`/api/contacts/lists/${listId}/contacts`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.success && data.data) {
+                        const contacts = data.data;
+                        log(`✅ Contacts loaded successfully! Found ${contacts.length} contacts.`, 'success');
+
+                        if (contacts.length > 0) {
+                            log(`📊 Sample contact: ${contacts[0].first_name} ${contacts[0].last_name} (${contacts[0].email})`);
+                            log(`📈 Total count matches: ${data.count || contacts.length} contacts`);
+                        }
+                        return contacts;
+                    } else if (Array.isArray(data)) {
+                        log(`✅ Contacts loaded! Found ${data.length} contacts (array format).`, 'success');
+                        return data;
+                    } else {
+                        log(`⚠️ Unexpected contacts response: ${JSON.stringify(data)}`, 'warning');
+                        return [];
+                    }
+                } else {
+                    if (response.status === 500) {
+                        log(`❌ 500 SERVER ERROR: This was the original bug! Error: ${data.error}`, 'error');
+                        log('🔍 Check server logs for detailed error information.', 'error');
+                    } else if (response.status === 404) {
+                        log(`❌ List not found (404): ${data.error}`, 'error');
+                    } else {
+                        log(`❌ API error (${response.status}): ${data.error || data.message}`, 'error');
+                    }
+                    return [];
+                }
+            } catch (error) {
+                log(`❌ Contacts API request failed: ${error.message}`, 'error');
+                log('🔍 This could indicate a network issue or server problem.', 'error');
+                return [];
+            }
+        }
+
+        function displayLists(lists) {
+            const container = document.getElementById('listsContainer');
+            const itemsDiv = document.getElementById('listItems');
+
+            itemsDiv.innerHTML = '';
+
+            lists.forEach(list => {
+                const listDiv = document.createElement('div');
+                listDiv.className = 'list-item';
+                listDiv.innerHTML = `
+                    <h4>${list.name}</h4>
+                    <p><strong>Description:</strong> ${list.description || 'No description'}</p>
+                    <p><strong>Contact Count:</strong> ${list.contactCount || 0} contacts</p>
+                    <p><strong>Created:</strong> ${new Date(list.createdAt).toLocaleDateString()}</p>
+                    <button onclick="testListContacts('${list.id}', '${list.name}')" style="font-size: 14px; padding: 6px 12px;">
+                        🧪 Test This List
+                    </button>
+                `;
+                itemsDiv.appendChild(listDiv);
+            });
+
+            container.style.display = 'block';
+        }
+
+        async function testSpecificList() {
+            log('🎯 Testing specific list functionality...');
+
+            // First get all lists
+            const lists = await testContactLists();
+
+            if (lists.length === 0) {
+                log('⚠️ No lists available to test. Create a list first.', 'warning');
+                return;
+            }
+
+            // Find a list with the problematic name if it exists
+            const problematicList = lists.find(list =>
+                list.name.includes('First Outreach') ||
+                list.name.includes('Boniforce') ||
+                list.contactCount > 0
+            );
+
+            if (problematicList) {
+                log(`🎯 Found target list: "${problematicList.name}" with ${problematicList.contactCount} contacts`, 'success');
+                await testListContacts(problematicList.id, problematicList.name);
+            } else {
+                log(`🎯 Testing first available list: "${lists[0].name}"`, 'info');
+                await testListContacts(lists[0].id, lists[0].name);
+            }
+        }
+
+        // Auto-run basic test on page load
+        window.addEventListener('load', () => {
+            log('🎉 Contact list fix test page loaded!');
+            log('Click "Test Contact Lists" to verify the fix is working...');
+            log('');
+        });
+    </script>
+</body>
+</html>

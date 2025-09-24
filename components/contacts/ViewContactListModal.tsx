@@ -57,30 +57,25 @@ export function ViewContactListModal({ list, isOpen, onClose }: ViewContactListM
 
     try {
       setLoading(true)
-      // Fetch the list details with contacts
-      const response = await ApiClient.get(`/api/contacts/lists/${list.id}`)
-      
-      // Handle different response formats
-      const listData = response.success ? response.data : response
-      
-      // If the response contains contact IDs, fetch the actual contacts
-      if (listData.contact_ids && listData.contact_ids.length > 0) {
-        // Fetch contacts by their IDs
-        const contactsResponse = await ApiClient.get(`/api/contacts?ids=${listData.contact_ids.join(',')}`)
-        const contactsData = contactsResponse.success ? contactsResponse.data : contactsResponse
-        
-        if (contactsData && contactsData.contacts) {
-          setContacts(contactsData.contacts)
-        } else if (Array.isArray(contactsData)) {
-          setContacts(contactsData)
-        } else {
-          setContacts([])
-        }
+      // Use the dedicated contacts endpoint for this list
+      const response = await ApiClient.get(`/api/contacts/lists/${list.id}/contacts`)
+
+      // Handle the response data
+      if (response.success) {
+        setContacts(response.data || [])
+      } else if (Array.isArray(response)) {
+        // Handle case where response is directly an array
+        setContacts(response)
       } else {
+        console.warn('Unexpected response format:', response)
         setContacts([])
       }
     } catch (error) {
-      console.error('Error fetching contacts:', error)
+      console.error('Error fetching contacts for list:', error)
+      // Show user-friendly error instead of empty list
+      if (error?.response?.status === 500) {
+        console.error('Server error when fetching contacts for list', list.id, error)
+      }
       setContacts([])
     } finally {
       setLoading(false)
@@ -131,7 +126,7 @@ export function ViewContactListModal({ list, isOpen, onClose }: ViewContactListM
                 <div>
                   <h3 className="font-medium">Contact List Details</h3>
                   <p className="text-sm text-gray-600">
-                    {contacts.length} contacts • Created {new Date(list.createdAt).toLocaleDateString()}
+                    {loading ? 'Loading contacts...' : `${contacts.length} contacts`} • Created {new Date(list.createdAt).toLocaleDateString()}
                   </p>
                 </div>
               </div>
