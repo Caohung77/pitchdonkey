@@ -303,7 +303,7 @@ export class CampaignProcessor {
       console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)      
 
       // Implement 24-hour interval batch scheduling
-      const dailyLimit = Number(campaign.daily_send_limit) || 50
+      const dailyLimit = Number(campaign.daily_send_limit) || 5
       const now = new Date()
 
       // Check if this is the first batch or a scheduled batch

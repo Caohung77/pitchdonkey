@@ -74,7 +74,7 @@ export default function SimpleCampaignPage() {
     send_immediately: true,
     timezone: '',
     from_email_account_id: '',
-    daily_send_limit: 50,
+    daily_send_limit: 5,
     // Enhanced template fields
     email_purpose: '',
     language: 'English',
@@ -351,8 +351,8 @@ export default function SimpleCampaignPage() {
         if (!campaignData.from_email_account_id) {
           newErrors.from_email_account_id = 'Please select an email account'
         }
-        if (![10,20,30,40,50].includes(Number(campaignData.daily_send_limit))) {
-          newErrors.daily_send_limit = 'Choose 10, 20, 30, 40, or 50 per day'
+        if (![5,10,15,20,30,50].includes(Number(campaignData.daily_send_limit))) {
+          newErrors.daily_send_limit = 'Choose 5, 10, 15, 20, 30, or 50 per day'
         }
         break
     }
@@ -823,21 +823,24 @@ export default function SimpleCampaignPage() {
                   )}
                 </div>
 
-                {/* Daily Send Limit */}
+                {/* Daily Send Limit (Batch Size) */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">Daily Send Limit *</label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {[10,20,30,40,50].map(v => (
+                  <label className="block text-sm font-medium mb-2">Daily Send Limit (Batch Size) *</label>
+                  <div className="grid grid-cols-6 gap-2">
+                    {[5,10,15,20,30,50].map(v => (
                       <button
                         key={v}
                         type="button"
-                        className={`px-3 py-2 border rounded-md text-sm ${campaignData.daily_send_limit === v ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+                        className={`px-3 py-2 border rounded-md text-sm transition-colors ${campaignData.daily_send_limit === v ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 hover:border-gray-400'}`}
                         onClick={() => setCampaignData(prev => ({ ...prev, daily_send_limit: v }))}
                       >
                         {v}/day
                       </button>
                     ))}
                   </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Choose how many emails to send per day. Smaller batches (5-10) are better for deliverability and warmup.
+                  </p>
                   {errors.daily_send_limit && (
                     <p className="text-red-500 text-sm mt-1">{errors.daily_send_limit}</p>
                   )}

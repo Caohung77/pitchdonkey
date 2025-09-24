@@ -423,7 +423,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
         description,
         status,
         // Map to existing columns
-        daily_send_limit: scheduleSettings?.dailyLimit || 50,
+        daily_send_limit: scheduleSettings?.dailyLimit || 5,
         track_opens: true,
         track_clicks: true,
         track_replies: true,

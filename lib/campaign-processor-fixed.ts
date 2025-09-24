@@ -298,7 +298,7 @@ export class FixedCampaignProcessor {
       }
 
       // Enforce per-campaign daily limit
-      const dailyLimit = Number(campaign.daily_send_limit) || 50
+      const dailyLimit = Number(campaign.daily_send_limit) || 5
       const startOfDay = new Date()
       startOfDay.setHours(0,0,0,0)
       const { data: sentTodayRows } = await supabase
