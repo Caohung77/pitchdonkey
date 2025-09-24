@@ -1043,8 +1043,8 @@ export class CampaignProcessor {
     const isServerless = Boolean(process.env.VERCEL || process.env.SERVERLESS) || isEdgeRuntime
 
     if (isServerless) {
-      // Tighten delays to stay within serverless execution limits
-      return { min: 1000, max: 2000 }
+      // Extended delays for more humanlike behavior in serverless environments
+      return { min: 15000, max: 45000 }
     }
 
     // Default desktop/server delay (30-60 seconds)
