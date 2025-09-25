@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Users, AlertCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { ContactCard } from './ContactCard'
-import { BulkActionsBar } from './BulkActionsBar'
+import { ContactSelectionDrawer } from './ContactSelectionDrawer'
 import { BulkEnrichmentModal } from './BulkEnrichmentModal'
 import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 import { BulkTagManagementModal } from './BulkTagManagementModal'
@@ -153,6 +153,34 @@ export function ContactsList({
     setSelectedContacts([])
   }
 
+  // Bulk action handlers
+  const handleBulkDelete = () => {
+    if (selectedContacts.length === 0) return
+    // We'll use the existing delete confirmation logic but for multiple contacts
+    // For now, let's show a simple confirmation
+    const confirmed = confirm(`Are you sure you want to delete ${selectedContacts.length} contacts? This action cannot be undone.`)
+    if (confirmed) {
+      // TODO: Implement bulk delete API call
+      console.log('Bulk delete:', selectedContacts)
+      setSelectedContacts([])
+    }
+  }
+
+  const handleBulkAddTag = () => {
+    if (selectedContacts.length === 0) return
+    setIsBulkTagModalOpen(true)
+  }
+
+  const handleBulkEnrich = () => {
+    if (selectedContacts.length === 0) return
+    setIsBulkEnrichModalOpen(true)
+  }
+
+  const handleBulkAddToList = () => {
+    if (selectedContacts.length === 0) return
+    setIsBulkListModalOpen(true)
+  }
+
   const handlePageChange = (page: number) => {
     fetchContacts(page)
   }
@@ -281,14 +309,6 @@ export function ContactsList({
 
   return (
     <>
-      {/* Bulk Actions Bar */}
-      <BulkActionsBar
-        selectedCount={selectedContacts.length}
-        totalCount={state.contacts.length}
-        onSelectAll={handleSelectAll}
-        onClearSelection={handleClearSelection}
-      />
-
       {/* Contacts grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {state.contacts.map((contact) => (
@@ -356,6 +376,71 @@ export function ContactsList({
         description="Are you sure you want to delete this contact? This action cannot be undone."
         confirmText="Delete"
         variant="destructive"
+      />
+
+      {/* Bulk Action Modals */}
+      {isBulkEnrichModalOpen && (
+        <BulkEnrichmentModal
+          selectedContacts={state.contacts.filter(contact => selectedContacts.includes(contact.id))}
+          isOpen={isBulkEnrichModalOpen}
+          onClose={() => setIsBulkEnrichModalOpen(false)}
+          onEnrichmentStarted={(jobId) => {
+            setCurrentJobId(jobId)
+            setIsBulkEnrichModalOpen(false)
+            setIsProgressModalOpen(true)
+          }}
+        />
+      )}
+
+      {isProgressModalOpen && currentJobId && (
+        <BulkEnrichmentProgressModal
+          jobId={currentJobId}
+          isOpen={isProgressModalOpen}
+          onClose={() => {
+            setIsProgressModalOpen(false)
+            setCurrentJobId(null)
+            fetchContacts(state.pagination.page)
+          }}
+        />
+      )}
+
+      {isBulkTagModalOpen && (
+        <BulkTagManagementModal
+          selectedContacts={selectedContacts}
+          selectedContactsCount={selectedContacts.length}
+          isOpen={isBulkTagModalOpen}
+          onClose={() => setIsBulkTagModalOpen(false)}
+          onTagsUpdated={() => {
+            fetchContacts(state.pagination.page)
+            setIsBulkTagModalOpen(false)
+            setSelectedContacts([])
+          }}
+        />
+      )}
+
+      {isBulkListModalOpen && (
+        <BulkListManagementModal
+          selectedContactIds={selectedContacts}
+          selectedContactCount={selectedContacts.length}
+          isOpen={isBulkListModalOpen}
+          onClose={() => setIsBulkListModalOpen(false)}
+          onListsUpdated={() => {
+            fetchContacts(state.pagination.page)
+            setIsBulkListModalOpen(false)
+            setSelectedContacts([])
+          }}
+        />
+      )}
+
+      {/* Bottom Selection Drawer */}
+      <ContactSelectionDrawer
+        selectedCount={selectedContacts.length}
+        onBulkDelete={handleBulkDelete}
+        onBulkAddTag={handleBulkAddTag}
+        onBulkEnrich={handleBulkEnrich}
+        onBulkAddToList={handleBulkAddToList}
+        onClearSelection={handleClearSelection}
+        isVisible={selectedContacts.length > 0}
       />
     </>
   )

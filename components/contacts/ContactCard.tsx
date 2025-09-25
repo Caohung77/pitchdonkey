@@ -83,26 +83,32 @@ export function ContactCard({
   const listsCount = contact.lists?.length || 0
 
   return (
-    <Card 
-      className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'} ${onClick ? 'cursor-pointer' : ''}`}
-      onClick={onClick ? () => onClick(contact) : undefined}
+    <Card
+      className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'} ${onClick && !onSelect ? 'cursor-pointer' : ''}`}
+      onClick={onClick && !onSelect ? () => onClick(contact) : undefined}
     >
       <CardContent className="p-4">
         {/* Header Row */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            {/* Checkbox */}
+            {/* Expanded Selection Area */}
             {onSelect && (
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={handleSelectChange}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-            )}
-            
-            {/* Contact Info */}
-            <div className="flex-1 min-w-0">
+              <div
+                className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer hover:bg-blue-50/50 rounded-md p-1 -m-1 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelect(contact.id, !isSelected)
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={handleSelectChange}
+                  className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded pointer-events-none"
+                />
+
+                {/* Contact Info */}
+                <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="text-base font-semibold text-gray-900 truncate flex-1">
                   {formatName(contact)}
@@ -137,9 +143,70 @@ export function ContactCard({
                   </div>
                 ) : null
               })()}
-            </div>
+                </div>
+              </div>
+            )}
+
+            {/* Non-Selection Contact Info */}
+            {!onSelect && (
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-base font-semibold text-gray-900 truncate flex-1">
+                    {formatName(contact)}
+                  </h3>
+                </div>
+
+                <div className="flex items-center text-sm text-gray-600 mb-2">
+                  <Mail className="h-3.5 w-3.5 text-gray-400 mr-1.5 flex-shrink-0" />
+                  <span className="truncate">{contact.email}</span>
+                </div>
+
+                {/* Company/Position */}
+                {(() => {
+                  const companyName = parseCompanyName(contact.company)
+                  const isCompanyAsTitle = !contact.first_name && !contact.last_name && companyName
+
+                  let displayText = ''
+                  if (isCompanyAsTitle && contact.position) {
+                    displayText = contact.position
+                  } else if (contact.position && companyName) {
+                    displayText = `${contact.position} at ${companyName}`
+                  } else if (contact.position) {
+                    displayText = contact.position
+                  } else if (companyName && !isCompanyAsTitle) {
+                    displayText = companyName
+                  }
+
+                  return displayText ? (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Building className="h-3.5 w-3.5 text-gray-400 mr-1.5 flex-shrink-0" />
+                      <span className="truncate">{displayText}</span>
+                    </div>
+                  ) : null
+                })()}
+              </div>
+            )}
           </div>
           
+          {/* Detail View Button - Only show when selection is active */}
+          {onSelect && onClick && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                onClick(contact)
+              }}
+              className="h-7 w-7 p-0 hover:bg-indigo-100 hover:text-indigo-700 transition-colors mr-1"
+              title="View details"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </Button>
+          )}
+
           {/* Action Buttons */}
           <div className="flex items-center gap-1">
             <Button
