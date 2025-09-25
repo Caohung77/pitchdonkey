@@ -358,12 +358,6 @@ export class CampaignProcessor {
         console.log(`📅 Batch ${currentBatchNumber + 1} processing. Next batch: ${nextNextBatchTime.toISOString()}`)
       }
 
-      // Limit contacts batch to daily quota
-      if (contacts.length > dailyLimit) {
-        console.log(`⚖️ Limiting batch to daily quota: ${dailyLimit} of ${contacts.length} contacts`)
-        contacts = contacts.slice(0, dailyLimit)
-      }
-
       let emailsSent = 0
       let emailsFailed = 0
       const sentContactIds: string[] = []
@@ -372,7 +366,14 @@ export class CampaignProcessor {
       // Send emails with delays to avoid rate limits
       const delayConfig = this.getSendDelayConfig()
 
+      console.log(`⚖️ Daily limit: ${dailyLimit}, Available contacts: ${contacts.length}`)
+
       for (let i = 0; i < contacts.length; i++) {
+        // Enforce daily limit during sending loop (not before)
+        if (emailsSent >= dailyLimit) {
+          console.log(`⚖️ Daily limit reached (${dailyLimit}). Stopping batch processing. Remaining: ${contacts.length - i} contacts`)
+          break
+        }
         const contact = contacts[i]
         
         // Check if email already sent to this contact to prevent duplicates
