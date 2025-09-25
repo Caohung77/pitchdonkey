@@ -14,6 +14,280 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_contact_scores: {
+        Row: {
+          agent_id: string
+          contact_id: string
+          created_at: string | null
+          id: string
+          reasons: Json | null
+          run_id: string
+          score: number
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          contact_id: string
+          created_at?: string | null
+          id?: string
+          reasons?: Json | null
+          run_id: string
+          score: number
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          contact_id?: string
+          created_at?: string | null
+          id?: string
+          reasons?: Json | null
+          run_id?: string
+          score?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_contact_scores_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_contact_scores_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_contact_scores_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_segment_members: {
+        Row: {
+          added_at: string | null
+          agent_id: string
+          contact_id: string
+          id: string
+          metadata: Json | null
+          reasons: Json | null
+          removed_at: string | null
+          run_id: string | null
+          score: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string | null
+          agent_id: string
+          contact_id: string
+          id?: string
+          metadata?: Json | null
+          reasons?: Json | null
+          removed_at?: string | null
+          run_id?: string | null
+          score?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string | null
+          agent_id?: string
+          contact_id?: string
+          id?: string
+          metadata?: Json | null
+          reasons?: Json | null
+          removed_at?: string | null
+          run_id?: string | null
+          score?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_segment_members_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_segment_members_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_segment_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outreach_agent_knowledge: {
+        Row: {
+          agent_id: string
+          content: string | null
+          created_at: string | null
+          description: string | null
+          embedding_metadata: Json | null
+          embedding_status: string | null
+          id: string
+          storage_path: string | null
+          title: string
+          type: string
+          updated_at: string | null
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          content?: string | null
+          created_at?: string | null
+          description?: string | null
+          embedding_metadata?: Json | null
+          embedding_status?: string | null
+          id?: string
+          storage_path?: string | null
+          title: string
+          type: string
+          updated_at?: string | null
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          content?: string | null
+          created_at?: string | null
+          description?: string | null
+          embedding_metadata?: Json | null
+          embedding_status?: string | null
+          id?: string
+          storage_path?: string | null
+          title?: string
+          type?: string
+          updated_at?: string | null
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_agent_knowledge_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outreach_agent_knowledge_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outreach_agents: {
+        Row: {
+          company_name: string | null
+          conversation_goal: string | null
+          created_at: string | null
+          custom_prompt: string | null
+          follow_up_strategy: string | null
+          id: string
+          knowledge_summary: Json | null
+          last_used_at: string | null
+          name: string
+          preferred_cta: string | null
+          product_description: string | null
+          product_one_liner: string | null
+          prompt_override: string | null
+          purpose: string | null
+          quality_weights: Json | null
+          segment_config: Json | null
+          sender_name: string | null
+          sender_role: string | null
+          settings: Json | null
+          status: string
+          target_persona: string | null
+          tone: string | null
+          unique_selling_points: string[] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          conversation_goal?: string | null
+          created_at?: string | null
+          custom_prompt?: string | null
+          follow_up_strategy?: string | null
+          id?: string
+          knowledge_summary?: Json | null
+          last_used_at?: string | null
+          name: string
+          preferred_cta?: string | null
+          product_description?: string | null
+          product_one_liner?: string | null
+          prompt_override?: string | null
+          purpose?: string | null
+          quality_weights?: Json | null
+          segment_config?: Json | null
+          sender_name?: string | null
+          sender_role?: string | null
+          settings?: Json | null
+          status?: string
+          target_persona?: string | null
+          tone?: string | null
+          unique_selling_points?: string[] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          conversation_goal?: string | null
+          created_at?: string | null
+          custom_prompt?: string | null
+          follow_up_strategy?: string | null
+          id?: string
+          knowledge_summary?: Json | null
+          last_used_at?: string | null
+          name?: string
+          preferred_cta?: string | null
+          product_description?: string | null
+          product_one_liner?: string | null
+          prompt_override?: string | null
+          purpose?: string | null
+          quality_weights?: Json | null
+          segment_config?: Json | null
+          sender_name?: string | null
+          sender_role?: string | null
+          settings?: Json | null
+          status?: string
+          target_persona?: string | null
+          tone?: string | null
+          unique_selling_points?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_agents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_templates: {
         Row: {
           ai_model: string | null

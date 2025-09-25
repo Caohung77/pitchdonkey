@@ -27,6 +27,13 @@ interface JobStatus {
     successful_scrapes: number
     failed_scrapes: number
     data_points_extracted: number
+    website_enriched: number
+    linkedin_enriched: number
+    sources_used: {
+      website: number
+      linkedin: number
+      hybrid: number
+    }
   }
 }
 
@@ -366,37 +373,69 @@ export function BulkEnrichmentProgressModal({
               <p className="text-gray-700 text-lg">{statusInfo.message}</p>
           </div>
           
-            {/* Brief Result Summary (shows for ~2s on completion) */}
+            {/* Detailed Result Summary (shows on completion) */}
             {showSummary && (
               <div className="w-full bg-white rounded-lg p-5 border border-green-200">
                 {(() => {
                   const successful = jobStatus.summary?.successful_scrapes ?? (jobStatus.progress.completed || 0)
                   const failed = jobStatus.summary?.failed_scrapes ?? (jobStatus.progress.failed || 0)
                   const total = jobStatus.progress.total || (successful + failed)
+                  const websiteOnly = jobStatus.summary?.sources_used?.website || 0
+                  const linkedinOnly = jobStatus.summary?.sources_used?.linkedin || 0
+                  const hybrid = jobStatus.summary?.sources_used?.hybrid || 0
+
                   return (
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <div className="text-xl font-semibold text-green-700">{successful}</div>
-                        <div className="text-xs text-gray-600">Successful</div>
-          </div>
-                      <div>
-                        <div className="text-xl font-semibold text-red-700">{failed}</div>
-                        <div className="text-xs text-gray-600">Failed</div>
+                    <div className="space-y-4">
+                      {/* Overall Stats */}
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-xl font-semibold text-green-700">{successful}</div>
+                          <div className="text-xs text-gray-600">Successful</div>
+                        </div>
+                        <div>
+                          <div className="text-xl font-semibold text-red-700">{failed}</div>
+                          <div className="text-xs text-gray-600">Failed</div>
+                        </div>
+                        <div>
+                          <div className="text-xl font-semibold text-blue-700">{total}</div>
+                          <div className="text-xs text-gray-600">Total</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xl font-semibold text-blue-700">{total}</div>
-                        <div className="text-xs text-gray-600">Total</div>
+
+                      {/* Enrichment Sources Breakdown */}
+                      {(websiteOnly > 0 || linkedinOnly > 0 || hybrid > 0) && (
+                        <div className="border-t pt-4">
+                          <div className="text-sm font-medium text-gray-700 mb-2 text-center">
+                            Enrichment Sources
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                            <div className="bg-blue-50 rounded-lg p-2">
+                              <div className="font-semibold text-blue-700">{websiteOnly}</div>
+                              <div className="text-blue-600">Website Only</div>
+                            </div>
+                            <div className="bg-purple-50 rounded-lg p-2">
+                              <div className="font-semibold text-purple-700">{linkedinOnly}</div>
+                              <div className="text-purple-600">LinkedIn Only</div>
+                            </div>
+                            <div className="bg-green-50 rounded-lg p-2">
+                              <div className="font-semibold text-green-700">{hybrid}</div>
+                              <div className="text-green-600">Both Sources</div>
+                            </div>
                           </div>
                         </div>
+                      )}
+
+                      {/* Data Points */}
+                      {jobStatus.summary?.data_points_extracted !== undefined && (
+                        <div className="text-center text-xs text-gray-500 border-t pt-2">
+                          Data points extracted: {jobStatus.summary.data_points_extracted}
+                        </div>
+                      )}
+                    </div>
                   )
                 })()}
-                {jobStatus.summary?.data_points_extracted !== undefined && (
-                  <div className="mt-3 text-center text-xs text-gray-500">
-                    Data points: {jobStatus.summary.data_points_extracted}
-          </div>
-        )}
-          </div>
-        )}
+              </div>
+            )}
 
 
           </div>

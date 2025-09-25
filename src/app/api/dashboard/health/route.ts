@@ -11,6 +11,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       .from('email_accounts')
       .select('*')
       .eq('user_id', user.id)
+      .is('deleted_at', null)
 
     if (accountsError) {
       console.error('Error fetching email accounts:', accountsError)

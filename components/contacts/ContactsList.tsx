@@ -399,6 +399,8 @@ export function ContactsList({
           onClose={() => {
             setIsProgressModalOpen(false)
             setCurrentJobId(null)
+          }}
+          onComplete={() => {
             fetchContacts(state.pagination.page)
           }}
         />

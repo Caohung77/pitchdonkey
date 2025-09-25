@@ -76,7 +76,14 @@ export const GET = withAuth(async (request: NextRequest, user, { params }: { par
       summary: job.status === 'completed' ? {
         successful_scrapes: job.results?.filter((r: any) => r.scrape_status === 'completed').length || 0,
         failed_scrapes: job.results?.filter((r: any) => r.scrape_status === 'failed').length || 0,
-        data_points_extracted: job.results?.filter((r: any) => r.enrichment_data).length || 0
+        data_points_extracted: job.results?.filter((r: any) => r.enrichment_data).length || 0,
+        website_enriched: job.results?.filter((r: any) => r.scrape_status === 'completed' && r.website_url).length || 0,
+        linkedin_enriched: job.results?.filter((r: any) => r.scrape_status === 'completed' && r.linkedin_data).length || 0,
+        sources_used: {
+          website: job.results?.filter((r: any) => r.scrape_status === 'completed' && r.website_url && !r.linkedin_data).length || 0,
+          linkedin: job.results?.filter((r: any) => r.scrape_status === 'completed' && r.linkedin_data && !r.website_url).length || 0,
+          hybrid: job.results?.filter((r: any) => r.scrape_status === 'completed' && r.website_url && r.linkedin_data).length || 0
+        }
       } : undefined
     })
 

@@ -2,6 +2,39 @@ import { createServerSupabaseClient } from './supabase-server'
 import { ContactEnrichmentService } from './contact-enrichment'
 import { SmartEnrichmentOrchestrator } from './smart-enrichment-orchestrator'
 
+// Personal email domains that should be skipped for business enrichment
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+  'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'freenet.de',
+  'aol.com', 'live.com', 'me.com', 'msn.com', 'ymail.com',
+  'protonmail.com', 'tutanota.com', '1und1.de', 'arcor.de'
+])
+
+/**
+ * Extract domain from email address
+ */
+function extractDomainFromEmail(email: string): string | null {
+  const emailRegex = /^[^\s@]+@([^\s@]+\.[^\s@]+)$/
+  const match = email.match(emailRegex)
+  return match ? match[1].toLowerCase() : null
+}
+
+/**
+ * Check if domain is a personal email provider
+ */
+function isPersonalEmailDomain(domain: string): boolean {
+  return PERSONAL_EMAIL_DOMAINS.has(domain.toLowerCase())
+}
+
+/**
+ * Check if contact has a business email that can be used for enrichment
+ */
+function hasBusinessEmail(email: string | null): boolean {
+  if (!email) return false
+  const domain = extractDomainFromEmail(email)
+  return !!(domain && !isPersonalEmailDomain(domain))
+}
+
 interface BulkEnrichmentJob {
   id: string
   user_id: string
@@ -285,7 +318,7 @@ export class BulkContactEnrichmentService {
         const supabase = await createServerSupabaseClient()
         const { data: contact } = await supabase
           .from('contacts')
-          .select('id, website, linkedin_url')
+          .select('id, email, website, linkedin_url, enrichment_status, linkedin_extraction_status')
           .eq('id', contactId)
           .eq('user_id', userId)
           .single()
@@ -296,16 +329,30 @@ export class BulkContactEnrichmentService {
 
         // Determine enrichment strategy based on available sources
         let result
-        if (contact.website) {
-          // Has website - use traditional enrichment or smart enrichment
+        const hasWebsite = !!contact.website
+        const hasLinkedIn = !!contact.linkedin_url
+        const hasBizEmail = hasBusinessEmail(contact.email)
+        const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed'
+        const isWebsiteEnriched = contact.enrichment_status === 'completed'
+
+        console.log(`📊 Contact ${contactId} sources:`, {
+          website: hasWebsite,
+          linkedin: hasLinkedIn,
+          businessEmail: hasBizEmail,
+          linkedinEnriched: isLinkedInEnriched,
+          websiteEnriched: isWebsiteEnriched
+        })
+
+        if (hasWebsite || hasBizEmail) {
+          // Has website or business email - use traditional enrichment
           console.log(`🌐 Using website enrichment for contact ${contactId}`)
           result = await this.enrichmentService.enrichContact(contactId, userId)
-        } else if (contact.linkedin_url) {
+        } else if (hasLinkedIn) {
           // LinkedIn-only - use smart enrichment orchestrator
           console.log(`🔗 Using LinkedIn-only enrichment for contact ${contactId}`)
           result = await this.smartOrchestrator.enrichContact(contactId, userId)
         } else {
-          throw new Error('Contact has no website or LinkedIn URL for enrichment')
+          throw new Error('Contact has no website, LinkedIn URL, or business email for enrichment')
         }
 
         if (result.success) {
@@ -422,6 +469,9 @@ export class BulkContactEnrichmentService {
     contacts?.forEach(contact => {
       const hasWebsite = !!contact.website
       const hasLinkedIn = !!contact.linkedin_url
+      const hasBizEmail = hasBusinessEmail(contact.email)
+      const canEnrichFromEmail = !hasWebsite && hasBizEmail // Can derive website from business email
+
       const isWebsiteEnriched = contact.enrichment_status === 'completed' && this.isRecentlyEnriched(contact.enrichment_updated_at)
       const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed' && this.isRecentlyEnriched(contact.linkedin_extracted_at)
       const isProcessing = contact.enrichment_status === 'pending' || contact.linkedin_extraction_status === 'pending'
@@ -432,21 +482,31 @@ export class BulkContactEnrichmentService {
           email: contact.email,
           status: contact.enrichment_status || contact.linkedin_extraction_status
         })
-      } else if (isWebsiteEnriched || isLinkedInEnriched) {
+      } else if (!hasWebsite && !hasLinkedIn && !canEnrichFromEmail) {
+        // No sources available for enrichment (no website, LinkedIn, or business email)
+        no_sources.push({
+          id: contact.id,
+          email: contact.email,
+          company: contact.company
+        })
+      } else if (isWebsiteEnriched && isLinkedInEnriched) {
+        // Both sources already enriched recently
         already_enriched.push({
           id: contact.id,
           email: contact.email,
           company: contact.company,
           last_enriched: contact.enrichment_updated_at || contact.linkedin_extracted_at
         })
-      } else if (!hasWebsite && !hasLinkedIn) {
-        no_sources.push({
+      } else if ((hasWebsite || canEnrichFromEmail) && !isWebsiteEnriched) {
+        // Has website OR business email, and website not recently enriched - eligible for website enrichment
+        eligible.push({
           id: contact.id,
           email: contact.email,
-          company: contact.company
+          company: contact.company,
+          website: contact.website || `https://www.${extractDomainFromEmail(contact.email)}`
         })
-      } else if (!hasWebsite && hasLinkedIn) {
-        // Has LinkedIn but no website - can use LinkedIn-only enrichment
+      } else if (hasLinkedIn && !isLinkedInEnriched) {
+        // Has LinkedIn and LinkedIn not recently enriched - eligible for LinkedIn enrichment
         linkedin_only.push({
           id: contact.id,
           email: contact.email,
@@ -454,13 +514,22 @@ export class BulkContactEnrichmentService {
           linkedin_url: contact.linkedin_url
         })
       } else {
-        // Has website (and maybe LinkedIn) - can use standard or smart enrichment
-        eligible.push({
-          id: contact.id,
-          email: contact.email,
-          company: contact.company,
-          website: contact.website
-        })
+        // Edge case: only one source enriched recently, but still has other sources available
+        if (hasWebsite || canEnrichFromEmail) {
+          eligible.push({
+            id: contact.id,
+            email: contact.email,
+            company: contact.company,
+            website: contact.website || `https://www.${extractDomainFromEmail(contact.email)}`
+          })
+        } else if (hasLinkedIn) {
+          linkedin_only.push({
+            id: contact.id,
+            email: contact.email,
+            company: contact.company,
+            linkedin_url: contact.linkedin_url
+          })
+        }
       }
     })
 
