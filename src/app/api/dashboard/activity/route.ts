@@ -9,6 +9,64 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     // Get recent activities from various sources
     const activities: any[] = []
 
+    // Get recent enrichment jobs
+    const { data: enrichmentJobs, error: jobsError } = await supabase
+      .from('bulk_enrichment_jobs')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    if (!jobsError && enrichmentJobs) {
+      enrichmentJobs.forEach(job => {
+        if (job.status === 'running') {
+          activities.push({
+            id: `enrichment-progress-${job.id}`,
+            type: 'enrichment_progress',
+            title: 'Contact Enrichment',
+            description: `Processing ${job.progress?.completed || 0}/${job.progress?.total || 0} contacts`,
+            timestamp: job.started_at || job.created_at,
+            status: 'info',
+            metadata: {
+              job_id: job.id,
+              progress: job.progress,
+              total_contacts: job.progress?.total || 0
+            }
+          })
+        } else if (job.status === 'completed') {
+          const successful = job.results?.filter((r: any) => r.scrape_status === 'completed').length || 0
+          const failed = job.results?.filter((r: any) => r.scrape_status === 'failed').length || 0
+
+          activities.push({
+            id: `enrichment-completed-${job.id}`,
+            type: 'enrichment_completed',
+            title: 'Enrichment Completed',
+            description: `${successful} contacts enriched successfully${failed > 0 ? `, ${failed} failed` : ''}`,
+            timestamp: job.completed_at || job.updated_at,
+            status: 'success',
+            metadata: {
+              job_id: job.id,
+              successful,
+              failed,
+              total: successful + failed
+            }
+          })
+        } else if (job.status === 'failed') {
+          activities.push({
+            id: `enrichment-failed-${job.id}`,
+            type: 'enrichment_failed',
+            title: 'Enrichment Failed',
+            description: 'Contact enrichment job failed to complete',
+            timestamp: job.updated_at,
+            status: 'error',
+            metadata: {
+              job_id: job.id
+            }
+          })
+        }
+      })
+    }
+
     // Get recent campaigns
     const { data: recentCampaigns, error: campaignsError } = await supabase
       .from('campaigns')

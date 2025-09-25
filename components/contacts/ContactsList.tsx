@@ -387,7 +387,8 @@ export function ContactsList({
           onEnrichmentStarted={(jobId) => {
             setCurrentJobId(jobId)
             setIsBulkEnrichModalOpen(false)
-            setIsProgressModalOpen(true)
+            // Don't open progress modal - enrichment now runs in background
+            // User will see progress in dashboard and get completion notifications
           }}
         />
       )}

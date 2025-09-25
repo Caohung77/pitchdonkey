@@ -5,7 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 export const POST = withAuth(async (request: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const supabase = createServerSupabaseClient()
-    const notificationId = params.id
+    const { id: notificationId } = await params
 
     // Mark notification as read
     const { error: updateError } = await supabase

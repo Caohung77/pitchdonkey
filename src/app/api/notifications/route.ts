@@ -5,20 +5,38 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 export const GET = withAuth(async (request: NextRequest, user) => {
   try {
     const supabase = createServerSupabaseClient()
+    const { searchParams } = new URL(request.url)
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const unreadOnly = searchParams.get('unread_only') === 'true'
 
-    // Get user notifications
-    const { data: notifications, error: notificationsError } = await supabase
+    let query = supabase
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(limit)
+
+    if (unreadOnly) {
+      query = query.eq('is_read', false)
+    }
+
+    const { data: notifications, error: notificationsError } = await query
 
     if (notificationsError) {
       console.error('Error fetching notifications:', notificationsError)
       // Return empty array if notifications table doesn't exist or has errors
-      return createSuccessResponse([])
+      return createSuccessResponse({
+        notifications: [],
+        unread_count: 0
+      })
     }
+
+    // Get unread count
+    const { count: unreadCount } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_read', false)
 
     // Transform notifications to match expected format
     const transformedNotifications = (notifications || []).map(notification => ({
@@ -27,14 +45,58 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       message: notification.message || '',
       type: notification.type || 'info',
       isRead: notification.is_read || false,
-      createdAt: notification.created_at
+      createdAt: notification.created_at,
+      data: notification.data || {}
     }))
 
-    return createSuccessResponse(transformedNotifications)
+    return createSuccessResponse({
+      notifications: transformedNotifications,
+      unread_count: unreadCount || 0
+    })
 
   } catch (error) {
     console.error('Notifications API error:', error)
     // Return empty array on error to prevent dashboard from breaking
-    return createSuccessResponse([])
+    return createSuccessResponse({
+      notifications: [],
+      unread_count: 0
+    })
+  }
+})
+
+export const POST = withAuth(async (request: NextRequest, user) => {
+  try {
+    const supabase = createServerSupabaseClient()
+    const body = await request.json()
+
+    const { type, title, message, data } = body
+
+    if (!type || !title) {
+      return createSuccessResponse(
+        { error: 'Type and title are required' },
+        400
+      )
+    }
+
+    const { data: notification, error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: user.id,
+        type,
+        title,
+        message: message || null,
+        data: data || {}
+      })
+      .select()
+      .single()
+
+    if (error) {
+      throw error
+    }
+
+    return createSuccessResponse(notification)
+
+  } catch (error) {
+    return handleApiError(error)
   }
 })

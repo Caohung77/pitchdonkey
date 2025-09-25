@@ -79,13 +79,22 @@ export function ContactCard({
     }
   }
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onClick) {
+      onClick(contact)
+    }
+  }
+
   // Get lists count for this contact
   const listsCount = contact.lists?.length || 0
 
   return (
     <Card
-      className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'} ${onClick && !onSelect ? 'cursor-pointer' : ''}`}
+      className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'} ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick && !onSelect ? () => onClick(contact) : undefined}
+      onDoubleClick={handleDoubleClick}
     >
       <CardContent className="p-4">
         {/* Header Row */}

@@ -588,6 +588,30 @@ CREATE INDEX IF NOT EXISTS idx_webhooks_event_type ON webhooks(event_type);
 CREATE INDEX IF NOT EXISTS idx_webhooks_message_id ON webhooks(message_id);
 CREATE INDEX IF NOT EXISTS idx_webhooks_processed ON webhooks(processed);
 
+-- Notifications table for user notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL CHECK (type IN (
+    'enrichment_started',
+    'enrichment_completed',
+    'enrichment_failed',
+    'campaign_completed',
+    'general'
+  )),
+  title VARCHAR(255) NOT NULL,
+  message TEXT,
+  data JSONB DEFAULT '{}',
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -605,3 +629,4 @@ CREATE TRIGGER update_ai_templates_updated_at BEFORE UPDATE ON ai_templates FOR 
 CREATE TRIGGER update_campaigns_updated_at BEFORE UPDATE ON campaigns FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_campaign_contacts_updated_at BEFORE UPDATE ON campaign_contacts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_email_sends_updated_at BEFORE UPDATE ON email_sends FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_notifications_updated_at BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

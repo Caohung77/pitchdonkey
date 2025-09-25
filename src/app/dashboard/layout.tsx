@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createClientSupabase } from '@/lib/supabase-client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -51,6 +52,7 @@ const navigation = [
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },
+  { name: 'AI Outreach Agents', href: '/dashboard/outreach-agents', icon: Zap },
   { name: 'AI Templates', href: '/dashboard/ai-templates', icon: Palette },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
@@ -68,24 +70,130 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const { user, loading, error, signOut } = useAuth()
 
-  // Initialize with empty notifications to prevent API calls that could cause 401 errors
+  // Fetch notifications and set up real-time subscriptions
   useEffect(() => {
-    // TODO: Implement notifications when the notifications table is properly set up
-    // For now, we avoid API calls in the dashboard layout to prevent authentication loops
-    setNotifications([])
-    setUnreadCount(0)
+    if (user) {
+      fetchNotifications()
+
+      // Set up real-time subscription for new notifications
+      const supabase = createClientSupabase()
+      const subscription = supabase
+        .channel('notifications')
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Listen to all changes (INSERT, UPDATE, DELETE)
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('🔔 Real-time notification update:', payload)
+
+            if (payload.eventType === 'INSERT') {
+              // New notification - add to list and increment unread count
+              const newNotification = {
+                id: payload.new.id,
+                title: payload.new.title || 'Notification',
+                message: payload.new.message || '',
+                type: payload.new.type || 'info',
+                isRead: payload.new.is_read || false,
+                createdAt: payload.new.created_at,
+                data: payload.new.data || {}
+              }
+
+              setNotifications(prev => [newNotification, ...prev])
+              if (!newNotification.isRead) {
+                setUnreadCount(prev => prev + 1)
+              }
+            } else if (payload.eventType === 'UPDATE') {
+              // Updated notification (e.g., marked as read)
+              setNotifications(prev =>
+                prev.map(notif =>
+                  notif.id === payload.new.id
+                    ? {
+                        ...notif,
+                        isRead: payload.new.is_read,
+                        title: payload.new.title || notif.title,
+                        message: payload.new.message || notif.message,
+                        type: payload.new.type || notif.type
+                      }
+                    : notif
+                )
+              )
+
+              // Recalculate unread count
+              setUnreadCount(prev => {
+                const wasRead = payload.old?.is_read
+                const isRead = payload.new.is_read
+                if (!wasRead && isRead) {
+                  return Math.max(0, prev - 1)
+                } else if (wasRead && !isRead) {
+                  return prev + 1
+                }
+                return prev
+              })
+            }
+          }
+        )
+        .subscribe()
+
+      // Also set up a fallback polling every 2 minutes (in case real-time fails)
+      const interval = setInterval(fetchNotifications, 120000)
+
+      return () => {
+        subscription.unsubscribe()
+        clearInterval(interval)
+      }
+    } else {
+      setNotifications([])
+      setUnreadCount(0)
+    }
   }, [user])
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await fetch('/api/notifications?limit=10')
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.data) {
+          setNotifications(result.data.notifications || [])
+          setUnreadCount(result.data.unread_count || 0)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error)
+      // Don't throw error to prevent layout breaking
+    }
+  }
 
   // Removed fetchNotifications to prevent 401 errors that cause authentication loops
   // This was causing users to be signed out when the notifications API failed
 
   const markNotificationRead = async (notificationId: string) => {
-    // TODO: Implement when notifications API is stable
-    // For now, just update the local state to prevent API calls
-    setNotifications(prev => 
-      prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
-    )
-    setUnreadCount(prev => Math.max(0, prev - 1))
+    try {
+      const response = await fetch(`/api/notifications/${notificationId}/read`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        // Real-time subscription will handle the UI update
+        console.log(`✅ Marked notification ${notificationId} as read`)
+      } else {
+        // Fallback to local update if API fails
+        setNotifications(prev =>
+          prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+        )
+        setUnreadCount(prev => Math.max(0, prev - 1))
+      }
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error)
+      // Fallback to local update
+      setNotifications(prev =>
+        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+      )
+      setUnreadCount(prev => Math.max(0, prev - 1))
+    }
   }
 
   const getPlanBadgeColor = (plan: string) => {

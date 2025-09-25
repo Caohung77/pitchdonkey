@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Globe, CheckCircle, AlertTriangle, Clock, XCircle, Loader2, Linkedin } from 'lucide-react'
+import { useEnrichmentToast } from '@/lib/enrichment-toast'
 
 interface Contact {
   id: string
@@ -48,6 +49,8 @@ export function BulkEnrichmentModal({
   const [batchSize, setBatchSize] = useState(3)
   const [timeout, setTimeout] = useState(30)
   const [isStarting, setIsStarting] = useState(false)
+
+  const { showEnrichmentStarted } = useEnrichmentToast()
 
   // Analyze eligibility when modal opens
   useEffect(() => {
@@ -119,7 +122,10 @@ export function BulkEnrichmentModal({
     
     console.log('🔄 BulkEnrichmentModal: Starting enrichment - showing progress modal immediately')
     console.log('📊 Total contacts to process:', totalContacts)
-    
+
+    // Show enrichment started toast
+    showEnrichmentStarted(totalContacts)
+
     onEnrichmentStarted(tempJobInfo) // Pass job info object
     onClose() // Close this modal
     

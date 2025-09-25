@@ -248,6 +248,17 @@ export class BulkContactEnrichmentService {
 
       console.log(`🚀 Starting bulk enrichment job ${jobId} for ${job.contact_ids.length} contacts`)
 
+      // Create start notification
+      await this.createNotification(job.user_id, {
+        type: 'enrichment_started',
+        title: 'Contact Enrichment Started',
+        message: `Enriching ${job.contact_ids.length} contacts in the background`,
+        data: {
+          job_id: jobId,
+          total_contacts: job.contact_ids.length
+        }
+      })
+
       // Process contacts in batches
       const batches = this.createBatches(job.contact_ids, (job.options as any)?.batch_size || 3)
       let totalCompleted = 0
@@ -289,9 +300,36 @@ export class BulkContactEnrichmentService {
       await this.updateJobStatus(jobId, 'completed')
       console.log(`🎉 Bulk enrichment job ${jobId} completed: ${totalCompleted} successful, ${totalFailed} failed`)
 
+      // Create completion notification
+      await this.createNotification(job.user_id, {
+        type: 'enrichment_completed',
+        title: 'Contact Enrichment Completed',
+        message: `Successfully enriched ${totalCompleted} contacts${totalFailed > 0 ? ` (${totalFailed} failed)` : ''}`,
+        data: {
+          job_id: jobId,
+          total_completed: totalCompleted,
+          total_failed: totalFailed,
+          total_contacts: job.contact_ids.length
+        }
+      })
+
     } catch (error) {
       console.error('Bulk enrichment job processing failed:', error)
       await this.updateJobStatus(jobId, 'failed', error instanceof Error ? error.message : 'Unknown error')
+
+      // Create failure notification
+      const job = await this.getJobDetails(jobId)
+      if (job) {
+        await this.createNotification(job.user_id, {
+          type: 'enrichment_failed',
+          title: 'Contact Enrichment Failed',
+          message: `Enrichment job failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          data: {
+            job_id: jobId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        })
+      }
     }
   }
 
@@ -662,10 +700,10 @@ export class BulkContactEnrichmentService {
 
     if (job) {
       const results = Array.isArray(job.results) ? job.results : []
-      
+
       // Find existing result or create new one
       const existingIndex = results.findIndex((r: any) => r.contact_id === contactId)
-      
+
       const resultData = {
         contact_id: contactId,
         scrape_status: status,
@@ -680,11 +718,58 @@ export class BulkContactEnrichmentService {
 
       await supabase
         .from('bulk_enrichment_jobs')
-        .update({ 
+        .update({
           results,
           updated_at: new Date().toISOString()
         })
         .eq('id', jobId)
+    }
+  }
+
+  /**
+   * Get job details for notifications
+   */
+  private async getJobDetails(jobId: string): Promise<{ user_id: string } | null> {
+    const supabase = await createServerSupabaseClient()
+
+    const { data: job } = await supabase
+      .from('bulk_enrichment_jobs')
+      .select('user_id')
+      .eq('id', jobId)
+      .single()
+
+    return job
+  }
+
+  /**
+   * Create a notification for the user
+   */
+  private async createNotification(userId: string, notification: {
+    type: string
+    title: string
+    message: string
+    data?: any
+  }): Promise<void> {
+    try {
+      const supabase = await createServerSupabaseClient()
+
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          data: notification.data || {}
+        })
+
+      if (error) {
+        console.error('Failed to create notification:', error)
+      } else {
+        console.log(`✅ Created notification for user ${userId}: ${notification.title}`)
+      }
+    } catch (error) {
+      console.error('Error creating notification:', error)
     }
   }
 }

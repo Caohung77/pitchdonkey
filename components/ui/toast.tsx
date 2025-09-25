@@ -10,6 +10,11 @@ interface Toast {
   message: string
   type: 'success' | 'error' | 'warning' | 'info'
   duration?: number
+  action?: {
+    label: string
+    onClick: () => void
+  }
+  persistent?: boolean
 }
 
 interface ToastContextType {
@@ -26,15 +31,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9)
     const newToast = { ...toast, id }
-    
+
     setToasts(prev => [...prev, newToast])
 
-    // Auto remove after duration (default 5 seconds)
-    const duration = toast.duration ?? 5000
-    if (duration > 0) {
-      setTimeout(() => {
-        removeToast(id)
-      }, duration)
+    // Auto remove after duration (default 5 seconds), unless persistent
+    if (!toast.persistent) {
+      const duration = toast.duration ?? 5000
+      if (duration > 0) {
+        setTimeout(() => {
+          removeToast(id)
+        }, duration)
+      }
     }
   }, [])
 
@@ -114,6 +121,23 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           <p className={`text-sm ${toast.title ? 'text-gray-600' : 'text-gray-900'}`}>
             {toast.message}
           </p>
+          {toast.action && (
+            <div className="mt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  toast.action!.onClick()
+                  if (!toast.persistent) {
+                    onRemove(toast.id)
+                  }
+                }}
+                className="h-7 text-xs"
+              >
+                {toast.action.label}
+              </Button>
+            </div>
+          )}
         </div>
         <div className="ml-4 flex-shrink-0">
           <Button
