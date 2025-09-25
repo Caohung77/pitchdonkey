@@ -10,6 +10,7 @@ import { AddContactModal } from './AddContactModal'
 import { EditContactModal } from './EditContactModal'
 import { BulkListManagementModal } from './BulkListManagementModal'
 import { ContactViewModal } from './ContactViewModal'
+import { ConfirmationDialog } from '../ui/confirmation-dialog'
 import { ApiClient } from '@/lib/api-client'
 import { Contact } from '@/lib/contacts'
 import { 
@@ -76,6 +77,13 @@ export function ContactListDetailView({
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [viewingContact, setViewingContact] = useState<Contact | null>(null)
   const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    title: string
+    description: string
+    action: () => void
+    variant?: 'default' | 'destructive'
+  }>({ open: false, title: '', description: '', action: () => {} })
 
   useEffect(() => {
     fetchListContacts()
@@ -148,7 +156,7 @@ export function ContactListDetailView({
       if (onListUpdated) {
         const updatedList = {
           ...list,
-          contact_ids: list.contact_ids.filter(id => !contactIds.includes(id))
+          contact_ids: (list.contact_ids || []).filter(id => !contactIds.includes(id))
         }
         onListUpdated(updatedList)
       }
@@ -171,7 +179,7 @@ export function ContactListDetailView({
       if (onListUpdated) {
         const updatedList = {
           ...list,
-          contact_ids: [...new Set([...list.contact_ids, ...contactIds])]
+          contact_ids: [...new Set([...(list.contact_ids || []), ...contactIds])]
         }
         onListUpdated(updatedList)
       }
@@ -186,20 +194,48 @@ export function ContactListDetailView({
     setShowEditContactModal(true)
   }
 
-  const handleDeleteContact = async (contactId: string) => {
-    if (!confirm('Are you sure you want to delete this contact? This will remove it from all lists.')) {
-      return
+  const handleRemoveContactFromList = (contactId: string) => {
+    const contact = contacts.find(c => c.id === contactId)
+    setConfirmDialog({
+      open: true,
+      title: 'Remove Contact from List',
+      description: `Are you sure you want to remove ${contact?.first_name || contact?.email || 'this contact'} from "${list.name}"? The contact will remain in your database and other lists.`,
+      action: () => handleRemoveFromList([contactId]),
+      variant: 'default'
+    })
+  }
+
+  const handleDeleteContact = (contactId: string) => {
+    const contact = contacts.find(c => c.id === contactId)
+    const listsCount = contact?.lists?.length || 0
+
+    let description = `Are you sure you want to permanently delete ${contact?.first_name || contact?.email || 'this contact'}? This action cannot be undone.`
+
+    if (listsCount > 1) {
+      description += ` This contact will be removed from ${listsCount} lists.`
+    } else if (listsCount === 1) {
+      description += ` This contact will be removed from 1 list.`
     }
 
+    setConfirmDialog({
+      open: true,
+      title: 'Delete Contact Permanently',
+      description,
+      action: () => performDeleteContact(contactId),
+      variant: 'destructive'
+    })
+  }
+
+  const performDeleteContact = async (contactId: string) => {
     try {
       await ApiClient.delete(`/api/contacts/${contactId}`)
       setContacts(prev => prev.filter(c => c.id !== contactId))
-      
+
       // Update parent list
       if (onListUpdated) {
         const updatedList = {
           ...list,
-          contact_ids: list.contact_ids.filter(id => id !== contactId)
+          contact_ids: (list.contact_ids || []).filter(id => id !== contactId)
         }
         onListUpdated(updatedList)
       }
@@ -424,10 +460,12 @@ export function ContactListDetailView({
               contact={contact}
               onEdit={handleEditContact}
               onDelete={handleDeleteContact}
+              onRemoveFromList={handleRemoveContactFromList}
               onAddTag={handleAddTag}
               onClick={!isSelectionMode ? handleViewContact : undefined}
               isSelected={selectedContacts.includes(contact.id)}
               onSelect={isSelectionMode ? handleContactSelect : undefined}
+              showRemoveFromList={true}
             />
           ))}
         </div>
@@ -501,6 +539,18 @@ export function ContactListDetailView({
           onClose={() => setViewingContact(null)}
         />
       )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.action}
+        variant={confirmDialog.variant || 'default'}
+        confirmText={confirmDialog.variant === 'destructive' ? 'Delete' : 'Remove'}
+        cancelText="Cancel"
+      />
     </div>
   )
 }
@@ -589,6 +639,7 @@ function AddExistingContactsModal({
                   onAddTag={() => {}}
                   isSelected={selectedContacts.includes(contact.id)}
                   onSelect={handleContactSelect}
+                  showRemoveFromList={false}
                 />
               ))}
             </div>

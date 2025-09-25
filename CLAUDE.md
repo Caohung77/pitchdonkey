@@ -67,11 +67,13 @@ npm test -- --watch --verbose
 - **Warmup System**: Automated email warmup with reputation monitoring
 - **Rate Limiting**: Per-account, per-domain, and global rate limits
 
-#### Contact Management (`lib/contacts.ts`, `lib/contact-segmentation.ts`)
-- **Contact Lists**: Bulk import, segmentation, and custom fields
+#### Contact Management (`lib/contacts.ts`, `lib/contact-segmentation.ts`, `lib/contact-engagement.ts`)
+- **Contact Lists**: Bulk import, segmentation, and custom fields with advanced list management
 - **Email Validation**: Real-time validation with status tracking
-- **Engagement Tracking**: Opens, clicks, replies, and unsubscribes
+- **Engagement Tracking**: Opens, clicks, replies, and unsubscribes with automated scoring
 - **Smart Segmentation**: Dynamic segments based on engagement and custom criteria
+- **Engagement Scoring**: Automated calculation of contact engagement scores with decay factors
+- **Contact Actions**: Dual-action interface for list management and contact operations
 
 #### Database Schema (`lib/database-schema.sql`, `lib/database.types.ts`)
 **Core Tables:**
@@ -105,7 +107,9 @@ npm test -- --watch --verbose
 ├── contacts/                  # Contact management
 │   ├── import/               # Bulk contact import
 │   ├── segments/             # Dynamic segmentation
-│   └── stats/                # Contact analytics
+│   ├── stats/                # Contact analytics
+│   └── recalculate-engagement/  # Engagement score recalculation
+│       └── bulk/             # Bulk engagement recalculation
 ├── email-accounts/           # Email provider integration
 │   ├── oauth/                # OAuth flow handlers
 │   │   ├── gmail/
@@ -127,14 +131,75 @@ const user = await requireAuth() // throws if not authenticated
 const hasPermission = await checkUserPermissions(userId, 'campaigns', 'create')
 ```
 
-### Error Handling
-Standardized error responses across all routes:
+### Enhanced API Client Operations
+
+#### DELETE Operations with Request Body
 ```typescript
+// Enhanced DELETE method supports request body for bulk operations
+await ApiClient.delete('/api/contacts/lists/{listId}/contacts', {
+  contact_ids: ['id1', 'id2', 'id3']
+})
+
+// Standard DELETE without body still supported
+await ApiClient.delete('/api/contacts/{contactId}')
+```
+
+#### Error Handling Strategy
+```typescript
+try {
+  await ApiClient.delete(url, data)
+} catch (error) {
+  // Specific error handling based on status codes
+  if (error.message.includes('401')) {
+    // Handle authentication errors
+  } else if (error.message.includes('404')) {
+    // Handle not found errors
+  }
+}
+```
+
+### Enhanced ApiClient DELETE Operations
+The `ApiClient.delete()` method supports request body data for complex deletion operations:
+```typescript
+// Delete with request body for bulk operations
+await ApiClient.delete('/api/contacts/bulk', { contactIds: ['id1', 'id2'] })
+
+// Simple delete without body
+await ApiClient.delete('/api/contacts/123')
+```
+
+**Key Features:**
+- **Request Body Support**: Pass data for bulk operations and complex deletions
+- **Comprehensive Error Handling**: User-friendly messages for common HTTP status codes
+- **Enhanced Logging**: Detailed request/response logging for debugging
+- **Retry Logic**: Built-in error recovery and network timeout handling
+
+### Error Handling
+Standardized error responses across all routes with enhanced user messaging:
+```typescript
+// Standard API error response
 return NextResponse.json(
   { error: 'Resource not found', code: 'NOT_FOUND' },
   { status: 404 }
 )
+
+// ApiClient error handling with user-friendly messages
+try {
+  await ApiClient.delete('/api/email-accounts/123')
+} catch (error) {
+  // Automatically converts HTTP status codes to user-friendly messages:
+  // 401 → "Please sign in again to continue"
+  // 403 → "You do not have permission to delete this email account"
+  // 404 → "Email account not found. It may have already been deleted."
+  // 429 → "Too many requests. Please wait a moment before trying again."
+}
 ```
+
+**Error Handling Features:**
+- **Null Safety**: Safe array operations with `?.length || 0` patterns
+- **Network Error Detection**: Specific handling for connection failures
+- **Authentication Recovery**: Automatic token refresh and re-authentication prompts
+- **Structured Logging**: Comprehensive error context for debugging
 
 ## Development Guidelines
 
@@ -143,6 +208,96 @@ return NextResponse.json(
 - **Client Components**: Use `"use client"` only for interactivity
 - **Supabase Integration**: Use appropriate client (browser vs server) for context
 - **Real-time Updates**: Implement subscriptions for live data updates
+
+#### ContactCard Component Pattern
+```typescript
+interface ContactCardProps {
+  contact: Contact
+  onEdit: (contact: Contact) => void
+  onDelete: (contactId: string) => void
+  onRemoveFromList?: (contactId: string) => void // Optional for list context
+  onAddTag: (contactId: string) => void
+  onClick?: (contact: Contact) => void
+  showRemoveFromList?: boolean // Controls dropdown menu options
+}
+
+// Event propagation control for dropdown actions
+<DropdownMenuItem onClick={(e) => {
+  e.stopPropagation() // Prevents card onClick from firing
+  onRemoveFromList(contact.id)
+}}>
+  <UserX className="h-4 w-4 mr-2" />
+  Remove from List
+</DropdownMenuItem>
+```
+
+#### ConfirmationDialog System
+```typescript
+// Reusable confirmation dialog with variant support
+<ConfirmationDialog
+  open={confirmDialog.open}
+  onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+  title="Remove Contact from List"
+  description="Are you sure you want to remove John Doe from 'Marketing List'?"
+  variant="default" // or "destructive" for dangerous actions
+  confirmText="Remove"
+  cancelText="Cancel"
+  onConfirm={handleConfirmedAction}
+/>
+```
+
+#### ContactCard Component Pattern
+Enhanced contact cards with dual-action interfaces and event handling:
+```typescript
+// Dual-action dropdown pattern with context-sensitive options
+<DropdownMenu>
+  <DropdownMenuItem onClick={(e) => {
+    e.stopPropagation() // Prevent card click propagation
+    onEdit(contact)
+  }}>
+    <Edit className="h-4 w-4 mr-2" />
+    Edit
+  </DropdownMenuItem>
+  {showRemoveFromList && onRemoveFromList && (
+    <DropdownMenuItem onClick={(e) => {
+      e.stopPropagation()
+      onRemoveFromList(contact.id)
+    }}>
+      <UserX className="h-4 w-4 mr-2" />
+      Remove from List
+    </DropdownMenuItem>
+  )}
+</DropdownMenu>
+```
+
+**Key Patterns:**
+- **Event Propagation Control**: Use `e.stopPropagation()` to prevent card click when interacting with buttons
+- **Conditional Actions**: Show context-specific actions (e.g., "Remove from List" only in list views)
+- **Null-Safe Operations**: Handle missing data with `contact.lists?.length || 0`
+- **Selection State Management**: Controlled checkbox state with proper event handling
+
+#### ConfirmationDialog System
+Reusable confirmation dialogs for destructive actions:
+```typescript
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+
+// Usage example
+<ConfirmationDialog
+  open={showDeleteConfirm}
+  onOpenChange={setShowDeleteConfirm}
+  title="Delete Contact"
+  description="Are you sure you want to delete this contact? This action cannot be undone."
+  confirmText="Delete Contact"
+  variant="destructive"
+  onConfirm={() => handleDeleteContact(contactId)}
+/>
+```
+
+**Features:**
+- **Variant Support**: `default` and `destructive` styling variants
+- **Auto-close**: Automatically closes dialog after action completion
+- **Accessibility**: Full keyboard navigation and screen reader support
+- **Flexible Content**: Customizable title, description, and button text
 
 ### Database Conventions
 - **UUIDs**: All primary keys use UUID v4
@@ -156,6 +311,25 @@ return NextResponse.json(
 - **Integration Tests**: API routes and database operations
 - **Component Tests**: Critical UI components with user interactions
 - **Mock Data**: Use realistic test data that matches production schemas
+
+#### Enhanced Testing for Contact Management
+**Component Testing Patterns:**
+```bash
+# Test ContactCard interactions
+npm test -- --testPathPattern=ContactCard
+npm test -- --testPathPattern=ConfirmationDialog
+
+# Test API client enhancements
+npm test -- --testPathPattern=api-client
+npm test -- --testPathPattern=contact-engagement
+```
+
+**Key Testing Areas:**
+- **Event Propagation**: Verify `stopPropagation()` prevents unwanted card clicks
+- **Null Safety**: Test array operations with `undefined`/`null` values
+- **Confirmation Flows**: Test dialog open/close states and action execution
+- **API Error Handling**: Mock network failures and HTTP error codes
+- **Engagement Scoring**: Validate score calculation and decay algorithms
 
 ### Environment Variables
 Required environment variables (check `.env.example` if available):
@@ -180,6 +354,70 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 const supabase = createServerSupabaseClient()
 ```
 
+### Contact Management Patterns
+
+#### Dual-Action Contact Operations
+```typescript
+// Distinguish between removing from list vs permanent deletion
+const handleRemoveFromList = (contactId: string) => {
+  setConfirmDialog({
+    open: true,
+    title: 'Remove Contact from List',
+    description: `Contact will remain in your database and other lists.`,
+    variant: 'default',
+    action: () => performRemoveFromList([contactId])
+  })
+}
+
+const handleDeleteContact = (contactId: string) => {
+  setConfirmDialog({
+    open: true,
+    title: 'Delete Contact Permanently',
+    description: `This action cannot be undone. Contact will be removed from all lists.`,
+    variant: 'destructive',
+    action: () => performDeleteContact(contactId)
+  })
+}
+```
+
+#### Null-Safe Array Operations
+```typescript
+// Always provide fallback for potentially undefined arrays
+const updatedList = {
+  ...list,
+  contact_ids: (list.contact_ids || []).filter(id => !contactIds.includes(id))
+}
+
+// Safe length checks
+const contactCount = contact.lists?.length || 0
+```
+
+#### Event Propagation Management
+```typescript
+// Prevent unwanted interactions in nested components
+const handleAction = (e: React.MouseEvent, contactId: string) => {
+  e.stopPropagation() // Essential for dropdown menus in clickable cards
+  performAction(contactId)
+}
+```
+
+#### Confirmation Dialog State Management
+```typescript
+// Reusable confirmation dialog pattern
+const [confirmDialog, setConfirmDialog] = useState<{
+  open: boolean
+  title: string
+  description: string
+  action: () => void
+  variant?: 'default' | 'destructive'
+}>({ open: false, title: '', description: '', action: () => {} })
+
+// Usage in component
+const showConfirmation = (title: string, description: string, action: () => void) => {
+  setConfirmDialog({ open: true, title, description, action, variant: 'destructive' })
+}
+```
+
 ### Campaign Execution Flow
 1. **Campaign Creation**: Validate sequence and settings
 2. **Contact Selection**: Apply segmentation and filters
@@ -202,6 +440,106 @@ const supabase = createServerSupabaseClient()
 4. **Quality Control**: Validate output and apply fallback if needed
 5. **Usage Tracking**: Record tokens used and personalization success
 
+### Contact Engagement Management
+Enhanced contact engagement system with automated scoring and recalculation:
+```typescript
+// Single contact engagement recalculation
+await ApiClient.post('/api/contacts/recalculate-engagement', { contactId })
+
+// Bulk engagement recalculation for all user contacts
+await ApiClient.post('/api/contacts/recalculate-engagement')
+
+// Engagement scoring example
+const engagementResult = await recalculateContactEngagement(supabase, contactId)
+// Returns: { status, score, sentCount, openCount, clickCount, replyCount, bounceCount }
+```
+
+**Engagement System Features:**
+1. **Automated Scoring**: Opens (+5 max 15), clicks (+20 max 60), replies (+50 unlimited)
+2. **Decay Factor**: 30-day rolling window with 0.7 decay factor for time-based scoring
+3. **Status Classification**: not_contacted → pending → engaged → bad (based on bounces/complaints)
+4. **Hard Stop Detection**: Automatic marking of bounced, complained, or unsubscribed contacts
+5. **Bulk Processing**: Efficient recalculation of all user contacts with null safety
+
+### Confirmation Dialog Pattern
+Standardized user action confirmation system:
+```typescript
+const [confirmState, setConfirmState] = useState({
+  open: false,
+  title: '',
+  description: '',
+  action: null as (() => void) | null
+})
+
+// Show confirmation
+const showConfirmation = (title: string, description: string, action: () => void) => {
+  setConfirmState({ open: true, title, description, action })
+}
+
+// Execute confirmed action
+const handleConfirm = () => {
+  confirmState.action?.()
+  setConfirmState({ open: false, title: '', description: '', action: null })
+}
+```
+
+**Usage Patterns:**
+- **Destructive Actions**: Delete contacts, remove from lists, clear data
+- **Bulk Operations**: Multi-select actions with count confirmation
+- **State Management**: Consistent open/close handling across components
+- **Action Queuing**: Store action callbacks for delayed execution
+
+### Event Propagation Management
+Best practices for complex UI interactions:
+```typescript
+// Prevent card click when interacting with buttons
+const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
+  e.stopPropagation() // Essential for nested interactive elements
+  action()
+}
+
+// Safe checkbox handling with propagation control
+const handleSelectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  e.stopPropagation() // Prevent parent element clicks
+  if (onSelect) {
+    onSelect(contact.id, e.target.checked)
+  }
+}
+```
+
+**Key Principles:**
+- **Selective Propagation**: Stop propagation only on interactive elements
+- **Event Bubbling**: Allow natural bubbling for non-conflicting events
+- **Dropdown Menus**: Always prevent propagation on dropdown triggers and items
+- **Form Elements**: Isolate form interactions from parent click handlers
+
+### Null-Safe Array Operations
+Defensive programming patterns for data handling:
+```typescript
+// Safe array length checking
+const listsCount = contact.lists?.length || 0
+const tagsCount = contact.tags?.length || 0
+
+// Safe array slicing and mapping
+const displayTags = contact.tags?.slice(0, 4) || []
+const extraTagsCount = Math.max(0, (contact.tags?.length || 0) - 4)
+
+// Safe array iteration with early returns
+if (!contacts || contacts.length === 0) {
+  return <EmptyState message="No contacts found" />
+}
+
+// Safe property access with fallbacks
+const contactName = contact.first_name || contact.last_name ||
+                   parseCompanyName(contact.company) || contact.email
+```
+
+**Safety Patterns:**
+- **Optional Chaining**: Use `?.` for potentially undefined nested properties
+- **Null Coalescing**: Use `||` for fallback values when arrays might be null/undefined
+- **Length Validation**: Check array existence before accessing length property
+- **Early Returns**: Exit early when required data is missing rather than continuing with null values
+
 ## Troubleshooting
 
 ### Common Issues
@@ -210,14 +548,41 @@ const supabase = createServerSupabaseClient()
 - **Email Sending**: Ensure provider credentials are valid and domain authentication is set up
 - **Campaign Not Starting**: Check contact list validity and email account status
 
+#### Contact Management Issues
+- **Event Propagation Conflicts**: Ensure `e.stopPropagation()` is used in dropdown menus and button handlers
+- **Null Reference Errors**: Use safe array operations with `?.length || 0` patterns
+- **Engagement Score Errors**: Check that all required fields exist before recalculation
+- **Confirmation Dialog Not Closing**: Verify `onOpenChange` handler resets dialog state properly
+- **API Delete Failures**: Check network logs for request body format and authentication headers
+
+#### UI Component Issues
+- **ContactCard Selection**: Checkbox clicks should not trigger card clicks (use `stopPropagation`)
+- **Dropdown Menu Positioning**: Ensure parent containers allow overflow for dropdown menus
+- **Loading States**: Show loading indicators during API operations to prevent user confusion
+- **Optimistic Updates**: Implement optimistic UI updates for better user experience
+
 ### Debug Tools
 - Use `/debug-auth` page for authentication troubleshooting
 - Check browser network tab for API response details
 - Monitor Supabase dashboard for real-time database activity
 - Use `console.log` in API routes - they appear in terminal, not browser console
 
+#### Enhanced Debugging for Contact Management
+- **ApiClient Logging**: Enhanced request/response logging with detailed error context
+- **Engagement Score Debugging**: Log scoring calculations and decay factor applications
+- **Event Handler Debugging**: Add console logs to verify event propagation behavior
+- **Confirmation Dialog State**: Monitor dialog state changes in React DevTools
+- **Component Props**: Use React DevTools to verify prop passing and state updates
+
 ### Performance Considerations
 - **Pagination**: Implement for large contact lists and campaign history
 - **Caching**: Use Supabase real-time subscriptions instead of polling
 - **Batch Operations**: Process email sends in configurable batch sizes
 - **Index Usage**: Ensure database queries use appropriate indexes for large datasets
+
+#### Contact Management Performance
+- **Engagement Calculation**: Bulk recalculation processes contacts in batches to prevent timeouts
+- **UI Optimization**: Use React.memo for ContactCard components to prevent unnecessary re-renders
+- **Event Handler Optimization**: Debounce search inputs and selection changes
+- **Large List Handling**: Implement virtual scrolling for lists with >1000 contacts
+- **API Client Efficiency**: Request body support reduces multiple API calls for bulk operations

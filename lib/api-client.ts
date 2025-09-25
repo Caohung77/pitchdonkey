@@ -175,11 +175,15 @@ export class ApiClient {
     return response.json()
   }
 
-  static async delete(url: string) {
-    console.log('🔄 Making DELETE request to:', url)
+  static async delete(url: string, data?: any) {
+    console.log('🔄 Making DELETE request to:', url, data ? 'with data' : 'without data')
 
     try {
-      const response = await authenticatedFetch(url, { method: 'DELETE' })
+      const options: RequestInit = { method: 'DELETE' }
+      if (data) {
+        options.body = JSON.stringify(data)
+      }
+      const response = await authenticatedFetch(url, options)
 
       console.log('📊 DELETE Response Details:', {
         status: response.status,

@@ -9,15 +9,16 @@ import { EnrichmentBadges } from './EnrichmentBadges'
 import { EngagementBadge } from './EngagementBadge'
 import { EngagementScore } from './EngagementScore'
 import type { ContactEngagementStatus } from '@/lib/contact-engagement'
-import { 
-  Mail, 
+import {
+  Mail,
   Building,
   Edit,
   Trash2,
   Tag,
   Sparkles,
   List,
-  MoreVertical
+  MoreVertical,
+  UserX
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -30,20 +31,24 @@ interface ContactCardProps {
   contact: Contact
   onEdit: (contact: Contact) => void
   onDelete: (contactId: string) => void
+  onRemoveFromList?: (contactId: string) => void
   onAddTag: (contactId: string) => void
   onClick?: (contact: Contact) => void
   isSelected?: boolean
   onSelect?: (contactId: string, selected: boolean) => void
+  showRemoveFromList?: boolean
 }
 
-export function ContactCard({ 
-  contact, 
-  onEdit, 
-  onDelete, 
+export function ContactCard({
+  contact,
+  onEdit,
+  onDelete,
+  onRemoveFromList,
   onAddTag,
   onClick,
   isSelected = false,
-  onSelect
+  onSelect,
+  showRemoveFromList = false
 }: ContactCardProps) {
   
 
@@ -175,21 +180,42 @@ export function ContactCard({
                   <MoreVertical className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={() => onEdit(contact)}>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit(contact)
+                }}>
                   <Edit className="h-4 w-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onAddTag(contact.id)}>
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation()
+                  onAddTag(contact.id)
+                }}>
                   <Tag className="h-4 w-4 mr-2" />
                   Add Tag
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => onDelete(contact.id)}
+                {showRemoveFromList && onRemoveFromList && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRemoveFromList(contact.id)
+                    }}
+                    className="text-orange-600 focus:text-orange-700"
+                  >
+                    <UserX className="h-4 w-4 mr-2" />
+                    Remove from List
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(contact.id)
+                  }}
                   className="text-red-600 focus:text-red-700"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
+                  Delete Contact
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

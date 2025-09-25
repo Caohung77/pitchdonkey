@@ -83,9 +83,9 @@ interface CampaignAnalytics {
 }
 
 export default function CampaignAnalyticsPage() {
-  const params = useParams()
+  const params = useParams<{ id?: string | string[] }>()
   const router = useRouter()
-  const campaignId = params.id as string
+  const campaignId = Array.isArray(params?.id) ? params.id?.[0] : params?.id
   
   const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -103,9 +103,13 @@ export default function CampaignAnalyticsPage() {
       
       const data = await ApiClient.get(`/api/campaigns/${campaignId}/analytics`)
       console.log('Analytics data:', data)
-      
-      if (data.success) {
+
+      if (data?.success && data?.data) {
         setAnalytics(data.data)
+      } else if (data && !data.success && data.error) {
+        setError(data.error)
+      } else if (data) {
+        setAnalytics(data as CampaignAnalytics)
       } else {
         setError('Failed to load analytics data')
       }
@@ -159,6 +163,14 @@ export default function CampaignAnalyticsPage() {
     } catch (error) {
       console.error('Error exporting data:', error)
     }
+  }
+
+  if (!campaignId) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px] text-sm text-gray-500">
+        Invalid campaign id.
+      </div>
+    )
   }
 
   if (loading) {
