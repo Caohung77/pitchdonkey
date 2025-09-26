@@ -207,6 +207,7 @@ export type Database = {
           knowledge_summary: Json | null
           last_used_at: string | null
           name: string
+          language: string
           preferred_cta: string | null
           product_description: string | null
           product_one_liner: string | null
@@ -234,6 +235,7 @@ export type Database = {
           knowledge_summary?: Json | null
           last_used_at?: string | null
           name: string
+          language?: string
           preferred_cta?: string | null
           product_description?: string | null
           product_one_liner?: string | null
@@ -261,6 +263,7 @@ export type Database = {
           knowledge_summary?: Json | null
           last_used_at?: string | null
           name?: string
+          language?: string
           preferred_cta?: string | null
           product_description?: string | null
           product_one_liner?: string | null

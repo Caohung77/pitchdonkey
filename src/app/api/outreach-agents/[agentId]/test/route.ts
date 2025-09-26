@@ -37,33 +37,67 @@ function buildDraft(mode: 'reply' | 'outbound', payload: PreviewTestPayload, age
   const cta = agent.preferred_cta || 'schedule a quick call'
   const tone = agent.tone || 'friendly'
   const sellingPoints = (agent.unique_selling_points || []).slice(0, 3)
+  const isGerman = agent.language === 'de'
 
   const contact = payload.sampleContact
   const contactName = contact?.first_name || contact?.company || 'there'
   const pain = contact?.pain_point
 
+  const greetings = {
+    friendly: isGerman ? `Hallo ${contactName},` : `Hey ${contactName},`,
+    formal: isGerman ? `Guten Tag ${contactName},` : `Hello ${contactName},`,
+    outbound: isGerman ? `Hallo ${contactName},` : `Hi ${contactName},`,
+  }
+
+  const closing = isGerman ? 'Beste Grüße,' : 'Best,'
+  const valueIntro = isGerman
+    ? `Wir unterstützen ${persona} regelmäßig dabei, ${pain || 'ihre Ziele schneller zu erreichen'}.`
+    : `We regularly help ${persona} tackle challenges around ${pain || 'their goals'}.`
+  const genericValue = isGerman
+    ? `Aus deiner Nachricht entnehme ich, dass ihr das optimieren möchtet.`
+    : `From what you've shared, it sounds like you're looking to optimize this.`
+  const followUp = isGerman
+    ? `Hättest du Zeit für ${cta.toLowerCase()}?`
+    : `Would a short ${cta.toLowerCase()} work sometime next week?`
+  const outboundCall = isGerman
+    ? `Wenn ${goal.toLowerCase()} auf deiner Roadmap steht, könnte ${cta.toLowerCase()} spannend sein.`
+    : `If ${goal.toLowerCase()} is on your roadmap, ${cta.toLowerCase()} could be worthwhile.`
+  const outboundCTA = isGerman
+    ? 'Lass uns diese Woche 15 Minuten finden?'
+    : 'Worth exploring for a few minutes this week?'
+
   if (mode === 'reply') {
     const subject = payload.subjectHint || `Re: ${agent.product_one_liner || 'Thanks for reaching out'}`
     const intro = tone === 'formal'
-      ? `Hello ${contactName},`
-      : `Hey ${contactName},`
+      ? greetings.formal
+      : greetings.friendly
 
     const replyBody = [
       intro,
       '',
       payload.incomingMessage
-        ? `Thanks for your note — really appreciate the context around "${payload.incomingMessage.slice(0, 120)}".`
-        : `Appreciate you sharing a bit about your current priorities.`,
-      pain
-        ? `We regularly help ${persona} tackle challenges around ${pain}.`
-        : `From what you've shared, it sounds like you're looking to optimize how your team approaches this.`,
+        ? (isGerman
+            ? `Danke für deine Nachricht – der Hinweis "${payload.incomingMessage.slice(0, 120)}" hilft uns sehr.`
+            : `Thanks for your note — really appreciate the context around "${payload.incomingMessage.slice(0, 120)}".`)
+        : (isGerman
+            ? 'Danke für die Einblicke in eure aktuelle Situation.'
+            : 'Appreciate you sharing a bit about your current priorities.'),
+      pain ? valueIntro : genericValue,
       agent.product_description
-        ? `In short, ${agent.product_description.split('\n')[0]}`
-        : `At ${company}, we focus on helping teams like yours move faster without adding extra overhead.`,
-      sellingPoints.length > 0 ? `Here are a couple quick highlights:\n- ${sellingPoints.join('\n- ')}` : '',
-      `Happy to ${goal.toLowerCase()} — would a short ${cta.toLowerCase()} work sometime next week?`,
+        ? (isGerman
+            ? `Kurz gesagt: ${agent.product_description.split('\n')[0]}`
+            : `In short, ${agent.product_description.split('\n')[0]}`)
+        : (isGerman
+            ? `Mit ${company} unterstützen wir Teams wie deins, schneller voranzukommen – ohne Zusatzaufwand.`
+            : `At ${company}, we focus on helping teams like yours move faster without adding extra overhead.`),
+      sellingPoints.length > 0
+        ? (isGerman
+            ? `Ein paar Punkte, die Kund:innen schätzen:\n- ${sellingPoints.join('\n- ')}`
+            : `Here are a couple quick highlights:\n- ${sellingPoints.join('\n- ')}`)
+        : '',
+      followUp,
       '',
-      `Best,`,
+      closing,
       identity,
     ]
       .filter(Boolean)
@@ -80,26 +114,32 @@ function buildDraft(mode: 'reply' | 'outbound', payload: PreviewTestPayload, age
     }
   }
 
-  const subject = payload.subjectHint || `${contact?.company ? `${contact.company} x ` : ''}${agent.product_one_liner || 'Quick idea'}`
+  const subject = payload.subjectHint || `${contact?.company ? `${contact.company} x ` : ''}${agent.product_one_liner || (isGerman ? 'Kurzer Impuls' : 'Quick idea')}`
   const intro = tone === 'formal'
-    ? `Hello ${contactName},`
-    : `Hi ${contactName},`
+    ? greetings.formal
+    : greetings.outbound
 
   const outboundBody = [
     intro,
     '',
     pain
-      ? `Noticed you're dealing with ${pain}.`
-      : `I saw you're leading the charge on revenue operations — impressive team.`,
+      ? (isGerman ? `Mir ist aufgefallen, dass ihr gerade mit ${pain} zu tun habt.` : `Noticed you're dealing with ${pain}.`)
+      : (isGerman ? 'Ich habe gesehen, dass du das Thema Wachstum federführend vorantreibst.' : `I saw you're leading the charge on revenue operations — impressive team.`),
     agent.product_one_liner
       ? agent.product_one_liner
-      : `${company} helps ${persona} streamline prospect outreach without sacrificing quality.`,
-    sellingPoints.length > 0 ? `Here’s what typically resonates with teams like yours:\n- ${sellingPoints.join('\n- ')}` : '',
-    goal ? `If ${goal.toLowerCase()} is on your roadmap, ${cta.toLowerCase()} could be worthwhile.` : cta,
+      : (isGerman
+          ? `${company} hilft ${persona}, Akquise-Prozesse effizienter zu steuern.`
+          : `${company} helps ${persona} streamline prospect outreach without sacrificing quality.`),
+    sellingPoints.length > 0
+      ? (isGerman
+          ? `Das kommt bei ähnlichen Teams gut an:\n- ${sellingPoints.join('\n- ')}`
+          : `Here’s what typically resonates with teams like yours:\n- ${sellingPoints.join('\n- ')}`)
+      : '',
+    goal ? outboundCall : cta,
     '',
-    `Worth exploring for a few minutes this week?`,
+    outboundCTA,
     '',
-    `Best,`,
+    closing,
     identity,
   ]
     .filter(Boolean)

@@ -66,12 +66,13 @@ export interface SegmentConfig {
   qualityWeights?: QualityWeights
 }
 
-export interface OutreachAgentRecord extends Database['public']['Tables']['outreach_agents']['Row'] {}
+export type OutreachAgentRecord = Database['public']['Tables']['outreach_agents']['Row']
 
-export interface OutreachAgent extends Omit<OutreachAgentRecord, 'segment_config' | 'quality_weights' | 'knowledge_summary'> {
+export type OutreachAgent = Omit<OutreachAgentRecord, 'segment_config' | 'quality_weights' | 'knowledge_summary'> & {
   segment_config: SegmentConfig
   quality_weights: QualityWeights
   knowledge_summary: KnowledgeSummary
+  language: 'en' | 'de'
 }
 
 export interface OutreachAgentUpsertInput {
@@ -79,6 +80,7 @@ export interface OutreachAgentUpsertInput {
   status?: 'draft' | 'active' | 'inactive'
   purpose?: string
   tone?: string
+  language?: 'en' | 'de'
   sender_name?: string
   sender_role?: string
   company_name?: string
@@ -147,6 +149,8 @@ const DEFAULT_QUALITY_WEIGHTS: QualityWeights = {
   deliverability: 0.1,
   enrichment: 0.05,
 }
+
+const DEFAULT_LANGUAGE: 'en' | 'de' = 'en'
 
 const DEFAULT_SEGMENT_CONFIG: SegmentConfig = {
   filters: {
@@ -280,6 +284,7 @@ function mapAgent(record: OutreachAgentRecord): OutreachAgent {
     segment_config: segmentConfig,
     quality_weights: normalizedWeights,
     knowledge_summary: parseKnowledgeSummary(record.knowledge_summary as Json | null),
+    language: (record.language as 'en' | 'de' | null) ?? DEFAULT_LANGUAGE,
   }
 }
 
@@ -579,6 +584,7 @@ export async function createOutreachAgent(supabase: Supabase, userId: string, in
     user_id: userId,
     name: input.name,
     status: input.status ?? 'draft',
+    language: input.language ?? DEFAULT_LANGUAGE,
     purpose: input.purpose,
     tone: input.tone,
     sender_name: input.sender_name,
@@ -652,6 +658,7 @@ export async function updateOutreachAgent(
   const payload: Database['public']['Tables']['outreach_agents']['Update'] = {
     name: input.name ?? current.name,
     status: input.status ?? current.status,
+    language: input.language ?? current.language ?? DEFAULT_LANGUAGE,
     purpose: input.purpose ?? current.purpose,
     tone: input.tone ?? current.tone,
     sender_name: input.sender_name ?? current.sender_name,
@@ -747,6 +754,7 @@ export async function duplicateOutreachAgent(supabase: Supabase, userId: string,
   const cloned = await createOutreachAgent(supabase, userId, {
     name: `${original.name} Copy`,
     status: 'draft',
+    language: original.language,
     purpose: original.purpose ?? undefined,
     tone: original.tone ?? undefined,
     sender_name: original.sender_name ?? undefined,

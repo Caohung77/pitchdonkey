@@ -71,6 +71,7 @@ export const agentCreateSchema = z.object({
   status: z.enum(['draft', 'active', 'inactive']).optional(),
   purpose: z.string().max(2000).optional(),
   tone: z.string().max(50).optional(),
+  language: z.enum(['en', 'de']).optional(),
   sender_name: z.string().max(255).optional(),
   sender_role: z.string().max(255).optional(),
   company_name: z.string().max(255).optional(),

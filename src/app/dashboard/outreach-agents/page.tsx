@@ -85,6 +85,8 @@ const DEFAULT_SEGMENT_CONFIG = {
   limit: 100,
 }
 
+const DEFAULT_AGENT_LANGUAGE: 'en' | 'de' = 'en'
+
 const EMPTY_KNOWLEDGE_FORM = {
   type: 'text' as 'text' | 'link' | 'pdf' | 'doc' | 'html',
   title: '',
@@ -98,9 +100,11 @@ interface AgentFormState {
   status: 'draft' | 'active' | 'inactive'
   purpose: string
   tone: string
+  language: 'en' | 'de'
   sender_name: string
   sender_role: string
   company_name: string
+  company_url: string
   product_one_liner: string
   product_description: string
   unique_selling_points: string[]
@@ -158,6 +162,22 @@ const parseListInput = (value: string) =>
 const listToMultiline = (values: string[] | undefined) =>
   (values && values.length > 0 ? values.join('\n') : '')
 
+const normalizeQualityWeights = (weights?: Partial<typeof DEFAULT_WEIGHTS>) => {
+  const merged = {
+    ...DEFAULT_WEIGHTS,
+    ...(weights || {}),
+  }
+
+  const total = Object.values(merged).reduce((sum, value) => sum + (Number.isFinite(value) ? Number(value) : 0), 0)
+  if (!total || total <= 0) {
+    return { ...DEFAULT_WEIGHTS }
+  }
+
+  return Object.fromEntries(
+    Object.entries(merged).map(([key, value]) => [key, Math.max(0, Number(value)) / total])
+  ) as typeof DEFAULT_WEIGHTS
+}
+
 const buildFormFromAgent = (agent?: OutreachAgent | null): AgentFormState => {
   if (!agent) {
     return {
@@ -165,9 +185,11 @@ const buildFormFromAgent = (agent?: OutreachAgent | null): AgentFormState => {
       status: 'draft',
       purpose: '',
       tone: 'friendly',
+      language: DEFAULT_AGENT_LANGUAGE,
       sender_name: '',
       sender_role: '',
       company_name: '',
+      company_url: '',
       product_one_liner: '',
       product_description: '',
       unique_selling_points: [],
@@ -183,6 +205,8 @@ const buildFormFromAgent = (agent?: OutreachAgent | null): AgentFormState => {
     }
   }
 
+  const rawSettings = (agent.settings as Record<string, any> | null) || {}
+
   const config = agent.segment_config || DEFAULT_SEGMENT_CONFIG
 
   return {
@@ -190,9 +214,11 @@ const buildFormFromAgent = (agent?: OutreachAgent | null): AgentFormState => {
     status: agent.status,
     purpose: agent.purpose || '',
     tone: agent.tone || 'friendly',
+    language: (agent.language as 'en' | 'de' | undefined) || DEFAULT_AGENT_LANGUAGE,
     sender_name: agent.sender_name || '',
     sender_role: agent.sender_role || '',
     company_name: agent.company_name || '',
+    company_url: (rawSettings.company_url as string) || '',
     product_one_liner: agent.product_one_liner || '',
     product_description: agent.product_description || '',
     unique_selling_points: agent.unique_selling_points || [],
@@ -234,7 +260,7 @@ const buildFormFromAgent = (agent?: OutreachAgent | null): AgentFormState => {
       ...DEFAULT_WEIGHTS,
       ...(agent.quality_weights || {}),
     },
-    settings: (agent.settings as Record<string, any>) || {},
+    settings: rawSettings,
   }
 }
 
@@ -473,6 +499,7 @@ function OutreachAgentsContent() {
                         <div className="flex flex-col gap-1">
                           <span className="text-sm text-gray-700 capitalize">Tone: {agent.tone || 'friendly'}</span>
                           <span className="text-xs text-gray-500">Goal: {agent.conversation_goal || 'Book meeting'}</span>
+                          <span className="text-xs text-gray-500">Language: {agent.language === 'de' ? 'Deutsch' : 'English'}</span>
                         </div>
                       </TableCell>
                       <TableCell>{renderKnowledgeSummary(agent)}</TableCell>
@@ -550,6 +577,11 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
   const [testResult, setTestResult] = useState<{ subject: string; body: string; highlights: string[] } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [overrideEnabled, setOverrideEnabled] = useState(Boolean(form.prompt_override))
+  const [smartFillLoading, setSmartFillLoading] = useState(false)
+  const [smartFillError, setSmartFillError] = useState('')
+  const [smartSegmentLoading, setSmartSegmentLoading] = useState(false)
+  const [smartSegmentError, setSmartSegmentError] = useState('')
+  const [smartSegmentRationale, setSmartSegmentRationale] = useState('')
 
   const { addToast } = useToast()
 
@@ -580,6 +612,11 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
     setTestResult(null)
     setOverrideEnabled(Boolean(initialForm.prompt_override))
     setKnowledgeItems([])
+    setSmartFillError('')
+    setSmartFillLoading(false)
+    setSmartSegmentError('')
+    setSmartSegmentLoading(false)
+    setSmartSegmentRationale('')
 
     if (mode === 'create') {
       setKnowledgeItems([])
@@ -629,10 +666,25 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
   }, [open, mode, agent?.id])
 
   const updateForm = (updates: Partial<AgentFormState>) => {
-    setForm((prev) => ({
-      ...prev,
-      ...updates,
-    }))
+    setForm((prev) => {
+      const next: AgentFormState = {
+        ...prev,
+        ...updates,
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, 'company_url')) {
+        const value = typeof updates.company_url === 'string' ? updates.company_url.trim() : ''
+        const nextSettings = { ...(prev.settings || {}) }
+        if (value) {
+          nextSettings.company_url = value
+        } else {
+          delete nextSettings.company_url
+        }
+        next.settings = nextSettings
+      }
+
+      return next
+    })
   }
 
   const updateSegmentFilters = (field: keyof typeof DEFAULT_SEGMENT_CONFIG.filters, value: string) => {
@@ -658,6 +710,213 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
         [field]: Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : prev.quality_weights[field],
       },
     }))
+  }
+
+  const handleSmartFill = async () => {
+    const url = form.company_url.trim()
+    if (!url) {
+      setSmartFillError('Enter a company website to analyze.')
+      return
+    }
+
+    setSmartFillError('')
+    setSmartFillLoading(true)
+
+    try {
+      if (url !== form.company_url) {
+        updateForm({ company_url: url })
+      }
+
+      const response = await ApiClient.post('/api/outreach-agents/smart-fill', { url })
+      const data = (response.data || {}) as Record<string, any>
+
+      setForm((prev) => {
+        const next: AgentFormState = {
+          ...prev,
+        }
+
+        if (typeof data.companyName === 'string' && !prev.company_name.trim()) {
+          next.company_name = data.companyName
+        }
+
+        if (typeof data.productOneLiner === 'string' && !prev.product_one_liner.trim()) {
+          next.product_one_liner = data.productOneLiner
+        }
+
+        if (typeof data.extendedDescription === 'string' && !prev.product_description.trim()) {
+          next.product_description = data.extendedDescription
+        }
+
+        if (Array.isArray(data.uniqueSellingPoints) && data.uniqueSellingPoints.length) {
+          const existing = new Set((prev.unique_selling_points || []).map((point) => point.trim().toLowerCase()))
+          const additions = data.uniqueSellingPoints
+            .map((point: string) => point.trim())
+            .filter((point: string) => point && !existing.has(point.toLowerCase()))
+          if (additions.length) {
+            next.unique_selling_points = [...prev.unique_selling_points, ...additions]
+          }
+        }
+
+        if (typeof data.targetPersona === 'string' && !prev.target_persona.trim()) {
+          next.target_persona = data.targetPersona
+        }
+
+        if (typeof data.industry === 'string' && !prev.purpose.trim()) {
+          next.purpose = data.industry
+        }
+
+        if (typeof data.tone === 'string' && !prev.tone.trim()) {
+          next.tone = data.tone.toLowerCase()
+        }
+
+        return next
+      })
+
+      addToast({ type: 'success', message: 'Filled product details from website.' })
+    } catch (error) {
+      console.error('Failed to smart fill outreach agent:', error)
+      setSmartFillError(error instanceof Error ? error.message : 'Failed to analyze website. Please try again.')
+    } finally {
+      setSmartFillLoading(false)
+    }
+  }
+
+  const handleSmartSegmentFill = async () => {
+    setSmartSegmentError('')
+    setSmartSegmentRationale('')
+    setSmartSegmentLoading(true)
+
+    try {
+      const knowledgePayload = knowledgeItems.slice(0, 5).map((item) => {
+        const content = (item.content || item.description || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+        return {
+          title: item.title || undefined,
+          content: content ? content.slice(0, 600) : item.url ? `Reference URL: ${item.url}` : undefined,
+        }
+      }).filter((item) => item.content)
+
+      const response = await ApiClient.post('/api/outreach-agents/segment/smart-fill', {
+        identity: {
+          agentName: form.name,
+          companyName: form.company_name,
+          tone: form.tone,
+          purpose: form.purpose,
+          senderRole: form.sender_role,
+          language: form.language,
+        },
+        product: {
+          productOneLiner: form.product_one_liner,
+          productDescription: form.product_description,
+          uniqueSellingPoints: form.unique_selling_points,
+          targetPersona: form.target_persona,
+          conversationGoal: form.conversation_goal,
+          preferredCTA: form.preferred_cta,
+          followUpStrategy: form.follow_up_strategy,
+        },
+        knowledge: knowledgePayload,
+        currentConfig: {
+          filters: {
+            countries: form.segment_config.filters.countries,
+            roles: form.segment_config.filters.roles,
+            keywords: form.segment_config.filters.keywords,
+            includeTags: form.segment_config.filters.includeTags,
+            excludeTags: form.segment_config.filters.excludeTags,
+          },
+          dataSignals: {
+            minEngagementScore: form.segment_config.dataSignals.minEngagementScore,
+            recencyDays: form.segment_config.dataSignals.recencyDays,
+          },
+          threshold: form.segment_config.threshold,
+          limit: form.segment_config.limit,
+          advancedRules: form.segment_config.advancedRules,
+          qualityWeights: form.quality_weights,
+        },
+      })
+
+      const suggestions = response.data || {}
+
+      setForm((prev) => {
+        const next: AgentFormState = {
+          ...prev,
+          segment_config: {
+            ...prev.segment_config,
+            filters: {
+              ...prev.segment_config.filters,
+            },
+            dataSignals: {
+              ...prev.segment_config.dataSignals,
+            },
+            advancedRules: {
+              ...prev.segment_config.advancedRules,
+            },
+          },
+        }
+
+        if (suggestions.filters) {
+          const filters = suggestions.filters as Record<string, string[]>
+          next.segment_config.filters.countries = filters.countries?.length ? filters.countries : next.segment_config.filters.countries
+          next.segment_config.filters.roles = filters.roles?.length ? filters.roles : next.segment_config.filters.roles
+          next.segment_config.filters.keywords = filters.keywords?.length ? filters.keywords : next.segment_config.filters.keywords
+          next.segment_config.filters.includeTags = filters.includeTags?.length ? filters.includeTags : next.segment_config.filters.includeTags
+          next.segment_config.filters.excludeTags = filters.excludeTags?.length ? filters.excludeTags : next.segment_config.filters.excludeTags
+        }
+
+        if (suggestions.dataSignals) {
+          const signals = suggestions.dataSignals as Record<string, number>
+          if (Number.isFinite(signals.minEngagementScore)) {
+            next.segment_config.dataSignals.minEngagementScore = Number(signals.minEngagementScore)
+          }
+          if (Number.isFinite(signals.recencyDays)) {
+            next.segment_config.dataSignals.recencyDays = Number(signals.recencyDays)
+          }
+        }
+
+        if (suggestions.advancedRules) {
+          const rules = suggestions.advancedRules as Record<string, any>
+          next.segment_config.advancedRules = {
+            ...next.segment_config.advancedRules,
+            excludeOptedOut: typeof rules.excludeOptedOut === 'boolean' ? rules.excludeOptedOut : next.segment_config.advancedRules.excludeOptedOut,
+            excludeMissingCompany: typeof rules.excludeMissingCompany === 'boolean' ? rules.excludeMissingCompany : next.segment_config.advancedRules.excludeMissingCompany,
+            excludeWithoutEmail: typeof rules.excludeWithoutEmail === 'boolean' ? rules.excludeWithoutEmail : next.segment_config.advancedRules.excludeWithoutEmail,
+            cooldownDays: Number.isFinite(rules.cooldownDays) ? Number(rules.cooldownDays) : next.segment_config.advancedRules.cooldownDays,
+            excludeStatuses: Array.isArray(rules.excludeStatuses) && rules.excludeStatuses.length
+              ? rules.excludeStatuses
+              : next.segment_config.advancedRules.excludeStatuses,
+          }
+        }
+
+        if (Number.isFinite(suggestions.threshold)) {
+          const value = Math.min(Math.max(Number(suggestions.threshold), 0), 1)
+          next.segment_config.threshold = Number(value.toFixed(2))
+        }
+
+        if (Number.isFinite(suggestions.limit)) {
+          const value = Math.round(Number(suggestions.limit))
+          next.segment_config.limit = Math.min(Math.max(value, 10), 1000)
+        }
+
+        if (suggestions.qualityWeights) {
+          const normalized = normalizeQualityWeights(suggestions.qualityWeights as Partial<typeof DEFAULT_WEIGHTS>)
+          next.quality_weights = normalized
+          ;(next.segment_config as unknown as { qualityWeights: typeof DEFAULT_WEIGHTS }).qualityWeights = normalized
+        }
+
+        return next
+      })
+
+      if (suggestions.rationale) {
+        setSmartSegmentRationale(String(suggestions.rationale))
+      }
+
+      addToast({ type: 'success', message: 'Segmentation suggestions applied.' })
+    } catch (error) {
+      console.error('Failed to generate smart segment:', error)
+      setSmartSegmentError(error instanceof Error ? error.message : 'Failed to generate segmentation suggestions.')
+    } finally {
+      setSmartSegmentLoading(false)
+    }
   }
 
   const handleKnowledgeAdd = async () => {
@@ -795,17 +1054,26 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
   const goBack = () => setStep((prev) => Math.max(prev - 1, 0))
 
   const handleSubmit = async () => {
+    const settingsPayload = { ...(form.settings || {}) }
+    const website = form.company_url.trim()
+    if (website) {
+      settingsPayload.company_url = website
+    } else {
+      delete settingsPayload.company_url
+    }
+
     const payload = {
       name: form.name.trim(),
       status: form.status,
       purpose: form.purpose,
       tone: form.tone,
+      language: form.language,
       sender_name: form.sender_name,
       sender_role: form.sender_role,
       company_name: form.company_name,
       product_one_liner: form.product_one_liner,
       product_description: form.product_description,
-      unique_selling_points: form.unique_selling_points,
+      unique_selling_points: form.unique_selling_points.map((point) => point.trim()).filter(Boolean),
       target_persona: form.target_persona,
       conversation_goal: form.conversation_goal,
       preferred_cta: form.preferred_cta,
@@ -814,7 +1082,7 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
       prompt_override: form.prompt_override,
       segment_config: form.segment_config,
       quality_weights: form.quality_weights,
-      settings: form.settings,
+      settings: settingsPayload,
     }
 
     try {
@@ -896,6 +1164,21 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
               </Select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="agent-language">Language</Label>
+              <Select
+                value={form.language}
+                onValueChange={(value) => updateForm({ language: value as 'en' | 'de' })}
+              >
+                <SelectTrigger id="agent-language">
+                  <SelectValue placeholder="English" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">English (default)</SelectItem>
+                  <SelectItem value="de">Deutsch</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="sender-name">Sender name</Label>
               <Input
                 id="sender-name"
@@ -937,6 +1220,41 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
       case 1:
         return (
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="company-url">Company website</Label>
+              <div className="flex flex-col gap-2 md:flex-row md:items-start">
+                <Input
+                  id="company-url"
+                  type="url"
+                  className="md:flex-1"
+                  value={form.company_url}
+                  onChange={(event) => {
+                    setSmartFillError('')
+                    updateForm({ company_url: event.target.value })
+                  }}
+                  placeholder="https://yourcompany.com"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSmartFill}
+                  disabled={smartFillLoading || !form.company_url.trim()}
+                  className="md:w-auto"
+                >
+                  {smartFillLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyzing…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />Smart fill
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">We’ll scan the site to suggest product messaging, personas, and differentiators.</p>
+              {smartFillError && <p className="text-xs text-red-600">{smartFillError}</p>}
+            </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="product-one-liner">Product one-liner</Label>
               <Input
@@ -1116,6 +1434,39 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
         return (
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <Label>Smart segmentation</Label>
+                    <p className="text-xs text-gray-500">
+                      Let Gemini suggest geography, roles, keywords, and scoring rules based on the identity, product, and knowledge you entered.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSmartSegmentFill}
+                    disabled={smartSegmentLoading}
+                    className="md:w-auto"
+                  >
+                    {smartSegmentLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyzing…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />Suggest segment
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {smartSegmentError && <p className="text-xs text-red-600">{smartSegmentError}</p>}
+                {smartSegmentRationale && (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-gray-600">
+                    {smartSegmentRationale}
+                  </div>
+                )}
+              </div>
               <div className="space-y-2">
                 <Label>Countries (one per line)</Label>
                 <Textarea
@@ -1394,7 +1745,13 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
                       ...prev,
                       sampleContact: { ...prev.sampleContact, first_name: event.target.value },
                     }))}
+                    placeholder={form.language === 'de' ? 'z. B. Anna' : 'e.g. Anna'}
                   />
+                  <p className="text-xs text-gray-500">
+                    {form.language === 'de'
+                      ? 'Vorname der Ansprechpartnerin bzw. des Kunden, an den der Testentwurf adressiert ist.'
+                      : 'First name of the prospect/customer the draft should address.'}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Contact role</Label>
@@ -1404,7 +1761,13 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
                       ...prev,
                       sampleContact: { ...prev.sampleContact, role: event.target.value },
                     }))}
+                    placeholder={form.language === 'de' ? 'z. B. Leiter Einkauf' : 'e.g. Head of Procurement'}
                   />
+                  <p className="text-xs text-gray-500">
+                    {form.language === 'de'
+                      ? 'Jobtitel oder Funktion des Kundenkontakts – hilft dem Agenten bei Ansprache und Argumentation.'
+                      : 'Job title or function of the customer contact so the agent can tailor tone and talking points.'}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Company</Label>
@@ -1414,7 +1777,13 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
                       ...prev,
                       sampleContact: { ...prev.sampleContact, company: event.target.value },
                     }))}
+                    placeholder={form.language === 'de' ? 'z. B. Muster GmbH' : 'e.g. Acme Corp'}
                   />
+                  <p className="text-xs text-gray-500">
+                    {form.language === 'de'
+                      ? 'Unternehmen des Kundenkontakts, damit der Agent es namentlich erwähnen kann.'
+                      : 'Customer’s company name so the draft can reference it directly.'}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Industry</Label>
@@ -1424,7 +1793,13 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
                       ...prev,
                       sampleContact: { ...prev.sampleContact, industry: event.target.value },
                     }))}
+                    placeholder={form.language === 'de' ? 'z. B. Einzelhandel' : 'e.g. Retail'}
                   />
+                  <p className="text-xs text-gray-500">
+                    {form.language === 'de'
+                      ? 'Branche des Kunden – beeinflusst Beispiele und Nutzenargumente im Entwurf.'
+                      : 'Customer’s industry to ground examples and value props in the draft.'}
+                  </p>
                 </div>
                 <div className="md:col-span-2 space-y-2">
                   <Label>Pain point / context</Label>
@@ -1439,10 +1814,20 @@ function AgentWizard({ open, mode, agent, initialStep = 0, onClose, onSaved }: A
                 </div>
                 <div className="md:col-span-2 space-y-2">
                   <Label>Incoming message (for replies)</Label>
+                  <p className="text-xs text-gray-500">
+                    {form.language === 'de'
+                      ? 'Füge hier die E-Mail des Kunden ein, auf die der Agent antworten soll. Beispiel: „Hallo Team, seit gestern sehen wir keine Bonitätsdaten mehr. Könnt ihr das prüfen?“'
+                      : 'Paste the customer’s email the agent should reply to. Example: “Hi team, our credit report is blank—can you check what’s wrong?”'}
+                  </p>
                   <Textarea
                     value={testForm.incomingMessage}
                     onChange={(event) => setTestForm((prev) => ({ ...prev, incomingMessage: event.target.value }))}
                     rows={4}
+                    placeholder={
+                      form.language === 'de'
+                        ? 'Hi Max, seit gestern sehen wir keine Bonitätsdaten mehr in eurem Dashboard. Könnt ihr das bitte prüfen?'
+                        : 'Hi Max, since yesterday our credit dashboard shows empty results. Could you take a look?'
+                    }
                   />
                 </div>
               </div>
