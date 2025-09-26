@@ -65,7 +65,7 @@ export default function EmailPage() {
       })
 
       if (response.ok) {
-        router.push('/dashboard/inbox')
+        router.push('/dashboard/mailbox')
       } else {
         console.error('Failed to delete email')
       }
@@ -160,8 +160,8 @@ On ${new Date(email.date_received).toLocaleDateString()} at ${new Date(email.dat
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-lg font-medium text-gray-900 mb-2">Email not found</p>
-          <Button onClick={() => router.push('/dashboard/inbox')}>
-            Back to Inbox
+          <Button onClick={() => router.push('/dashboard/mailbox')}>
+            Back to Mailbox
           </Button>
         </div>
       </div>
@@ -177,7 +177,7 @@ On ${new Date(email.date_received).toLocaleDateString()} at ${new Date(email.dat
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => router.push('/dashboard/inbox')}
+              onClick={() => router.push('/dashboard/mailbox')}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back

@@ -291,6 +291,98 @@ export type Database = {
           },
         ]
       }
+      email_sends: {
+        Row: {
+          ab_variant: string | null
+          campaign_id: string | null
+          contact_id: string
+          content: string
+          created_at: string | null
+          email_account_id: string
+          error_message: string | null
+          id: string
+          message_id: string | null
+          retry_count: number | null
+          scheduled_at: string | null
+          send_status: string | null
+          sent_at: string | null
+          step_number: number | null
+          subject: string
+          tracking_data: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          ab_variant?: string | null
+          campaign_id?: string | null
+          contact_id: string
+          content: string
+          created_at?: string | null
+          email_account_id: string
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          retry_count?: number | null
+          scheduled_at?: string | null
+          send_status?: string | null
+          sent_at?: string | null
+          step_number?: number | null
+          subject: string
+          tracking_data?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          ab_variant?: string | null
+          campaign_id?: string | null
+          contact_id?: string
+          content?: string
+          created_at?: string | null
+          email_account_id?: string
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          retry_count?: number | null
+          scheduled_at?: string | null
+          send_status?: string | null
+          sent_at?: string | null
+          step_number?: number | null
+          subject?: string
+          tracking_data?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_sends_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_email_account_id_fkey"
+            columns: ["email_account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_templates: {
         Row: {
           ai_model: string | null
