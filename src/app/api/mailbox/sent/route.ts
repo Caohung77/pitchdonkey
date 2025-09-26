@@ -12,31 +12,31 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     const accountId = searchParams.get('account_id')
     const status = searchParams.get('status')
 
-    let query = supabase
-      .from('email_sends')
-      .select(`
+    const baseSelect = `
         id,
         subject,
         content,
         send_status,
         sent_at,
         created_at,
-        email_accounts:email_accounts!inner (
-          id,
-          email,
-          provider
-        ),
-        contacts:contacts (
+        email_account_id,
+        contact_id,
+        campaign_id,
+        contacts (
           id,
           first_name,
           last_name,
           email
         ),
-        campaigns:campaigns (
+        campaigns (
           id,
           name
         )
-      `, { count: 'exact' })
+      `
+
+    let query = supabase
+      .from('email_sends')
+      .select(baseSelect, { count: 'exact' })
       .eq('user_id', user.id)
       .order('sent_at', { ascending: false, nullsLast: false })
       .order('created_at', { ascending: false })
@@ -65,9 +65,38 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       }, { status: 500 })
     }
 
+    const accountIds = (emails || [])
+      .map(email => email.email_account_id)
+      .filter((value): value is string => Boolean(value))
+
+    let accountMap: Record<string, { id: string; email: string; provider: string }> = {}
+
+    if (accountIds.length) {
+      const { data: accounts, error: accountError } = await supabase
+        .from('email_accounts')
+        .select('id, email, provider, status, deleted_at')
+        .in('id', Array.from(new Set(accountIds)))
+        .eq('user_id', user.id)
+
+      if (accountError) {
+        console.error('Error fetching account metadata for sent mailbox:', accountError)
+      } else if (accounts) {
+        for (const account of accounts) {
+          accountMap[account.id] = {
+            id: account.id,
+            email: account.email,
+            provider: account.provider,
+          }
+        }
+      }
+    }
+
     const response = NextResponse.json({
       success: true,
-      emails: emails || [],
+      emails: (emails || []).map(email => ({
+        ...email,
+        email_accounts: email.email_account_id ? accountMap[email.email_account_id] || null : null,
+      })),
       pagination: {
         total: count || 0,
         limit,
