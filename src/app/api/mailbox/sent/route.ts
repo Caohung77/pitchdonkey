@@ -21,18 +21,18 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         send_status,
         sent_at,
         created_at,
-        email_accounts (
+        email_accounts:email_accounts!inner (
           id,
           email,
           provider
         ),
-        contacts (
+        contacts:contacts (
           id,
           first_name,
           last_name,
           email
         ),
-        campaigns (
+        campaigns:campaigns (
           id,
           name
         )

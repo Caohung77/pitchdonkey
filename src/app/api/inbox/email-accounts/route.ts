@@ -16,10 +16,12 @@ export const GET = withAuth(async (
         id,
         email,
         provider,
-        status
+        status,
+        deleted_at
       `)
       .eq('user_id', user.id)
       .eq('status', 'active')
+      .is('deleted_at', null)
       .order('email', { ascending: true })
 
     if (error) {

@@ -314,7 +314,7 @@ export default function MailboxPage() {
 
   const renderSentListItem = (email: SentEmail) => {
     const to = getContactDisplayName(email.contacts) || 'Unknown recipient'
-    const preview = email.content.slice(0, 120)
+    const preview = email.content ? email.content.slice(0, 120) : ''
     const isActive = selectedItem?.type === 'outbox' && selectedItem.email.id === email.id
     return (
       <button
