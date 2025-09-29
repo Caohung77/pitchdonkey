@@ -130,7 +130,7 @@ describe('GmailIMAPSMTPService', () => {
 
       const mockCreateTransporter = jest.fn().mockReturnValue(mockTransporter)
       jest.doMock('nodemailer', () => ({
-        createTransporter: mockCreateTransporter
+        createTransport: mockCreateTransporter
       }))
 
       const sendOptions = {

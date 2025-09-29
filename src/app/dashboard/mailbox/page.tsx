@@ -28,6 +28,7 @@ import {
 import clsx from 'clsx'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
+import { MailboxToolbar } from '../../../components/mailbox/MailboxToolbar'
 
 interface EmailAccount {
   id: string
@@ -552,8 +553,34 @@ export default function MailboxPage() {
       const campaign = email.email_replies?.[0]?.campaigns || null
       return (
         <div className="h-full overflow-auto">
+          {/* Apple Mail-inspired Toolbar */}
+          <div className="border-b border-gray-200 bg-gradient-to-b from-gray-50 to-gray-100/50 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-gray-800 truncate max-w-[200px] md:max-w-[300px] lg:max-w-[400px]">
+                    {email.subject || '(No subject)'}
+                  </h3>
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                      {email.classification_status.replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <MailboxToolbar
+                onReply={() => beginCompose('reply')}
+                onForward={() => beginCompose('forward')}
+                onNewEmail={() => beginCompose('new')}
+                onDelete={() => deleteInboxEmail(email.id)}
+                isInboxEmail={true}
+              />
+            </div>
+          </div>
+
+          {/* Email Header Content */}
           <div className="border-b border-gray-200 bg-white px-8 py-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-4">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
                 <p className="mt-2 text-base text-gray-700 font-medium">From {email.from_address}</p>
@@ -583,20 +610,6 @@ export default function MailboxPage() {
                   )}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => beginCompose('reply')}>
-                  <Reply className="mr-2 h-4 w-4" /> Reply
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => beginCompose('forward')}>
-                  <CornerUpRight className="mr-2 h-4 w-4" /> Forward
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => beginCompose('new')}>
-                  <PenSquare className="mr-2 h-4 w-4" /> New email
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => deleteInboxEmail(email.id)}>
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete
-                </Button>
-              </div>
             </div>
           </div>
           <div className="px-8 py-8">
@@ -620,8 +633,34 @@ export default function MailboxPage() {
     const email = selectedItem.email
     return (
       <div className="h-full overflow-auto">
+        {/* Apple Mail-inspired Toolbar */}
+        <div className="border-b border-gray-200 bg-gradient-to-b from-gray-50 to-gray-100/50 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium text-gray-800 truncate max-w-[200px] md:max-w-[300px] lg:max-w-[400px]">
+                  {email.subject || '(No subject)'}
+                </h3>
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+                    {email.send_status}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <MailboxToolbar
+              onReply={() => beginCompose('reply')}
+              onForward={() => beginCompose('forward')}
+              onNewEmail={() => beginCompose('new')}
+              onDelete={() => {}}
+              isInboxEmail={false}
+            />
+          </div>
+        </div>
+
+        {/* Email Header Content */}
         <div className="border-b border-gray-200 bg-white px-8 py-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col gap-4">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
               <p className="mt-2 text-base text-gray-700 font-medium">
@@ -645,17 +684,6 @@ export default function MailboxPage() {
                   </span>
                 )}
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => beginCompose('reply')}>
-                <Reply className="mr-2 h-4 w-4" /> Reply
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => beginCompose('forward')}>
-                <CornerUpRight className="mr-2 h-4 w-4" /> Forward
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => beginCompose('new')}>
-                <PenSquare className="mr-2 h-4 w-4" /> New email
-              </Button>
             </div>
           </div>
         </div>
@@ -956,16 +984,17 @@ export default function MailboxPage() {
               </div>
             )}
           </section>
-
-          {/* Email Content - Responsive width for better reading experience */}
-          <section className={clsx(
-            'bg-white min-w-0',
-            'flex-1',
-            showEmailContent ? 'block' : 'hidden md:block'
-          )}>
-            {renderDetail()}
-          </section>
+          </div>
         </div>
+
+      {/* Email Content - Responsive width for better reading experience */}
+      <section className={clsx(
+        'bg-white min-w-0',
+        'flex-1',
+        showEmailContent ? 'block' : 'hidden md:block'
+      )}>
+        {renderDetail()}
+      </section>
       </div>
 
       <Dialog
@@ -982,20 +1011,18 @@ export default function MailboxPage() {
               <p className="text-xs text-gray-500">Sending from {getAccountLabel(composeAccountId)}</p>
             )}
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <label htmlFor="compose-to" className="text-sm font-medium text-gray-700">To</label>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4">
               <Input
-                id="compose-to"
+                type="email"
                 value={composeTo}
                 onChange={(e) => setComposeTo(e.target.value)}
-                placeholder="recipient@example.com"
+                placeholder="To: recipient@example.com"
               />
             </div>
-            <div>
-              <label htmlFor="compose-subject" className="text-sm font-medium text-gray-700">Subject</label>
+            <div className="grid grid-cols-1 gap-4">
               <Input
-                id="compose-subject"
+                type="text"
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
                 placeholder="Subject"

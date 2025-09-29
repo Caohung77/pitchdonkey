@@ -74,7 +74,12 @@ export class CampaignProcessor {
       console.log('🔎 Querying campaigns with status: sending, scheduled (excluding already completed ones)')
       const { data: campaigns, error } = await supabase
         .from('campaigns')
-        .select('*')
+        .select(`
+          *,
+          next_batch_send_time,
+          first_batch_sent_at,
+          current_batch_number
+        `)
         .in('status', ['sending', 'scheduled'])
         .order('created_at', { ascending: true })
 
@@ -310,9 +315,26 @@ export class CampaignProcessor {
       }
       console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)      
 
-      // Process campaign with daily limit
-      const dailyLimit = Number(campaign.daily_send_limit) || 50
+      // Check batch scheduling before processing
+      const batchDelayMs = this.getBatchDelayMs()
+      const now = new Date()
+
+      // Check if we need to wait for next batch time
+      if (campaign.next_batch_send_time) {
+        const nextBatchTime = new Date(campaign.next_batch_send_time)
+        if (now < nextBatchTime) {
+          console.log(`⏰ Batch not ready yet. Next batch scheduled for: ${nextBatchTime.toISOString()}`)
+          console.log(`⏰ Current time: ${now.toISOString()}`)
+          console.log(`⏰ Time remaining: ${Math.round((nextBatchTime.getTime() - now.getTime()) / 1000 / 60)} minutes`)
+          return // Skip this campaign for now
+        }
+      }
+
+      // Get batch size from send_settings (this is the daily batch limit)
+      const batchSize = campaign.send_settings?.rate_limiting?.batch_size || campaign.daily_send_limit || 50
       console.log(`🚀 Starting campaign processing for ${campaign.id}`)
+      console.log(`📊 Daily batch size: ${batchSize}`)
+      console.log(`📊 Campaign send_settings:`, JSON.stringify(campaign.send_settings?.rate_limiting, null, 2))
 
       // Set start date if not already set
       if (!campaign.start_date) {
@@ -333,12 +355,12 @@ export class CampaignProcessor {
       // Send emails with delays to avoid rate limits
       const delayConfig = this.getSendDelayConfig()
 
-      console.log(`⚖️ Daily limit: ${dailyLimit}, Available contacts: ${contacts.length}`)
+      console.log(`⚖️ Batch size: ${batchSize}, Available contacts: ${contacts.length}`)
 
       for (let i = 0; i < contacts.length; i++) {
-        // Enforce daily limit during sending loop (not before)
-        if (emailsSent >= dailyLimit) {
-          console.log(`⚖️ Daily limit reached (${dailyLimit}). Stopping batch processing. Remaining: ${contacts.length - i} contacts`)
+        // Enforce batch size limit during sending loop (not before)
+        if (emailsSent >= batchSize) {
+          console.log(`⚖️ Batch size reached (${batchSize}). Stopping current batch. Remaining: ${contacts.length - i} contacts`)
           break
         }
         const contact = contacts[i]
@@ -646,7 +668,11 @@ export class CampaignProcessor {
 
       // Update campaign statistics (keeping existing logic for compatibility)
       const processedCount = emailsSent + emailsFailed
-      const newStatus = processedCount >= contacts.length ? 'completed' : (processedCount > 0 ? 'running' : 'paused')
+      const remainingContacts = contacts.length - processedCount
+
+      // Determine if there are more contacts to send
+      const hasMoreContacts = remainingContacts > 0
+      const newStatus = !hasMoreContacts ? 'completed' : (processedCount > 0 ? 'sending' : 'paused')
 
       // Prepare update data
       const updateData = {
@@ -657,6 +683,24 @@ export class CampaignProcessor {
         updated_at: new Date().toISOString()
       }
 
+      // Schedule next batch if there are more contacts
+      if (hasMoreContacts && emailsSent > 0) {
+        const nextBatchTime = new Date(Date.now() + batchDelayMs)
+        updateData.next_batch_send_time = nextBatchTime.toISOString()
+
+        // Set first batch time if this is the first batch
+        if (!campaign.first_batch_sent_at) {
+          updateData.first_batch_sent_at = new Date().toISOString()
+        }
+
+        console.log(`📅 Next batch scheduled for: ${nextBatchTime.toISOString()}`)
+        console.log(`📊 Remaining contacts: ${remainingContacts}`)
+        console.log(`⏰ Next batch in: ${Math.round(batchDelayMs / 1000 / 60)} minutes`)
+      } else if (emailsSent > 0) {
+        // Clear next batch time if no more contacts
+        updateData.next_batch_send_time = null
+      }
+
       // Set start_date if campaign is starting for the first time
       if (campaign.status === 'sending' && processedCount > 0) {
         updateData.start_date = new Date().toISOString()
@@ -665,6 +709,7 @@ export class CampaignProcessor {
       // Set end_date if campaign is completing
       if (newStatus === 'completed') {
         updateData.end_date = new Date().toISOString()
+        updateData.next_batch_send_time = null // Clear any scheduled batch
         console.log(`🎉 Campaign completed!`)
       }
 
@@ -989,6 +1034,25 @@ export class CampaignProcessor {
 
     // Default desktop/server delay (30-60 seconds)
     return { min: 30000, max: 60000 }
+  }
+
+  /**
+   * Get the delay in milliseconds between batches (24 hours or testing override)
+   */
+  private getBatchDelayMs(): number {
+    // Check for testing override (10 minutes = 600000 ms)
+    const testingOverride = process.env.BATCH_DELAY_MINUTES_OVERRIDE
+    if (testingOverride) {
+      const minutes = parseInt(testingOverride, 10)
+      if (!isNaN(minutes) && minutes > 0) {
+        console.log(`⚠️ Using testing batch delay override: ${minutes} minutes`)
+        return minutes * 60 * 1000
+      }
+    }
+
+    // Default: 24 hours = 86400000 ms
+    console.log(`⏰ Using standard batch delay: 24 hours`)
+    return 24 * 60 * 60 * 1000
   }
 
 }

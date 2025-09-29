@@ -75,6 +75,13 @@ export class FixedCampaignProcessor {
         .from('campaigns')
         .select(`
           *,
+          first_batch_sent_at,
+          next_batch_send_time,
+          current_batch_number,
+          contacts_remaining,
+          contacts_processed,
+          contacts_failed,
+          batch_history,
           email_accounts!from_email_account_id(
             id,
             email,
@@ -635,7 +642,7 @@ export class FixedCampaignProcessor {
 
     const nodemailer = require('nodemailer')
 
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       host: params.emailAccount.smtp_host,
       port: params.emailAccount.smtp_port,
       secure: params.emailAccount.smtp_secure,
