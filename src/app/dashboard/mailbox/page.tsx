@@ -18,6 +18,8 @@ import {
   Search,
   ChevronRight,
   CircleDot,
+  Menu,
+  X,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -125,6 +127,10 @@ export default function MailboxPage() {
   const [sentEmails, setSentEmails] = useState<SentEmail[]>([])
   const [selectedItem, setSelectedItem] = useState<MailboxSelection | null>(null)
   const [errorMessage, setErrorMessage] = useState<string>('')
+
+  // Mobile navigation state
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  const [showEmailContent, setShowEmailContent] = useState(false)
 
   useEffect(() => {
     fetchEmailAccounts()
@@ -273,6 +279,8 @@ export default function MailboxPage() {
     setSearchTerm('')
     setClassificationFilter('all')
     setSelectedItem(null)
+    setIsMobileSidebarOpen(false) // Close mobile sidebar after selection
+    setShowEmailContent(false) // Reset to show email list on mobile
   }
 
   const renderInboxListItem = (email: IncomingEmail) => {
@@ -282,7 +290,10 @@ export default function MailboxPage() {
     return (
       <button
         key={email.id}
-        onClick={() => setSelectedItem({ type: 'inbox', email })}
+        onClick={() => {
+          setSelectedItem({ type: 'inbox', email })
+          setShowEmailContent(true) // Show email content on mobile
+        }}
         className={clsx(
           'w-full text-left rounded-lg border px-4 py-3 transition-colors',
           isActive ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:bg-gray-50'
@@ -319,7 +330,10 @@ export default function MailboxPage() {
     return (
       <button
         key={email.id}
-        onClick={() => setSelectedItem({ type: 'outbox', email })}
+        onClick={() => {
+          setSelectedItem({ type: 'outbox', email })
+          setShowEmailContent(true) // Show email content on mobile
+        }}
         className={clsx(
           'w-full text-left rounded-lg border px-4 py-3 transition-colors',
           isActive ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:bg-gray-50'
@@ -353,7 +367,10 @@ export default function MailboxPage() {
     if (!selectedItem) {
       return (
         <div className="flex h-full items-center justify-center text-gray-500">
-          Select an email to preview.
+          <p className="text-center">
+            <span className="block">Select an email to preview.</span>
+            <span className="block md:hidden mt-2 text-sm">Tap an email from the list to view it here.</span>
+          </p>
         </div>
       )
     }
@@ -364,14 +381,14 @@ export default function MailboxPage() {
       const campaign = email.email_replies?.[0]?.campaigns || null
       return (
         <div className="h-full overflow-auto">
-          <div className="border-b border-gray-200 bg-white px-6 py-4">
-            <h2 className="text-xl font-semibold text-gray-900">{email.subject || '(No subject)'}</h2>
-            <p className="mt-1 text-sm text-gray-600">From {email.from_address}</p>
+          <div className="border-b border-gray-200 bg-white px-8 py-6">
+            <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
+            <p className="mt-2 text-base text-gray-700 font-medium">From {email.from_address}</p>
             {email.to_address && (
-              <p className="text-xs text-gray-500">To {email.to_address}</p>
+              <p className="text-sm text-gray-600">To {email.to_address}</p>
             )}
-            <p className="mt-2 text-xs text-gray-500">Received {new Date(email.date_received).toLocaleString()}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <p className="mt-3 text-sm text-gray-500">Received {new Date(email.date_received).toLocaleString()}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
               <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
                 Status: {email.classification_status.replace('_', ' ')}
               </span>
@@ -393,17 +410,19 @@ export default function MailboxPage() {
               )}
             </div>
           </div>
-          <div className="px-6 py-6">
-            {email.html_content ? (
-              <div
-                className="prose max-w-none"
-                dangerouslySetInnerHTML={{ __html: email.html_content }}
-              />
-            ) : (
-              <pre className="whitespace-pre-wrap text-sm text-gray-700">
-                {email.text_content || 'No content available'}
-              </pre>
-            )}
+          <div className="px-8 py-8">
+            <div className="max-w-4xl">
+              {email.html_content ? (
+                <div
+                  className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:hover:text-blue-700"
+                  dangerouslySetInnerHTML={{ __html: email.html_content }}
+                />
+              ) : (
+                <pre className="whitespace-pre-wrap text-base text-gray-700 leading-relaxed font-sans">
+                  {email.text_content || 'No content available'}
+                </pre>
+              )}
+            </div>
           </div>
         </div>
       )
@@ -412,20 +431,20 @@ export default function MailboxPage() {
     const email = selectedItem.email
     return (
       <div className="h-full overflow-auto">
-        <div className="border-b border-gray-200 bg-white px-6 py-4">
-          <h2 className="text-xl font-semibold text-gray-900">{email.subject || '(No subject)'}</h2>
-          <p className="mt-1 text-sm text-gray-600">
+        <div className="border-b border-gray-200 bg-white px-8 py-6">
+          <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
+          <p className="mt-2 text-base text-gray-700 font-medium">
             Sent from {email.email_accounts?.email || 'Unknown account'}
           </p>
           {email.contacts && (
-            <p className="text-xs text-gray-500">
+            <p className="text-sm text-gray-600">
               To {getContactDisplayName(email.contacts)}
             </p>
           )}
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-3 text-sm text-gray-500">
             {email.sent_at ? `Sent ${new Date(email.sent_at).toLocaleString()}` : 'Not yet sent'}
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
               Status: {email.send_status}
             </span>
@@ -436,19 +455,45 @@ export default function MailboxPage() {
             )}
           </div>
         </div>
-        <div className="px-6 py-6">
-          <pre className="whitespace-pre-wrap text-sm text-gray-700">
-            {email.content || 'No content available'}
-          </pre>
+        <div className="px-8 py-8">
+          <div className="max-w-4xl">
+            <pre className="whitespace-pre-wrap text-base text-gray-700 leading-relaxed font-sans">
+              {email.content || 'No content available'}
+            </pre>
+          </div>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="flex h-full bg-gray-50">
-      <aside className="w-64 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
-        <div className="p-4">
+  // Mobile Sidebar Component
+  const renderMobileSidebar = () => (
+    <>
+      {/* Overlay */}
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile Sidebar */}
+      <aside className={clsx(
+        'fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 md:hidden',
+        isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      )}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Mailbox</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="overflow-y-auto h-full pb-20 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Unified mailboxes</p>
           <div className="mt-3 space-y-1">
             <button
@@ -460,7 +505,7 @@ export default function MailboxPage() {
                   : 'text-gray-700 hover:bg-gray-100'
               )}
             >
-              <Inbox className="h-4 w-4" />
+              <Inbox className="h-4 w-4 flex-shrink-0" />
               <span>All Inboxes</span>
             </button>
             <button
@@ -472,7 +517,7 @@ export default function MailboxPage() {
                   : 'text-gray-700 hover:bg-gray-100'
               )}
             >
-              <Send className="h-4 w-4" />
+              <Send className="h-4 w-4 flex-shrink-0" />
               <span>All Sent</span>
             </button>
           </div>
@@ -484,8 +529,8 @@ export default function MailboxPage() {
               return (
                 <div key={account.id}>
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    <CircleDot className="h-3 w-3 text-gray-400" />
-                    {account.email}
+                    <CircleDot className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                    <span className="truncate">{account.email}</span>
                   </div>
                   <div className="mt-2 space-y-1">
                     <button
@@ -495,8 +540,11 @@ export default function MailboxPage() {
                         isActiveInbox ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
                       )}
                     >
-                      <span className="flex items-center gap-2"><Inbox className="h-4 w-4" /> Inbox</span>
-                      <ChevronRight className="h-4 w-4" />
+                      <span className="flex items-center gap-2">
+                        <Inbox className="h-4 w-4 flex-shrink-0" />
+                        <span>Inbox</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
                     </button>
                     <button
                       onClick={() => handleMailboxSelect(`${account.id}:outbox`)}
@@ -505,8 +553,91 @@ export default function MailboxPage() {
                         isActiveSent ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
                       )}
                     >
-                      <span className="flex items-center gap-2"><Send className="h-4 w-4" /> Sent</span>
-                      <ChevronRight className="h-4 w-4" />
+                      <span className="flex items-center gap-2">
+                        <Send className="h-4 w-4 flex-shrink-0" />
+                        <span>Sent</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </aside>
+    </>
+  )
+
+  return (
+    <div className="flex h-full bg-gray-50 max-w-[95vw] mx-auto">
+      {renderMobileSidebar()}
+      <aside className="hidden md:flex w-44 lg:w-48 xl:w-52 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+        <div className="p-3 xl:p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Unified mailboxes</p>
+          <div className="mt-3 space-y-1">
+            <button
+              onClick={() => handleMailboxSelect('all:inbox')}
+              className={clsx(
+                'flex w-full items-center gap-2 rounded-lg px-2 xl:px-3 py-2 text-sm font-medium transition-colors',
+                selectedMailboxKey === 'all:inbox'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              )}
+            >
+              <Inbox className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">All Inboxes</span>
+            </button>
+            <button
+              onClick={() => handleMailboxSelect('all:outbox')}
+              className={clsx(
+                'flex w-full items-center gap-2 rounded-lg px-2 xl:px-3 py-2 text-sm font-medium transition-colors',
+                selectedMailboxKey === 'all:outbox'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              )}
+            >
+              <Send className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">All Sent</span>
+            </button>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {emailAccounts.map((account) => {
+              const isActiveInbox = selectedMailboxKey === `${account.id}:inbox`
+              const isActiveSent = selectedMailboxKey === `${account.id}:outbox`
+              return (
+                <div key={account.id}>
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <CircleDot className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                    <span className="truncate" title={account.email}>{account.email}</span>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <button
+                      onClick={() => handleMailboxSelect(`${account.id}:inbox`)}
+                      className={clsx(
+                        'flex w-full items-center justify-between rounded-lg px-2 xl:px-3 py-2 text-sm transition-colors',
+                        isActiveInbox ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                      )}
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Inbox className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">Inbox</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                    </button>
+                    <button
+                      onClick={() => handleMailboxSelect(`${account.id}:outbox`)}
+                      className={clsx(
+                        'flex w-full items-center justify-between rounded-lg px-2 xl:px-3 py-2 text-sm transition-colors',
+                        isActiveSent ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                      )}
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Send className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">Sent</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
                     </button>
                   </div>
                 </div>
@@ -517,19 +648,43 @@ export default function MailboxPage() {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="border-b border-gray-200 bg-white px-6 py-4">
+        <header className="border-b border-gray-200 bg-white px-4 md:px-6 py-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Mailbox</h1>
-              <p className="text-sm text-gray-600">
-                {mailboxTarget.folder === 'inbox' ? 'Inbox' : 'Sent'} • {getAccountLabel(mailboxTarget.accountId)} • {currentCount} message{currentCount !== 1 ? 's' : ''}
-              </p>
+            <div className="flex items-center gap-3">
+              {/* Mobile menu button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="md:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+
+              {/* Mobile back button for email content */}
+              {showEmailContent && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowEmailContent(false)}
+                  className="md:hidden"
+                >
+                  <ChevronRight className="h-4 w-4 rotate-180" />
+                </Button>
+              )}
+
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900">Mailbox</h1>
+                <p className="text-sm text-gray-600">
+                  {mailboxTarget.folder === 'inbox' ? 'Inbox' : 'Sent'} • {getAccountLabel(mailboxTarget.accountId)} • {currentCount} message{currentCount !== 1 ? 's' : ''}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {mailboxTarget.folder === 'inbox' && (
                 <Button onClick={handleSync} disabled={syncing} variant="outline" size="sm">
                   <RefreshCw className={clsx('h-4 w-4', syncing && 'animate-spin')} />
-                  <span className="ml-2">Sync</span>
+                  <span className="ml-2 hidden sm:inline">Sync</span>
                 </Button>
               )}
             </div>
@@ -573,7 +728,12 @@ export default function MailboxPage() {
         )}
 
         <div className="flex flex-1 overflow-hidden">
-          <section className="w-full max-w-xl border-r border-gray-200 bg-gray-50 overflow-y-auto">
+          {/* Email List - Responsive width */}
+          <section className={clsx(
+            'bg-gray-50 overflow-y-auto flex-shrink-0 border-r border-gray-200',
+            'w-full md:w-[42%] lg:w-[38%] xl:w-[32%] md:min-w-[320px] md:max-w-[480px]',
+            showEmailContent ? 'hidden md:block' : 'block'
+          )}>
             {loadingList ? (
               <div className="flex h-full items-center justify-center text-gray-500">
                 <RefreshCw className="h-6 w-6 animate-spin" />
@@ -592,7 +752,12 @@ export default function MailboxPage() {
             )}
           </section>
 
-          <section className="flex-1 bg-white">
+          {/* Email Content - Responsive width for better reading experience */}
+          <section className={clsx(
+            'bg-white min-w-0',
+            'flex-1',
+            showEmailContent ? 'block' : 'hidden md:block'
+          )}>
             {renderDetail()}
           </section>
         </div>
