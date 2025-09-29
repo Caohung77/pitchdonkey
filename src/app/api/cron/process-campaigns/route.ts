@@ -155,17 +155,18 @@ export async function GET(request: NextRequest) {
           console.log(`🔄 Campaign ${campaign.name} already in 'sending' status - will process directly`)
         }
 
-        // Trigger the FIXED campaign processor for this specific campaign
+        // Trigger campaign processor - use regular processor for batch functionality
         try {
-          // Import the working campaign processor (fixed processor has JOIN issues with SMTP)
-          const { campaignProcessor } = await import('@/lib/campaign-processor')
+          // Import the regular campaign processor (has batch scheduling logic)
+          const { CampaignProcessor } = await import('@/lib/campaign-processor')
+          const processor = CampaignProcessor.getInstance()
 
           // Process this specific campaign
-          console.log(`🚀 Processing campaign ${campaign.name} with working processor`)
+          console.log(`🚀 Processing campaign ${campaign.name} with batch-enabled processor`)
 
           // Wait for the processor to complete (instead of background processing)
           // This ensures we catch any errors and report them properly
-          await campaignProcessor.processReadyCampaigns()
+          await processor.processReadyCampaigns()
           
           successCount++
           results.push({

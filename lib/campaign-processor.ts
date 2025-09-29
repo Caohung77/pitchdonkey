@@ -74,16 +74,7 @@ export class CampaignProcessor {
       console.log('🔎 Querying campaigns with status: sending, scheduled (excluding already completed ones)')
       const { data: campaigns, error } = await supabase
         .from('campaigns')
-        .select(`
-          *,
-          first_batch_sent_at,
-          next_batch_send_time,
-          current_batch_number,
-          contacts_remaining,
-          contacts_processed,
-          contacts_failed,
-          batch_history
-        `)
+        .select('*')
         .in('status', ['sending', 'scheduled'])
         .order('created_at', { ascending: true })
 
@@ -114,22 +105,15 @@ export class CampaignProcessor {
         let processedCount = 0
         let totalContacts = campaign.total_contacts || 0
 
-        // Try the new contact tracking system first
-        if (campaign.contacts_remaining && Array.isArray(campaign.contacts_remaining)) {
-          isComplete = campaign.contacts_remaining.length === 0 && totalContacts > 0
-          processedCount = (campaign.contacts_processed?.length || 0) + (campaign.contacts_failed?.length || 0)
-          console.log(`📊 New tracking: ${campaign.name} has ${campaign.contacts_remaining.length} remaining contacts`)
-        } else {
-          // Fallback to old email_tracking method
-          const { data: emailStats } = await supabase
-            .from('email_tracking')
-            .select('sent_at, bounced_at')
-            .eq('campaign_id', campaign.id)
+        // Use email_tracking method to check completion
+        const { data: emailStats } = await supabase
+          .from('email_tracking')
+          .select('sent_at, bounced_at')
+          .eq('campaign_id', campaign.id)
 
-          processedCount = emailStats?.filter(e => e.sent_at !== null).length || 0
-          isComplete = processedCount >= totalContacts && totalContacts > 0
-          console.log(`📊 Fallback tracking: ${campaign.name} has ${processedCount}/${totalContacts} processed`)
-        }
+        processedCount = emailStats?.filter(e => e.sent_at !== null).length || 0
+        isComplete = processedCount >= totalContacts && totalContacts > 0
+        console.log(`📊 Email tracking: ${campaign.name} has ${processedCount}/${totalContacts} processed`)
 
         if (isComplete) {
           console.log(`⏭️ Skipping ${campaign.name} - already completed`)
@@ -140,8 +124,8 @@ export class CampaignProcessor {
               .from('campaigns')
               .update({
                 status: 'completed',
-                emails_sent: campaign.contacts_processed?.length || 0,
-                emails_bounced: campaign.contacts_failed?.length || 0,
+                emails_sent: processedCount,
+                emails_bounced: emailStats?.filter(e => e.bounced_at !== null).length || 0,
                 end_date: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               })
@@ -244,24 +228,49 @@ export class CampaignProcessor {
       let contacts = []
 
       if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
-        // Initialize contact tracking if not already done
-        await this.initializeContactTracking(campaign, supabase)
+        // Get all contacts from contact lists
+        const { data: contactLists, error: listError } = await supabase
+          .from('contact_lists')
+          .select('contact_ids')
+          .in('id', campaign.contact_list_ids)
 
-        // Get remaining contacts that haven't been processed yet
-        const contactsToProcess = await this.getRemainingContacts(campaign, supabase)
+        if (listError) {
+          throw new Error(`Failed to get contact lists: ${listError.message}`)
+        }
 
-        if (contactsToProcess.length > 0) {
-          // Get the actual contact records
-          const { data: contactData, error: contactsError } = await supabase
-            .from('contacts')
-            .select('*')
-            .in('id', contactsToProcess)
-
-          if (contactsError) {
-            throw new Error(`Failed to get contacts: ${contactsError.message}`)
+        // Collect all unique contact IDs
+        const allContactIds = new Set<string>()
+        contactLists?.forEach((list: any) => {
+          if (list.contact_ids && Array.isArray(list.contact_ids)) {
+            list.contact_ids.forEach((id: string) => allContactIds.add(id))
           }
+        })
 
-          contacts = contactData || []
+        const contactIds = Array.from(allContactIds)
+
+        if (contactIds.length > 0) {
+          // Get contacts that haven't been sent to yet
+          const { data: sentEmails } = await supabase
+            .from('email_tracking')
+            .select('contact_id')
+            .eq('campaign_id', campaign.id)
+            .in('status', ['sent', 'delivered'])
+
+          const sentContactIds = new Set(sentEmails?.map((e: any) => e.contact_id) || [])
+          const remainingContactIds = contactIds.filter(id => !sentContactIds.has(id))
+
+          if (remainingContactIds.length > 0) {
+            const { data: contactData, error: contactsError } = await supabase
+              .from('contacts')
+              .select('*')
+              .in('id', remainingContactIds)
+
+            if (contactsError) {
+              throw new Error(`Failed to get contacts: ${contactsError.message}`)
+            }
+
+            contacts = contactData || []
+          }
         }
       }
 
@@ -301,61 +310,19 @@ export class CampaignProcessor {
       }
       console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)      
 
-      // Implement 24-hour interval batch scheduling
-      const dailyLimit = Number(campaign.daily_send_limit) || 5
-      const now = new Date()
+      // Process campaign with daily limit
+      const dailyLimit = Number(campaign.daily_send_limit) || 50
+      console.log(`🚀 Starting campaign processing for ${campaign.id}`)
 
-      // Check if this is the first batch or a scheduled batch
-      const isFirstBatch = !campaign.first_batch_sent_at
-      const currentBatchNumber = campaign.current_batch_number || 0
-
-      if (isFirstBatch) {
-        // First batch - set initial timing
-        console.log(`🚀 Starting first batch for campaign ${campaign.id}`)
-        const nextBatchTime = new Date(now.getTime() + (24 * 60 * 60 * 1000)) // 24 hours from now
-
+      // Set start date if not already set
+      if (!campaign.start_date) {
         await supabase
           .from('campaigns')
           .update({
-            first_batch_sent_at: now.toISOString(),
-            current_batch_number: 1,
-            next_batch_send_time: nextBatchTime.toISOString()
+            start_date: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           })
           .eq('id', campaign.id)
-
-        console.log(`⏰ Next batch scheduled for: ${nextBatchTime.toISOString()}`)
-      } else {
-        // Subsequent batches - check if it's time to send
-        if (!campaign.next_batch_send_time) {
-          console.log(`⚠️ Missing next_batch_send_time for campaign ${campaign.id}, skipping`)
-          return
-        }
-
-        const nextBatchTime = new Date(campaign.next_batch_send_time)
-        const batchWindow = this.isWithinBatchSendWindow(nextBatchTime, now)
-
-        if (!batchWindow.canSend) {
-          console.log(`⏳ Campaign ${campaign.id} not ready yet. Next batch in ${Math.round(batchWindow.timeUntilBatch / (60 * 1000))} minutes`)
-          return
-        }
-
-        if (batchWindow.windowStatus === 'overdue') {
-          console.log(`⚠️ Campaign ${campaign.id} batch is ${Math.round(Math.abs(batchWindow.timeUntilBatch) / (60 * 1000))} minutes overdue`)
-        } else {
-          console.log(`✅ Campaign ${campaign.id} batch is ready to send (${batchWindow.windowStatus})`)
-        }
-
-        // Update for next batch (24 hours from original scheduled time)
-        const nextNextBatchTime = new Date(nextBatchTime.getTime() + (24 * 60 * 60 * 1000))
-        await supabase
-          .from('campaigns')
-          .update({
-            current_batch_number: currentBatchNumber + 1,
-            next_batch_send_time: nextNextBatchTime.toISOString()
-          })
-          .eq('id', campaign.id)
-
-        console.log(`📅 Batch ${currentBatchNumber + 1} processing. Next batch: ${nextNextBatchTime.toISOString()}`)
       }
 
       let emailsSent = 0
@@ -675,8 +642,7 @@ export class CampaignProcessor {
         }
       }
 
-      // Update the new contact tracking system
-      await this.updateContactTracking(campaign.id, sentContactIds, failedContactIds, supabase)
+      // Contact tracking handled via email_tracking table inserts during sending
 
       // Update campaign statistics (keeping existing logic for compatibility)
       const processedCount = emailsSent + emailsFailed
@@ -696,11 +662,10 @@ export class CampaignProcessor {
         updateData.start_date = new Date().toISOString()
       }
 
-      // Set end_date if campaign is completing and clear batch scheduling
+      // Set end_date if campaign is completing
       if (newStatus === 'completed') {
         updateData.end_date = new Date().toISOString()
-        updateData.next_batch_send_time = null // Clear future scheduling
-        console.log(`🎉 Campaign completed! Total batches processed: ${campaign.current_batch_number || 0}`)
+        console.log(`🎉 Campaign completed!`)
       }
 
       await supabase
@@ -998,39 +963,6 @@ export class CampaignProcessor {
   /**
    * Determine delay configuration between sends, with overrides for serverless environments
    */
-  /**
-   * Check if a campaign is within its scheduled batch send window
-   */
-  private isWithinBatchSendWindow(nextBatchTime: Date, now: Date = new Date()): {
-    canSend: boolean;
-    timeUntilBatch: number;
-    windowStatus: 'early' | 'ready' | 'overdue';
-  } {
-    const timeUntilBatch = nextBatchTime.getTime() - now.getTime()
-    const timeWindow = 5 * 60 * 1000 // 5-minute window (configurable)
-
-    if (timeUntilBatch > timeWindow) {
-      return {
-        canSend: false,
-        timeUntilBatch,
-        windowStatus: 'early'
-      }
-    }
-
-    if (timeUntilBatch < -timeWindow) {
-      return {
-        canSend: true, // Allow overdue sends
-        timeUntilBatch,
-        windowStatus: 'overdue'
-      }
-    }
-
-    return {
-      canSend: true,
-      timeUntilBatch,
-      windowStatus: 'ready'
-    }
-  }
 
   private getSendDelayConfig(): { min: number; max: number } {
     const parseDelay = (value?: string | number | null) => {
@@ -1059,166 +991,6 @@ export class CampaignProcessor {
     return { min: 30000, max: 60000 }
   }
 
-  /**
-   * Initialize contact tracking for a campaign
-   */
-  private async initializeContactTracking(campaign: any, supabase: any): Promise<void> {
-    // Skip if already initialized
-    if (campaign.contacts_remaining && Array.isArray(campaign.contacts_remaining) && campaign.contacts_remaining.length > 0) {
-      return
-    }
-
-    console.log(`🔄 Initializing contact tracking for campaign ${campaign.id}`)
-
-    try {
-      // Get all contacts from contact lists
-      const { data: contactLists, error: listError } = await supabase
-        .from('contact_lists')
-        .select('contact_ids')
-        .in('id', campaign.contact_list_ids)
-
-      if (listError) {
-        throw new Error(`Failed to get contact lists: ${listError.message}`)
-      }
-
-      // Collect all unique contact IDs
-      const allContactIds = new Set<string>()
-      contactLists?.forEach((list: any) => {
-        if (list.contact_ids && Array.isArray(list.contact_ids)) {
-          list.contact_ids.forEach((id: string) => allContactIds.add(id))
-        }
-      })
-
-      const contactIds = Array.from(allContactIds)
-
-      // Check which contacts have already been processed (sent successfully)
-      const { data: sentEmails, error: sentError } = await supabase
-        .from('email_tracking')
-        .select('contact_id')
-        .eq('campaign_id', campaign.id)
-        .in('status', ['sent', 'delivered'])
-
-      const processedContactIds = new Set(sentEmails?.map((e: any) => e.contact_id) || [])
-
-      // Remaining contacts = all contacts - already processed
-      const remainingContacts = contactIds.filter(id => !processedContactIds.has(id))
-      const processedContacts = contactIds.filter(id => processedContactIds.has(id))
-
-      // Update campaign with contact tracking
-      await supabase
-        .from('campaigns')
-        .update({
-          contacts_remaining: remainingContacts,
-          contacts_processed: processedContacts,
-          contacts_failed: [],
-          total_contacts: contactIds.length,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', campaign.id)
-
-      console.log(`✅ Contact tracking initialized: ${remainingContacts.length} remaining, ${processedContacts.length} processed`)
-
-    } catch (error) {
-      console.error(`❌ Failed to initialize contact tracking for campaign ${campaign.id}:`, error)
-      throw error
-    }
-  }
-
-  /**
-   * Get remaining contacts that need to be processed
-   */
-  private async getRemainingContacts(campaign: any, supabase: any): Promise<string[]> {
-    // Get the latest campaign data with contact tracking
-    const { data: campaignData, error: campaignError } = await supabase
-      .from('campaigns')
-      .select('contacts_remaining, contacts_processed')
-      .eq('id', campaign.id)
-      .single()
-
-    if (campaignError) {
-      console.error(`❌ Failed to get campaign data for ${campaign.id}:`, campaignError)
-      return []
-    }
-
-    const remainingContacts = campaignData.contacts_remaining || []
-    console.log(`📊 Found ${remainingContacts.length} remaining contacts for campaign ${campaign.id}`)
-
-    return remainingContacts
-  }
-
-  /**
-   * Update contact tracking after sending emails
-   */
-  private async updateContactTracking(
-    campaignId: string,
-    sentContactIds: string[],
-    failedContactIds: string[],
-    supabase: any
-  ): Promise<void> {
-    try {
-      const { data: campaign, error: fetchError } = await supabase
-        .from('campaigns')
-        .select('contacts_remaining, contacts_processed, contacts_failed, current_batch_number, batch_history')
-        .eq('id', campaignId)
-        .single()
-
-      if (fetchError) {
-        console.error(`❌ Failed to fetch campaign for tracking update:`, fetchError)
-        return
-      }
-
-      const currentRemaining = campaign.contacts_remaining || []
-      const currentProcessed = campaign.contacts_processed || []
-      const currentFailed = campaign.contacts_failed || []
-      const currentBatchHistory = campaign.batch_history || []
-
-      // Update tracking arrays
-      const newRemaining = currentRemaining.filter((id: string) =>
-        !sentContactIds.includes(id) && !failedContactIds.includes(id)
-      )
-      const newProcessed = [...currentProcessed, ...sentContactIds]
-      const newFailed = [...currentFailed, ...failedContactIds]
-
-      // Add to batch history
-      const batchRecord = {
-        batch_number: campaign.current_batch_number || 1,
-        timestamp: new Date().toISOString(),
-        sent_count: sentContactIds.length,
-        failed_count: failedContactIds.length,
-        remaining_count: newRemaining.length
-      }
-
-      const newBatchHistory = [...currentBatchHistory, batchRecord]
-
-      // Determine if campaign is complete
-      const isComplete = newRemaining.length === 0
-      const updateData: any = {
-        contacts_remaining: newRemaining,
-        contacts_processed: newProcessed,
-        contacts_failed: newFailed,
-        batch_history: newBatchHistory,
-        emails_sent: newProcessed.length,
-        updated_at: new Date().toISOString()
-      }
-
-      // Mark as completed if no more contacts
-      if (isComplete) {
-        updateData.status = 'completed'
-        updateData.completed_at = new Date().toISOString()
-        console.log(`✅ Campaign ${campaignId} marked as completed - all contacts processed`)
-      }
-
-      await supabase
-        .from('campaigns')
-        .update(updateData)
-        .eq('id', campaignId)
-
-      console.log(`📊 Contact tracking updated: ${sentContactIds.length} sent, ${failedContactIds.length} failed, ${newRemaining.length} remaining`)
-
-    } catch (error) {
-      console.error(`❌ Failed to update contact tracking:`, error)
-    }
-  }
 }
 
 // Export singleton instance
