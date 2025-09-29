@@ -205,15 +205,21 @@ export class CampaignExecutionEngine {
     const campaign = execution.campaigns
 
     // Get pending email jobs
+    const deliveryConfig = campaign.delivery_config || {}
+    const batchSize = typeof deliveryConfig.batch_size === 'number' && deliveryConfig.batch_size > 0
+      ? Math.floor(deliveryConfig.batch_size)
+      : 50
+    const nowIso = new Date().toISOString()
+
     const { data: pendingJobs, error: jobsError } = await supabaseClient
       .from('email_jobs')
       .select('*')
       .eq('campaign_id', campaign.id)
       .eq('status', 'pending')
-      .lte('scheduled_at', new Date().toISOString())
+      .lte('scheduled_at', nowIso)
       .order('priority', { ascending: false })
       .order('scheduled_at', { ascending: true })
-      .limit(50) // Process in batches
+      .limit(batchSize)
 
     if (jobsError) {
       throw new Error('Failed to fetch pending jobs')
