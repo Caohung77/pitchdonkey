@@ -18,10 +18,16 @@ import {
   Search,
   ChevronRight,
   CircleDot,
+  Trash2,
+  Reply,
+  CornerUpRight,
+  PenSquare,
   Menu,
   X,
 } from 'lucide-react'
 import clsx from 'clsx'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
 
 interface EmailAccount {
   id: string
@@ -89,6 +95,32 @@ const parseMailboxKey = (key: string): MailboxTarget => {
   }
 }
 
+const extractEmailAddress = (value?: string | null): string | null => {
+  if (!value) return null
+  const angle = value.match(/<([^>]+)>/)
+  if (angle) return angle[1].trim()
+  const simple = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  return simple ? simple[0] : value.trim()
+}
+
+const buildQuoteBlock = (html: string, sender: string, timestamp: string) => {
+  return `
+<div style="border-left: 4px solid #e5e7eb; padding-left: 16px; margin: 20px 0; color: #6b7280;">
+  <p style="font-weight: 600; margin-bottom: 8px;">
+    On ${new Date(timestamp).toLocaleString()} ${sender} wrote:
+  </p>
+  <div style="background: #f9fafb; padding: 12px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${html}</div>
+</div>`
+}
+
+const textToHtml = (text: string) => {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br/>')
+}
+
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '—'
   const date = new Date(value)
@@ -127,6 +159,14 @@ export default function MailboxPage() {
   const [sentEmails, setSentEmails] = useState<SentEmail[]>([])
   const [selectedItem, setSelectedItem] = useState<MailboxSelection | null>(null)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [composeMode, setComposeMode] = useState<'reply' | 'forward' | 'new'>('reply')
+  const [composeTo, setComposeTo] = useState('')
+  const [composeSubject, setComposeSubject] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  const [composeAccountId, setComposeAccountId] = useState<string | null>(null)
+  const [composeSending, setComposeSending] = useState(false)
+  const [composeError, setComposeError] = useState('')
 
   // Mobile navigation state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -240,6 +280,131 @@ export default function MailboxPage() {
     }
   }
 
+  const deleteInboxEmail = async (emailId: string) => {
+    try {
+      await fetch('/api/inbox/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailIds: [emailId] }),
+      })
+      setInboxEmails((prev) => prev.filter((email) => email.id !== emailId))
+      if (selectedItem?.type === 'inbox' && selectedItem.email.id === emailId) {
+        setSelectedItem(null)
+      }
+    } catch (error) {
+      console.error('Error deleting email:', error)
+      setErrorMessage('Failed to delete email')
+    }
+  }
+
+  const beginCompose = (mode: 'reply' | 'forward' | 'new') => {
+    if (!selectedItem) return
+
+    const isInbox = selectedItem.type === 'inbox'
+    const email = selectedItem.email
+    const accountId = (email as any).email_accounts?.id || null
+
+    if (!accountId) {
+      setErrorMessage('The linked email account is unavailable. Please reconnect the account before sending emails.')
+      return
+    }
+
+    let to = ''
+    let subject = email.subject || ''
+    let body = ''
+
+    if (isInbox) {
+      to = extractEmailAddress((email as IncomingEmail).from_address) || ''
+    } else {
+      to = extractEmailAddress(selectedItem.email.contacts?.email) || ''
+    }
+
+    const originalContent = isInbox
+      ? (selectedItem.email as IncomingEmail).html_content || textToHtml((selectedItem.email as IncomingEmail).text_content || '')
+      : textToHtml((selectedItem.email as SentEmail).content || '')
+
+    const timestamp = isInbox
+      ? (selectedItem.email as IncomingEmail).date_received
+      : (selectedItem.email as SentEmail).sent_at || (selectedItem.email as SentEmail).created_at || new Date().toISOString()
+
+    const senderLabel = isInbox ? (selectedItem.email as IncomingEmail).from_address : (getContactDisplayName(selectedItem.email.contacts) || 'Recipient')
+
+    switch (mode) {
+      case 'reply':
+        subject = subject?.match(/^Re:/i) ? subject : `Re: ${subject || ''}`
+        body = `${'<p></p>'}${buildQuoteBlock(originalContent || 'No content available', senderLabel, timestamp)}`
+        break
+      case 'forward':
+        subject = subject?.match(/^Fwd:/i) ? subject : `Fwd: ${subject || ''}`
+        to = ''
+        body = `${'<p></p>'}${buildQuoteBlock(originalContent || 'No content available', senderLabel, timestamp)}`
+        break
+      case 'new':
+        body = '<p></p>'
+        if (!to) {
+          to = isInbox ? extractEmailAddress((selectedItem.email as IncomingEmail).from_address) || '' : ''
+        }
+        break
+    }
+
+    setComposeMode(mode)
+    setComposeAccountId(accountId)
+    setComposeTo(to)
+    setComposeSubject(subject)
+    setComposeBody(body)
+    setComposeError('')
+    setComposeOpen(true)
+  }
+
+  const handleComposeSend = async () => {
+    if (!composeAccountId) {
+      setComposeError('Email account is missing.')
+      return
+    }
+    if (!composeTo.trim()) {
+      setComposeError('Recipient is required.')
+      return
+    }
+    if (!composeSubject.trim()) {
+      setComposeError('Subject is required.')
+      return
+    }
+    if (!composeBody.trim()) {
+      setComposeError('Message cannot be empty.')
+      return
+    }
+
+    setComposeSending(true)
+    setComposeError('')
+    try {
+      const response = await fetch(`/api/email-accounts/${composeAccountId}/send-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: composeTo,
+          subject: composeSubject,
+          message: composeBody,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to send email')
+      }
+
+      setComposeOpen(false)
+      setComposeBody('')
+      setComposeSubject('')
+      // Refresh sent folder for the account used
+      await fetchSentEmails(composeAccountId)
+    } catch (error: any) {
+      console.error('Failed to send email:', error)
+      setComposeError(error.message || 'Failed to send email')
+    } finally {
+      setComposeSending(false)
+    }
+  }
+
   const handleSync = async () => {
     const { accountId } = mailboxTarget
     try {
@@ -273,6 +438,12 @@ export default function MailboxPage() {
     const account = emailAccounts.find(acc => acc.id === accountId)
     return account ? account.email : 'Unknown account'
   }
+
+  const composeTitle = composeMode === 'reply'
+    ? 'Reply to email'
+    : composeMode === 'forward'
+    ? 'Forward email'
+    : 'New email'
 
   const handleMailboxSelect = (key: string) => {
     setSelectedMailboxKey(key)
@@ -369,7 +540,7 @@ export default function MailboxPage() {
         <div className="flex h-full items-center justify-center text-gray-500">
           <p className="text-center">
             <span className="block">Select an email to preview.</span>
-            <span className="block md:hidden mt-2 text-sm">Tap an email from the list to view it here.</span>
+            <span className="mt-2 block text-sm text-gray-400">Choose a folder on the left, then pick a message to see its contents.</span>
           </p>
         </div>
       )
@@ -382,32 +553,50 @@ export default function MailboxPage() {
       return (
         <div className="h-full overflow-auto">
           <div className="border-b border-gray-200 bg-white px-8 py-6">
-            <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
-            <p className="mt-2 text-base text-gray-700 font-medium">From {email.from_address}</p>
-            {email.to_address && (
-              <p className="text-sm text-gray-600">To {email.to_address}</p>
-            )}
-            <p className="mt-3 text-sm text-gray-500">Received {new Date(email.date_received).toLocaleString()}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
-                Status: {email.classification_status.replace('_', ' ')}
-              </span>
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
-                Processing: {email.processing_status}
-              </span>
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                Account: {email.email_accounts?.email || 'Unknown'}
-              </span>
-              {campaign && (
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  Campaign: {campaign.name}
-                </span>
-              )}
-              {contact && (
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  Contact: {getContactDisplayName(contact)}
-                </span>
-              )}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
+                <p className="mt-2 text-base text-gray-700 font-medium">From {email.from_address}</p>
+                {email.to_address && (
+                  <p className="text-sm text-gray-600">To {email.to_address}</p>
+                )}
+                <p className="mt-3 text-sm text-gray-500">Received {new Date(email.date_received).toLocaleString()}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
+                    Status: {email.classification_status.replace('_', ' ')}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
+                    Processing: {email.processing_status}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                    Account: {email.email_accounts?.email || 'Unknown'}
+                  </span>
+                  {campaign && (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                      Campaign: {campaign.name}
+                    </span>
+                  )}
+                  {contact && (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                      Contact: {getContactDisplayName(contact)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => beginCompose('reply')}>
+                  <Reply className="mr-2 h-4 w-4" /> Reply
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => beginCompose('forward')}>
+                  <CornerUpRight className="mr-2 h-4 w-4" /> Forward
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => beginCompose('new')}>
+                  <PenSquare className="mr-2 h-4 w-4" /> New email
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => deleteInboxEmail(email.id)}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                </Button>
+              </div>
             </div>
           </div>
           <div className="px-8 py-8">
@@ -432,27 +621,42 @@ export default function MailboxPage() {
     return (
       <div className="h-full overflow-auto">
         <div className="border-b border-gray-200 bg-white px-8 py-6">
-          <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
-          <p className="mt-2 text-base text-gray-700 font-medium">
-            Sent from {email.email_accounts?.email || 'Unknown account'}
-          </p>
-          {email.contacts && (
-            <p className="text-sm text-gray-600">
-              To {getContactDisplayName(email.contacts)}
-            </p>
-          )}
-          <p className="mt-3 text-sm text-gray-500">
-            {email.sent_at ? `Sent ${new Date(email.sent_at).toLocaleString()}` : 'Not yet sent'}
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
-              Status: {email.send_status}
-            </span>
-            {email.campaigns && (
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                Campaign: {email.campaigns.name}
-              </span>
-            )}
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
+              <p className="mt-2 text-base text-gray-700 font-medium">
+                Sent from {email.email_accounts?.email || 'Unknown account'}
+              </p>
+              {email.contacts && (
+                <p className="text-sm text-gray-600">
+                  To {getContactDisplayName(email.contacts)}
+                </p>
+              )}
+              <p className="mt-3 text-sm text-gray-500">
+                {email.sent_at ? `Sent ${new Date(email.sent_at).toLocaleString()}` : 'Not yet sent'}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
+                  Status: {email.send_status}
+                </span>
+                {email.campaigns && (
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                    Campaign: {email.campaigns.name}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => beginCompose('reply')}>
+                <Reply className="mr-2 h-4 w-4" /> Reply
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => beginCompose('forward')}>
+                <CornerUpRight className="mr-2 h-4 w-4" /> Forward
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => beginCompose('new')}>
+                <PenSquare className="mr-2 h-4 w-4" /> New email
+              </Button>
+            </div>
           </div>
         </div>
         <div className="px-8 py-8">
@@ -570,7 +774,8 @@ export default function MailboxPage() {
   )
 
   return (
-    <div className="flex h-full bg-gray-50 max-w-[95vw] mx-auto">
+    <>
+      <div className="flex h-full bg-gray-50 max-w-[95vw] mx-auto">
       {renderMobileSidebar()}
       <aside className="hidden md:flex w-44 lg:w-48 xl:w-52 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
         <div className="p-3 xl:p-4">
@@ -762,6 +967,64 @@ export default function MailboxPage() {
           </section>
         </div>
       </div>
-    </div>
+
+      <Dialog
+        open={composeOpen}
+        onOpenChange={(open) => {
+          setComposeOpen(open)
+          if (!open) setComposeError('')
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{composeTitle}</DialogTitle>
+            {composeAccountId && (
+              <p className="text-xs text-gray-500">Sending from {getAccountLabel(composeAccountId)}</p>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label htmlFor="compose-to" className="text-sm font-medium text-gray-700">To</label>
+              <Input
+                id="compose-to"
+                value={composeTo}
+                onChange={(e) => setComposeTo(e.target.value)}
+                placeholder="recipient@example.com"
+              />
+            </div>
+            <div>
+              <label htmlFor="compose-subject" className="text-sm font-medium text-gray-700">Subject</label>
+              <Input
+                id="compose-subject"
+                value={composeSubject}
+                onChange={(e) => setComposeSubject(e.target.value)}
+                placeholder="Subject"
+              />
+            </div>
+            <EmailRichTextEditor
+              value={composeBody}
+              onChange={setComposeBody}
+              minHeight="260px"
+            />
+            {composeError && <p className="text-sm text-red-600">{composeError}</p>}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setComposeOpen(false)
+                setComposeError('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleComposeSend} disabled={composeSending}>
+              {composeSending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+              Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
