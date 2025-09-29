@@ -89,6 +89,11 @@ export class ApiClient {
           console.error(`📭 POST API Error ${response.status}: Empty or unstructured error body`)
         }
 
+        // Special handling for authentication errors
+        if (response.status === 401) {
+          errorMessage = 'Authentication failed. Please sign in again.'
+        }
+
         // Handle both plain errors and our API envelope: { success, data, error, message }
         const topLevelError = (errorData && (errorData.error || errorData.message || errorData.details)) as string | undefined
         const envelopeData = errorData && errorData.data ? errorData.data : undefined
