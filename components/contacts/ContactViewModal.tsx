@@ -50,10 +50,15 @@ export function ContactViewModal({
   onClose,
   onEdit
 }: ContactViewModalProps) {
-  if (!contact) return null
-
-  // Always display freshest data from Supabase
+  // Store the freshest version of the contact that we hydrate from the API
   const [latestContact, setLatestContact] = useState<Contact | null>(contact)
+
+  // Keep the local cache in sync when the modal is opened for a different contact
+  useEffect(() => {
+    if (contact) {
+      setLatestContact(contact)
+    }
+  }, [contact])
   
   // Notes state management
   const [notes, setNotes] = useState<string>('')
@@ -134,7 +139,7 @@ export function ContactViewModal({
     }
   }, [isOpen])
 
-  const hydratedContact: Contact = latestContact || contact
+  const hydratedContact = latestContact ?? contact
   
   // NEW: Check for individual LinkedIn fields first, fallback to legacy JSON blob
   const hasLinkedInData = !!(
@@ -247,7 +252,7 @@ export function ContactViewModal({
 
   // Notes management functions
   const fetchNotes = async () => {
-    if (!hydratedContact.id) return
+    if (!hydratedContact?.id) return
     
     setNotesLoading(true)
     try {
@@ -267,7 +272,7 @@ export function ContactViewModal({
   }
 
   const saveNotes = async (content: string) => {
-    if (!hydratedContact.id) return
+    if (!hydratedContact?.id) return
     
     try {
       const response = await fetch(`/api/contacts/${hydratedContact.id}/notes`, {
@@ -291,10 +296,11 @@ export function ContactViewModal({
 
   // Fetch notes when modal opens
   useEffect(() => {
-    if (isOpen && hydratedContact.id) {
-      fetchNotes()
+    if (!isOpen || !hydratedContact?.id) {
+      return
     }
-  }, [isOpen, hydratedContact.id])
+    fetchNotes()
+  }, [isOpen, hydratedContact?.id])
 
   useEffect(() => {
     const fetchEngagementEvents = async () => {
@@ -326,6 +332,10 @@ export function ContactViewModal({
 
     fetchEngagementEvents()
   }, [isOpen, contact?.id])
+
+  if (!hydratedContact) {
+    return null
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

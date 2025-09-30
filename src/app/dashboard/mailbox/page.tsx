@@ -16,6 +16,8 @@ import {
   RefreshCw,
   Mail,
   Search,
+  Settings,
+  ChevronLeft,
   ChevronRight,
   CircleDot,
   Trash2,
@@ -143,6 +145,24 @@ const getContactDisplayName = (contact: Contact | null | undefined) => {
     return `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
   }
   return contact.email
+}
+
+const deriveNameFromEmail = (email?: string | null) => {
+  if (!email) return 'Mailbox User'
+  const local = email.split('@')[0] || ''
+  if (!local) return email
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ') || email
+}
+
+const getInitialFromText = (value?: string | null) => {
+  if (!value) return 'M'
+  const trimmed = value.trim()
+  if (!trimmed) return 'M'
+  return trimmed.charAt(0).toUpperCase()
 }
 
 export default function MailboxPage() {
@@ -434,17 +454,85 @@ export default function MailboxPage() {
   const currentEmails = mailboxTarget.folder === 'inbox' ? inboxEmails : sentEmails
   const currentCount = currentEmails.length
 
+  const primaryAccountId = emailAccounts[0]?.id || null
+  const primaryEmail = emailAccounts[0]?.email || null
+  const userDisplayName = useMemo(() => deriveNameFromEmail(primaryEmail), [primaryEmail])
+  const userInitial = useMemo(() => getInitialFromText(userDisplayName), [userDisplayName])
+  const accountCount = emailAccounts.length
+
   const getAccountLabel = (accountId: string | null) => {
     if (!accountId) return 'All accounts'
     const account = emailAccounts.find(acc => acc.id === accountId)
     return account ? account.email : 'Unknown account'
   }
 
+  const emailSections = useMemo(
+    () => {
+      const now = new Date()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+      const yesterdayStart = new Date(todayStart)
+      yesterdayStart.setDate(todayStart.getDate() - 1)
+      const weekStart = new Date(todayStart)
+      weekStart.setDate(todayStart.getDate() - 7)
+
+      const baseSections = [
+        { key: 'today', label: 'Today', emails: [] as Array<IncomingEmail | SentEmail> },
+        { key: 'yesterday', label: 'Yesterday', emails: [] as Array<IncomingEmail | SentEmail> },
+        { key: 'week', label: 'Last 7 Days', emails: [] as Array<IncomingEmail | SentEmail> },
+        { key: 'older', label: 'Earlier', emails: [] as Array<IncomingEmail | SentEmail> },
+      ]
+
+      const source = mailboxTarget.folder === 'inbox' ? inboxEmails : sentEmails
+
+      source.forEach((email) => {
+        const rawDate = mailboxTarget.folder === 'inbox'
+          ? (email as IncomingEmail).date_received
+          : (email as SentEmail).sent_at || (email as SentEmail).created_at
+
+        if (!rawDate) {
+          baseSections[3].emails.push(email)
+          return
+        }
+
+        const date = new Date(rawDate)
+
+        if (date >= todayStart) {
+          baseSections[0].emails.push(email)
+        } else if (date >= yesterdayStart && date < todayStart) {
+          baseSections[1].emails.push(email)
+        } else if (date >= weekStart) {
+          baseSections[2].emails.push(email)
+        } else {
+          baseSections[3].emails.push(email)
+        }
+      })
+
+      return baseSections.filter((section) => section.emails.length > 0)
+    },
+    [mailboxTarget.folder, inboxEmails, sentEmails]
+  )
+
   const composeTitle = composeMode === 'reply'
     ? 'Reply to email'
     : composeMode === 'forward'
     ? 'Forward email'
     : 'New email'
+
+  const openBlankCompose = () => {
+    if (!primaryAccountId) {
+      setErrorMessage('Connect an email account before composing a message.')
+      return
+    }
+
+    setComposeMode('new')
+    setComposeAccountId(primaryAccountId)
+    setComposeTo('')
+    setComposeSubject('')
+    setComposeBody('<p></p>')
+    setComposeError('')
+    setComposeOpen(true)
+  }
 
   const handleMailboxSelect = (key: string) => {
     setSelectedMailboxKey(key)
@@ -467,29 +555,61 @@ export default function MailboxPage() {
           setShowEmailContent(true) // Show email content on mobile
         }}
         className={clsx(
-          'w-full text-left rounded-lg border px-4 py-3 transition-colors',
-          isActive ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:bg-gray-50'
+          'group w-full rounded-2xl border px-4 py-4 text-left transition-all duration-200',
+          isActive
+            ? 'border-transparent bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-white shadow-lg shadow-blue-200/60'
+            : 'border-transparent bg-white/95 text-slate-900 shadow-sm hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg'
         )}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{email.subject || '(No subject)'}</p>
-            <p className="text-xs text-gray-500 truncate">{from}</p>
+        <div className="flex items-start gap-3">
+          <div
+            className={clsx(
+              'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-sm',
+              isActive
+                ? 'border border-white/50 bg-white/10 text-white'
+                : 'bg-gradient-to-br from-blue-500 to-indigo-500 text-white'
+            )}
+          >
+            {getInitialFromText(from)}
           </div>
-          <span className="text-xs text-gray-500 whitespace-nowrap">{formatDate(email.date_received)}</span>
-        </div>
-        {preview && (
-          <p className="text-xs text-gray-600 mt-2 line-clamp-2">
-            {preview}
-          </p>
-        )}
-        <div className="mt-2 flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 capitalize">
-            {email.classification_status.replace('_', ' ')}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
-            {email.email_accounts?.email || 'Unknown account'}
-          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>
+                  {email.subject || '(No subject)'}
+                </p>
+                <p className={clsx('mt-1 truncate text-xs', isActive ? 'text-white/80' : 'text-slate-500')}>
+                  {from}
+                </p>
+              </div>
+              <span className={clsx('whitespace-nowrap text-xs font-medium', isActive ? 'text-white/80' : 'text-slate-400')}>
+                {formatDate(email.date_received)}
+              </span>
+            </div>
+            {preview && (
+              <p className={clsx('mt-3 line-clamp-2 text-xs leading-relaxed', isActive ? 'text-white/80' : 'text-slate-500')}>
+                {preview}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span
+                className={clsx(
+                  'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium capitalize',
+                  isActive ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
+                )}
+              >
+                {email.classification_status.replace('_', ' ')}
+              </span>
+              <span
+                className={clsx(
+                  'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium',
+                  isActive ? 'bg-white/10 text-white/90' : 'bg-slate-100 text-slate-600'
+                )}
+              >
+                {email.email_accounts?.email || 'Unknown account'}
+              </span>
+            </div>
+          </div>
         </div>
       </button>
     )
@@ -507,29 +627,61 @@ export default function MailboxPage() {
           setShowEmailContent(true) // Show email content on mobile
         }}
         className={clsx(
-          'w-full text-left rounded-lg border px-4 py-3 transition-colors',
-          isActive ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:bg-gray-50'
+          'group w-full rounded-2xl border px-4 py-4 text-left transition-all duration-200',
+          isActive
+            ? 'border-transparent bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-white shadow-lg shadow-blue-200/60'
+            : 'border-transparent bg-white/95 text-slate-900 shadow-sm hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg'
         )}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{email.subject || '(No subject)'}</p>
-            <p className="text-xs text-gray-500 truncate">To: {to}</p>
+        <div className="flex items-start gap-3">
+          <div
+            className={clsx(
+              'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-sm',
+              isActive
+                ? 'border border-white/50 bg-white/10 text-white'
+                : 'bg-gradient-to-br from-sky-500 to-blue-500 text-white'
+            )}
+          >
+            {getInitialFromText(to)}
           </div>
-          <span className="text-xs text-gray-500 whitespace-nowrap">{formatDate(email.sent_at || email.created_at)}</span>
-        </div>
-        {preview && (
-          <p className="text-xs text-gray-600 mt-2 line-clamp-2">
-            {preview}
-          </p>
-        )}
-        <div className="mt-2 flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 capitalize">
-            {email.send_status}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
-            {email.email_accounts?.email || 'Unknown account'}
-          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>
+                  {email.subject || '(No subject)'}
+                </p>
+                <p className={clsx('mt-1 truncate text-xs', isActive ? 'text-white/80' : 'text-slate-500')}>
+                  To: {to}
+                </p>
+              </div>
+              <span className={clsx('whitespace-nowrap text-xs font-medium', isActive ? 'text-white/80' : 'text-slate-400')}>
+                {formatDate(email.sent_at || email.created_at)}
+              </span>
+            </div>
+            {preview && (
+              <p className={clsx('mt-3 line-clamp-2 text-xs leading-relaxed', isActive ? 'text-white/80' : 'text-slate-500')}>
+                {preview}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span
+                className={clsx(
+                  'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium capitalize',
+                  isActive ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-600'
+                )}
+              >
+                {email.send_status}
+              </span>
+              <span
+                className={clsx(
+                  'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium',
+                  isActive ? 'bg-white/10 text-white/90' : 'bg-slate-100 text-slate-600'
+                )}
+              >
+                {email.email_accounts?.email || 'Unknown account'}
+              </span>
+            </div>
+          </div>
         </div>
       </button>
     )
@@ -538,10 +690,11 @@ export default function MailboxPage() {
   const renderDetail = () => {
     if (!selectedItem) {
       return (
-        <div className="flex h-full items-center justify-center text-gray-500">
-          <p className="text-center">
-            <span className="block">Select an email to preview.</span>
-            <span className="mt-2 block text-sm text-gray-400">Choose a folder on the left, then pick a message to see its contents.</span>
+        <div className="flex h-full flex-col items-center justify-center bg-white text-slate-400">
+          <Mail className="mb-4 h-12 w-12" />
+          <p className="text-sm font-semibold text-slate-500">Select an email to preview</p>
+          <p className="mt-2 max-w-sm text-center text-xs text-slate-400">
+            Choose a message from the list to explore its full content, attachments, and conversation history.
           </p>
         </div>
       )
@@ -551,245 +704,267 @@ export default function MailboxPage() {
       const email = selectedItem.email
       const contact = email.email_replies?.[0]?.contacts || null
       const campaign = email.email_replies?.[0]?.campaigns || null
+      const fromName = email.from_address || 'Unknown sender'
+      const receivedAt = new Date(email.date_received).toLocaleString()
+
       return (
-        <div className="h-full overflow-auto">
-          {/* Apple Mail-inspired Toolbar */}
-          <div className="border-b border-gray-200 bg-gradient-to-b from-gray-50 to-gray-100/50 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-medium text-gray-800 truncate max-w-[200px] md:max-w-[300px] lg:max-w-[400px]">
-                    {email.subject || '(No subject)'}
-                  </h3>
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
-                      {email.classification_status.replace('_', ' ')}
-                    </span>
+        <div className="flex h-full flex-col bg-slate-50">
+          <div className="border-b border-slate-200 bg-white px-6 py-6 shadow-sm">
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="hidden h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-blue-500 text-lg font-semibold text-white shadow-sm sm:flex">
+                    {getInitialFromText(fromName)}
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28rem] text-blue-500">Incoming Message</p>
+                    <h2 className="text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
+                    <p className="text-sm text-slate-600">From {fromName}</p>
+                    {email.to_address && (
+                      <p className="text-xs text-slate-500">To {email.to_address}</p>
+                    )}
+                    <p className="text-xs text-slate-400">Received {receivedAt}</p>
                   </div>
                 </div>
+                <MailboxToolbar
+                  onReply={() => beginCompose('reply')}
+                  onForward={() => beginCompose('forward')}
+                  onNewEmail={() => beginCompose('new')}
+                  onDelete={() => deleteInboxEmail(email.id)}
+                  isInboxEmail={true}
+                  className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
+                />
               </div>
-              <MailboxToolbar
-                onReply={() => beginCompose('reply')}
-                onForward={() => beginCompose('forward')}
-                onNewEmail={() => beginCompose('new')}
-                onDelete={() => deleteInboxEmail(email.id)}
-                isInboxEmail={true}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-medium capitalize text-blue-600">
+                  {email.classification_status.replace('_', ' ')}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-600">
+                  {email.processing_status === 'completed' ? 'Processed' : `Processing: ${email.processing_status}`}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  {email.email_accounts?.email || 'Unknown account'}
+                </span>
+                {campaign && (
+                  <span className="inline-flex items-center rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-600">
+                    Campaign: {campaign.name}
+                  </span>
+                )}
+                {contact && (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-600">
+                    Contact: {getContactDisplayName(contact)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Email Header Content */}
-          <div className="border-b border-gray-200 bg-white px-8 py-6">
-            <div className="flex flex-col gap-4">
-              <div>
-                <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
-                <p className="mt-2 text-base text-gray-700 font-medium">From {email.from_address}</p>
-                {email.to_address && (
-                  <p className="text-sm text-gray-600">To {email.to_address}</p>
-                )}
-                <p className="mt-3 text-sm text-gray-500">Received {new Date(email.date_received).toLocaleString()}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
-                    Status: {email.classification_status.replace('_', ' ')}
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
-                    Processing: {email.processing_status}
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                    Account: {email.email_accounts?.email || 'Unknown'}
-                  </span>
-                  {campaign && (
-                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                      Campaign: {campaign.name}
-                    </span>
-                  )}
-                  {contact && (
-                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                      Contact: {getContactDisplayName(contact)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="px-8 py-8">
-            <div className="max-w-4xl">
+          <div className="flex-1 overflow-auto px-6 py-8">
+            <article className="mx-auto max-w-3xl rounded-3xl bg-white px-6 py-8 shadow-sm ring-1 ring-slate-100">
               {email.html_content ? (
                 <div
-                  className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:hover:text-blue-700"
+                  className="prose prose-lg max-w-none prose-headings:text-slate-900 prose-p:text-slate-600 prose-a:text-blue-600"
                   dangerouslySetInnerHTML={{ __html: email.html_content }}
                 />
               ) : (
-                <pre className="whitespace-pre-wrap text-base text-gray-700 leading-relaxed font-sans">
+                <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-slate-600">
                   {email.text_content || 'No content available'}
                 </pre>
               )}
-            </div>
+            </article>
           </div>
         </div>
       )
     }
 
     const email = selectedItem.email
+    const toDisplay = getContactDisplayName(email.contacts) || email.contacts?.email || 'Unknown recipient'
+    const sentAt = email.sent_at ? new Date(email.sent_at).toLocaleString() : null
+
     return (
-      <div className="h-full overflow-auto">
-        {/* Apple Mail-inspired Toolbar */}
-        <div className="border-b border-gray-200 bg-gradient-to-b from-gray-50 to-gray-100/50 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-gray-800 truncate max-w-[200px] md:max-w-[300px] lg:max-w-[400px]">
-                  {email.subject || '(No subject)'}
-                </h3>
-                <div className="flex items-center gap-1 text-xs text-gray-500">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
-                    {email.send_status}
-                  </span>
+      <div className="flex h-full flex-col bg-slate-50">
+        <div className="border-b border-slate-200 bg-white px-6 py-6 shadow-sm">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="hidden h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-blue-500 text-lg font-semibold text-white shadow-sm sm:flex">
+                  {getInitialFromText(toDisplay)}
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.28rem] text-sky-500">Sent Email</p>
+                  <h2 className="text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
+                  <p className="text-sm text-slate-600">From {email.email_accounts?.email || 'Unknown account'}</p>
+                  <p className="text-xs text-slate-500">To {toDisplay}</p>
+                  <p className="text-xs text-slate-400">{sentAt ? `Sent ${sentAt}` : 'Queued to send soon'}</p>
                 </div>
               </div>
+              <MailboxToolbar
+                onReply={() => beginCompose('reply')}
+                onForward={() => beginCompose('forward')}
+                onNewEmail={() => beginCompose('new')}
+                onDelete={() => {}}
+                isInboxEmail={false}
+                className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
+              />
             </div>
-            <MailboxToolbar
-              onReply={() => beginCompose('reply')}
-              onForward={() => beginCompose('forward')}
-              onNewEmail={() => beginCompose('new')}
-              onDelete={() => {}}
-              isInboxEmail={false}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-600">
+                Status: {email.send_status}
+              </span>
+              {email.campaigns && (
+                <span className="inline-flex items-center rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-600">
+                  Campaign: {email.campaigns.name}
+                </span>
+              )}
+              {email.created_at && (
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  Created {new Date(email.created_at).toLocaleString()}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Email Header Content */}
-        <div className="border-b border-gray-200 bg-white px-8 py-6">
-          <div className="flex flex-col gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900 leading-tight">{email.subject || '(No subject)'}</h2>
-              <p className="mt-2 text-base text-gray-700 font-medium">
-                Sent from {email.email_accounts?.email || 'Unknown account'}
-              </p>
-              {email.contacts && (
-                <p className="text-sm text-gray-600">
-                  To {getContactDisplayName(email.contacts)}
-                </p>
-              )}
-              <p className="mt-3 text-sm text-gray-500">
-                {email.sent_at ? `Sent ${new Date(email.sent_at).toLocaleString()}` : 'Not yet sent'}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 capitalize">
-                  Status: {email.send_status}
-                </span>
-                {email.campaigns && (
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                    Campaign: {email.campaigns.name}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="px-8 py-8">
-          <div className="max-w-4xl">
-            <pre className="whitespace-pre-wrap text-base text-gray-700 leading-relaxed font-sans">
+        <div className="flex-1 overflow-auto px-6 py-8">
+          <article className="mx-auto max-w-3xl rounded-3xl bg-white px-6 py-8 shadow-sm ring-1 ring-slate-100">
+            <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-slate-600">
               {email.content || 'No content available'}
             </pre>
-          </div>
+          </article>
         </div>
       </div>
     )
   }
 
-  // Mobile Sidebar Component
-  const renderMobileSidebar = () => (
-    <>
-      {/* Overlay */}
-      {isMobileSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
-          onClick={() => setIsMobileSidebarOpen(false)}
-        />
-      )}
-
-      {/* Mobile Sidebar */}
-      <aside className={clsx(
-        'fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 md:hidden',
-        isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      )}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Mailbox</h2>
+  const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
+    <div className="flex h-full w-full max-w-[18rem] flex-col bg-white">
+      <div className="relative border-b border-slate-100 px-6 pt-6 pb-5">
+        {onClose && (
           <Button
             variant="ghost"
-            size="sm"
-            onClick={() => setIsMobileSidebarOpen(false)}
+            size="icon"
+            className="absolute right-2 top-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            onClick={onClose}
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </Button>
+        )}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-sm font-semibold text-white shadow-sm">
+            CR
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24rem] text-slate-400">Workspace</p>
+            <h2 className="text-lg font-semibold text-slate-900">ColdReach Mailbox</h2>
+          </div>
         </div>
+      </div>
 
-        <div className="overflow-y-auto h-full pb-20 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Unified mailboxes</p>
-          <div className="mt-3 space-y-1">
+      <div className="space-y-4 border-b border-slate-100 px-6 py-5">
+        <div className="rounded-2xl bg-slate-100/80 p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-base font-semibold text-blue-600 shadow-sm">
+              {userInitial}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">{userDisplayName}</p>
+              <p className="truncate text-xs text-slate-500">{primaryEmail || 'No accounts connected'}</p>
+              <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-400">{accountCount} account{accountCount === 1 ? '' : 's'} connected</p>
+            </div>
+          </div>
+        </div>
+        <Button
+          className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:from-indigo-500 hover:via-blue-500 hover:to-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={!primaryAccountId}
+          onClick={() => {
+            openBlankCompose()
+            onClose?.()
+          }}
+        >
+          <PenSquare className="mr-2 h-4 w-4" />
+          Compose Mail
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Unified View</p>
+          <div className="mt-3 space-y-2">
             <button
               onClick={() => handleMailboxSelect('all:inbox')}
               className={clsx(
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-sm font-medium transition-all',
                 selectedMailboxKey === 'all:inbox'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
+                  ? 'border-transparent bg-gradient-to-r from-blue-600 to-indigo-500 text-white shadow-md'
+                  : 'border-transparent bg-slate-100/70 text-slate-700 hover:border-blue-200 hover:bg-white hover:text-blue-700 shadow-sm'
               )}
             >
-              <Inbox className="h-4 w-4 flex-shrink-0" />
-              <span>All Inboxes</span>
+              <span className="flex items-center gap-2">
+                <Inbox className="h-4 w-4" />
+                Inbox
+              </span>
+              <ChevronRight className={clsx('h-4 w-4 transition-transform', selectedMailboxKey === 'all:inbox' && 'translate-x-0.5')} />
             </button>
             <button
               onClick={() => handleMailboxSelect('all:outbox')}
               className={clsx(
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-sm font-medium transition-all',
                 selectedMailboxKey === 'all:outbox'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
+                  ? 'border-transparent bg-gradient-to-r from-blue-600 to-indigo-500 text-white shadow-md'
+                  : 'border-transparent bg-slate-100/70 text-slate-700 hover:border-blue-200 hover:bg-white hover:text-blue-700 shadow-sm'
               )}
             >
-              <Send className="h-4 w-4 flex-shrink-0" />
-              <span>All Sent</span>
+              <span className="flex items-center gap-2">
+                <Send className="h-4 w-4" />
+                Sent Mail
+              </span>
+              <ChevronRight className={clsx('h-4 w-4 transition-transform', selectedMailboxKey === 'all:outbox' && 'translate-x-0.5')} />
             </button>
           </div>
+        </div>
 
-          <div className="mt-6 space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Accounts</p>
+          <div className="mt-4 space-y-4">
             {emailAccounts.map((account) => {
               const isActiveInbox = selectedMailboxKey === `${account.id}:inbox`
               const isActiveSent = selectedMailboxKey === `${account.id}:outbox`
               return (
-                <div key={account.id}>
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    <CircleDot className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                    <span className="truncate">{account.email}</span>
+                <div key={account.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                    <CircleDot className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="truncate" title={account.email}>{account.email}</span>
                   </div>
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       onClick={() => handleMailboxSelect(`${account.id}:inbox`)}
                       className={clsx(
-                        'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
-                        isActiveInbox ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                        'flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-all',
+                        isActiveInbox
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-500 text-white shadow'
+                          : 'bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-700'
                       )}
                     >
                       <span className="flex items-center gap-2">
-                        <Inbox className="h-4 w-4 flex-shrink-0" />
-                        <span>Inbox</span>
+                        <Inbox className="h-3.5 w-3.5" />
+                        Inbox
                       </span>
-                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                      <ChevronRight className="h-3 w-3" />
                     </button>
                     <button
                       onClick={() => handleMailboxSelect(`${account.id}:outbox`)}
                       className={clsx(
-                        'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
-                        isActiveSent ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                        'flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-all',
+                        isActiveSent
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-500 text-white shadow'
+                          : 'bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-700'
                       )}
                     >
                       <span className="flex items-center gap-2">
-                        <Send className="h-4 w-4 flex-shrink-0" />
-                        <span>Sent</span>
+                        <Send className="h-3.5 w-3.5" />
+                        Sent
                       </span>
-                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                      <ChevronRight className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
@@ -797,204 +972,185 @@ export default function MailboxPage() {
             })}
           </div>
         </div>
+      </div>
+    </div>
+  )
+
+  const renderMobileSidebar = () => (
+    <>
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm md:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      <aside
+        className={clsx(
+          'fixed top-0 left-0 z-50 h-full w-64 transform border-r border-slate-200 bg-white shadow-2xl transition-transform duration-300 md:hidden',
+          isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <SidebarContent onClose={() => setIsMobileSidebarOpen(false)} />
       </aside>
     </>
   )
 
   return (
     <>
-      <div className="flex h-full bg-gray-50 max-w-[95vw] mx-auto">
       {renderMobileSidebar()}
-      <aside className="hidden md:flex w-44 lg:w-48 xl:w-52 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
-        <div className="p-3 xl:p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Unified mailboxes</p>
-          <div className="mt-3 space-y-1">
-            <button
-              onClick={() => handleMailboxSelect('all:inbox')}
-              className={clsx(
-                'flex w-full items-center gap-2 rounded-lg px-2 xl:px-3 py-2 text-sm font-medium transition-colors',
-                selectedMailboxKey === 'all:inbox'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
-              )}
-            >
-              <Inbox className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">All Inboxes</span>
-            </button>
-            <button
-              onClick={() => handleMailboxSelect('all:outbox')}
-              className={clsx(
-                'flex w-full items-center gap-2 rounded-lg px-2 xl:px-3 py-2 text-sm font-medium transition-colors',
-                selectedMailboxKey === 'all:outbox'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
-              )}
-            >
-              <Send className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">All Sent</span>
-            </button>
-          </div>
+      <div className="flex h-full min-h-[720px] w-full bg-slate-100">
+        <aside className="hidden h-full flex-shrink-0 border-r border-slate-200 bg-white md:flex md:w-56 lg:w-64">
+          <SidebarContent />
+        </aside>
 
-          <div className="mt-6 space-y-4">
-            {emailAccounts.map((account) => {
-              const isActiveInbox = selectedMailboxKey === `${account.id}:inbox`
-              const isActiveSent = selectedMailboxKey === `${account.id}:outbox`
-              return (
-                <div key={account.id}>
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    <CircleDot className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                    <span className="truncate" title={account.email}>{account.email}</span>
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    <button
-                      onClick={() => handleMailboxSelect(`${account.id}:inbox`)}
-                      className={clsx(
-                        'flex w-full items-center justify-between rounded-lg px-2 xl:px-3 py-2 text-sm transition-colors',
-                        isActiveInbox ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-                      )}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <header className="bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-white shadow-lg">
+            <div className="flex flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsMobileSidebarOpen(true)}
+                    className="md:hidden text-white hover:bg-white/10"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                  {showEmailContent && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowEmailContent(false)}
+                      className="md:hidden text-white hover:bg-white/10"
                     >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <Inbox className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Inbox</span>
-                      </span>
-                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
-                    </button>
-                    <button
-                      onClick={() => handleMailboxSelect(`${account.id}:outbox`)}
-                      className={clsx(
-                        'flex w-full items-center justify-between rounded-lg px-2 xl:px-3 py-2 text-sm transition-colors',
-                        isActiveSent ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-                      )}
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <Send className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Sent</span>
-                      </span>
-                      <ChevronRight className="h-4 w-4 flex-shrink-0" />
-                    </button>
+                      <ChevronLeft className="h-5 w-5" />
+                    </Button>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2 text-white/80">
+                      <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25rem]">ColdReach</span>
+                      <span className="hidden text-sm sm:inline">Unified Mailbox</span>
+                    </div>
+                    <h1 className="mt-2 text-2xl font-semibold leading-tight sm:text-3xl">Mailbox</h1>
+                    <p className="text-sm text-white/90">
+                      {mailboxTarget.folder === 'inbox' ? 'Inbox' : 'Sent'} • {getAccountLabel(mailboxTarget.accountId)} • {currentCount} message{currentCount !== 1 ? 's' : ''}
+                    </p>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="border-b border-gray-200 bg-white px-4 md:px-6 py-4">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              {/* Mobile menu button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsMobileSidebarOpen(true)}
-                className="md:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-
-              {/* Mobile back button for email content */}
-              {showEmailContent && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowEmailContent(false)}
-                  className="md:hidden"
-                >
-                  <ChevronRight className="h-4 w-4 rotate-180" />
-                </Button>
-              )}
-
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900">Mailbox</h1>
-                <p className="text-sm text-gray-600">
-                  {mailboxTarget.folder === 'inbox' ? 'Inbox' : 'Sent'} • {getAccountLabel(mailboxTarget.accountId)} • {currentCount} message{currentCount !== 1 ? 's' : ''}
-                </p>
+                <div className="flex items-center gap-2">
+                  {mailboxTarget.folder === 'inbox' && (
+                    <Button
+                      onClick={handleSync}
+                      disabled={syncing}
+                      variant="outline"
+                      className="rounded-2xl border-white/40 bg-white/20 text-sm font-semibold text-white hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <RefreshCw className={clsx('mr-2 h-4 w-4', syncing && 'animate-spin')} />
+                      Sync
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="hidden text-white hover:bg-white/10 sm:flex"
+                  >
+                    <Settings className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {mailboxTarget.folder === 'inbox' && (
-                <Button onClick={handleSync} disabled={syncing} variant="outline" size="sm">
-                  <RefreshCw className={clsx('h-4 w-4', syncing && 'animate-spin')} />
-                  <span className="ml-2 hidden sm:inline">Sync</span>
-                </Button>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" />
+                  <Input
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder={mailboxTarget.folder === 'inbox' ? 'Search incoming mail…' : 'Search sent mail…'}
+                    className="h-11 rounded-2xl border border-white/30 bg-white/20 pl-11 text-white placeholder:text-white/70 focus-visible:ring-white/70"
+                  />
+                </div>
+                {mailboxTarget.folder === 'inbox' && (
+                  <Select value={classificationFilter} onValueChange={(value) => setClassificationFilter(value as typeof classificationFilter)}>
+                    <SelectTrigger className="h-11 w-full rounded-2xl border-none bg-white text-sm font-medium text-slate-700 shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500 sm:w-60">
+                      <SelectValue placeholder="All classifications" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All classifications</SelectItem>
+                      <SelectItem value="unclassified">Unclassified</SelectItem>
+                      <SelectItem value="human_reply">Replies</SelectItem>
+                      <SelectItem value="bounce">Bounces</SelectItem>
+                      <SelectItem value="auto_reply">Auto replies</SelectItem>
+                      <SelectItem value="spam">Spam</SelectItem>
+                      <SelectItem value="unsubscribe">Unsubscribes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {syncStatus && (
+                <div className="rounded-2xl bg-white/15 px-4 py-2 text-xs font-medium text-white/90">
+                  {syncStatus}
+                </div>
               )}
             </div>
-          </div>
-          {syncStatus && (
-            <div className="mt-2 text-xs text-blue-600">{syncStatus}</div>
+          </header>
+
+          {errorMessage && (
+            <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-sm font-medium text-red-700">
+              {errorMessage}
+            </div>
           )}
-          <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={mailboxTarget.folder === 'inbox' ? 'Search incoming mail…' : 'Search sent mail…'}
-                className="pl-9"
-              />
-            </div>
-            {mailboxTarget.folder === 'inbox' && (
-              <Select value={classificationFilter} onValueChange={(value) => setClassificationFilter(value as typeof classificationFilter)}>
-                <SelectTrigger className="w-full lg:w-52">
-                  <SelectValue placeholder="All classifications" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All classifications</SelectItem>
-                  <SelectItem value="unclassified">Unclassified</SelectItem>
-                  <SelectItem value="human_reply">Replies</SelectItem>
-                  <SelectItem value="bounce">Bounces</SelectItem>
-                  <SelectItem value="auto_reply">Auto replies</SelectItem>
-                  <SelectItem value="spam">Spam</SelectItem>
-                  <SelectItem value="unsubscribe">Unsubscribes</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        </header>
 
-        {errorMessage && (
-          <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-sm text-red-700">
-            {errorMessage}
-          </div>
-        )}
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            <section
+              className={clsx(
+                'relative flex-shrink-0 border-r border-slate-200 bg-slate-100/80',
+                'w-full md:w-[300px] lg:w-[320px] xl:w-[340px]',
+                showEmailContent ? 'hidden md:flex' : 'flex'
+              )}
+            >
+              <div className="flex w-full flex-col">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white/60 to-transparent" />
+                {loadingList ? (
+                  <div className="flex h-full items-center justify-center text-slate-400">
+                    <RefreshCw className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : currentEmails.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center px-6 text-center text-slate-400">
+                    <Mail className="h-12 w-12" />
+                    <p className="mt-3 text-sm font-semibold">No email yet</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Adjust your filters or sync a connected account to see messages here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex-1 space-y-6 overflow-y-auto px-4 py-6">
+                    {emailSections.map((section) => (
+                      <div key={section.key} className="space-y-3">
+                        <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{section.label}</p>
+                        <div className="space-y-3">
+                          {mailboxTarget.folder === 'inbox'
+                            ? (section.emails as IncomingEmail[]).map((email) => renderInboxListItem(email))
+                            : (section.emails as SentEmail[]).map((email) => renderSentListItem(email))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Email List - Responsive width */}
-          <section className={clsx(
-            'bg-gray-50 overflow-y-auto flex-shrink-0 border-r border-gray-200',
-            'w-full md:w-[42%] lg:w-[38%] xl:w-[32%] md:min-w-[320px] md:max-w-[480px]',
-            showEmailContent ? 'hidden md:block' : 'block'
-          )}>
-            {loadingList ? (
-              <div className="flex h-full items-center justify-center text-gray-500">
-                <RefreshCw className="h-6 w-6 animate-spin" />
-              </div>
-            ) : currentEmails.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center text-gray-500">
-                <Mail className="h-10 w-10" />
-                <p className="mt-3 text-sm">No emails found</p>
-              </div>
-            ) : (
-              <div className="space-y-2 p-4">
-                {mailboxTarget.folder === 'inbox'
-                  ? inboxEmails.map((email) => renderInboxListItem(email))
-                  : sentEmails.map((email) => renderSentListItem(email))}
-              </div>
-            )}
-          </section>
+            <section
+              className={clsx(
+                'min-w-0 flex-1 bg-white',
+                showEmailContent ? 'block' : 'hidden md:block'
+              )}
+            >
+              {renderDetail()}
+            </section>
           </div>
         </div>
-
-      {/* Email Content - Responsive width for better reading experience */}
-      <section className={clsx(
-        'bg-white min-w-0',
-        'flex-1',
-        showEmailContent ? 'block' : 'hidden md:block'
-      )}>
-        {renderDetail()}
-      </section>
       </div>
 
       <Dialog
@@ -1004,7 +1160,7 @@ export default function MailboxPage() {
           if (!open) setComposeError('')
         }}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl rounded-3xl">
           <DialogHeader>
             <DialogTitle>{composeTitle}</DialogTitle>
             {composeAccountId && (

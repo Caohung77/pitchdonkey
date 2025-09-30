@@ -21,7 +21,6 @@ import { BulkEnrichmentProgressModal } from './BulkEnrichmentProgressModal'
 import { BulkTagManagementModal } from './BulkTagManagementModal'
 import { BulkListManagementModal } from './BulkListManagementModal'
 import { EnrichmentBadges } from './EnrichmentBadges'
-import { ContactCard } from './ContactCard'
 import { Pagination } from '@/components/ui/pagination'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { useToast } from '@/components/ui/toast'
@@ -522,33 +521,13 @@ export function ContactsList({
       />
 
       {/* Contacts grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {state.contacts.map((contact) => (
-          <ContactCard
-            key={contact.id}
-            contact={contact}
-            isSelected={selectedContacts.includes(contact.id)}
-            onSelect={(contactId, selected) => handleSelectContact(contactId, selected)}
-            onClick={handleView}
-            onEdit={handleEdit}
-            onDelete={handleDeleteConfirm}
-            onAddTag={handleAddTag}
-          />
-        ))}
-            const html = (contact as any).notes as string | undefined
-            if (!html) return false
-            const text = html
-              .replace(/<[^>]*>/g, ' ')
-              .replace(/&nbsp;/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-            return text.length > 0
-          })()
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {state.contacts.map((contact) => {
           const formatName = () => {
             const firstName = contact.first_name || ''
             const lastName = contact.last_name || ''
             const fullName = `${firstName} ${lastName}`.trim()
-            
+
             if (fullName) return fullName
             const companyName = parseCompanyName(contact.company)
             if (companyName && companyName.trim()) return companyName.trim()
@@ -561,7 +540,7 @@ export function ContactsList({
             const fullName = `${firstName} ${lastName}`.trim()
             const companyName = parseCompanyName(contact.company)
             const isCompanyAsTitle = !fullName && companyName && companyName.trim()
-            
+
             if (isCompanyAsTitle && contact.position) return contact.position
             if (contact.position && companyName) return `${contact.position} at ${companyName}`
             if (contact.position) return contact.position
@@ -572,44 +551,46 @@ export function ContactsList({
           const listsCount = contact.lists?.length || 0
           const tagsCount = contact.tags?.length || 0
 
+          const noteHtml = (contact as any).notes as string | undefined
+          const noteHasContent = (() => {
+            if (!noteHtml) return false
+            const plainText = noteHtml
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+            return plainText.length > 0
+          })()
+
           return (
-            <Card 
-              key={contact.id} 
-              className={`hover:shadow-lg transition-all duration-200 border-0 shadow-sm transform hover:scale-[1.02] cursor-pointer ${
-                selectedContacts.includes(contact.id) 
-                  ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' 
+            <Card
+              key={contact.id}
+              className={`cursor-pointer transform border-0 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${
+                selectedContacts.includes(contact.id)
+                  ? 'bg-blue-50/30 ring-2 ring-blue-500 shadow-blue-100'
                   : 'bg-white hover:bg-gray-50/50'
               }`}
             >
               <CardContent className="p-4" onClick={() => handleView(contact)}>
-                {/* Header Row */}
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    {/* Checkbox */}
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
                     <input
                       type="checkbox"
                       checked={selectedContacts.includes(contact.id)}
                       onChange={(e) => handleSelectContact(contact.id, e.target.checked)}
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-                    
-                    {/* Contact Info */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-base font-semibold text-gray-900 truncate mb-1">
-                        {formatName()}
-                      </h3>
-                      
-                      <p className="text-sm text-gray-600 truncate mb-2">{contact.email}</p>
-                      
-                      {/* Company/Position */}
+
+                    <div className="min-w-0 flex-1">
+                      <h3 className="mb-1 truncate text-base font-semibold text-gray-900">{formatName()}</h3>
+                      <p className="mb-2 truncate text-sm text-gray-600">{contact.email}</p>
                       {getCompanyPosition() && (
-                        <p className="text-sm text-gray-600 truncate">{getCompanyPosition()}</p>
+                        <p className="truncate text-sm text-gray-600">{getCompanyPosition()}</p>
                       )}
                     </div>
                   </div>
-                  
-                  {/* Action Buttons */}
+
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
@@ -618,12 +599,11 @@ export function ContactsList({
                         e.stopPropagation()
                         handleEdit(contact)
                       }}
-                      className="h-7 w-7 p-0 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                      className="h-7 w-7 p-0 hover:bg-blue-100 hover:text-blue-700"
                       title="Edit contact"
                     >
                       <Edit className="h-3.5 w-3.5" />
                     </Button>
-                    
                     <Button
                       variant="ghost"
                       size="sm"
@@ -631,18 +611,17 @@ export function ContactsList({
                         e.stopPropagation()
                         handleAddTag(contact.id)
                       }}
-                      className="h-7 w-7 p-0 hover:bg-green-100 hover:text-green-700 transition-colors"
+                      className="h-7 w-7 p-0 hover:bg-green-100 hover:text-green-700"
                       title="Add tag"
                     >
                       <Tag className="h-3.5 w-3.5" />
                     </Button>
-                    
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0 hover:bg-gray-100 transition-colors"
+                          className="h-7 w-7 p-0 hover:bg-gray-100"
                           title="More actions"
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -650,32 +629,32 @@ export function ContactsList({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation()
                             handleEdit(contact)
                           }}
                         >
-                          <Edit className="h-4 w-4 mr-2" />
+                          <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation()
                             handleAddTag(contact.id)
                           }}
                         >
-                          <Tag className="h-4 w-4 mr-2" />
+                          <Tag className="mr-2 h-4 w-4" />
                           Add Tag
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation()
                             handleDelete(contact.id)
                           }}
                           className="text-red-600 focus:text-red-700"
                         >
-                          <Trash2 className="h-4 w-4 mr-2" />
+                          <Trash2 className="mr-2 h-4 w-4" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -683,76 +662,65 @@ export function ContactsList({
                   </div>
                 </div>
 
-                {/* Meta Information Row */}
-                <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    {/* Status */}
-                    <Badge 
-                      variant="secondary" 
+                    <Badge
+                      variant="secondary"
                       className={`text-xs font-medium px-2 py-1 ${
-                        contact.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' :
-                        contact.status === 'unsubscribed' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                        contact.status === 'bounced' ? 'bg-red-100 text-red-700 border-red-200' :
-                        'bg-gray-100 text-gray-700 border-gray-200'
+                        contact.status === 'active'
+                          ? 'bg-green-100 text-green-700 border-green-200'
+                          : contact.status === 'unsubscribed'
+                            ? 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                            : contact.status === 'bounced'
+                              ? 'bg-red-100 text-red-700 border-red-200'
+                              : 'bg-gray-100 text-gray-700 border-gray-200'
                       }`}
                     >
                       {contact.status}
                     </Badge>
-                    
-                    {/* Enrichment Badges */}
                     <EnrichmentBadges contact={contact} size="sm" />
-                    {/* Notes badge */}
-                    {(() => {
-                      const html = (contact as any).notes as string | undefined
-                      if (!html) return null
-                      const text = html
-                        .replace(/<[^>]*>/g, ' ')
-                        .replace(/&nbsp;/g, ' ')
-                        .replace(/\s+/g, ' ')
-                        .trim()
-                      if (text.length === 0) return null
-                      return (
-                        <Badge variant="secondary" className="text-xs font-medium px-2 py-1 bg-yellow-100 text-yellow-700 border-yellow-200 flex items-center gap-1">
-                          <FileText className="h-3 w-3" />
-                          Note
-                        </Badge>
-                      )
-                    })()}
+                    {noteHasContent && (
+                      <Badge
+                        variant="secondary"
+                        className="flex items-center gap-1 border-yellow-200 bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-700"
+                      >
+                        <FileText className="h-3 w-3" />
+                        Note
+                      </Badge>
+                    )}
                   </div>
-                  
-                  {/* Counts */}
+
                   <div className="flex items-center gap-3 text-xs text-gray-500">
                     {tagsCount > 0 && (
-                      <div className="flex items-center gap-1">
+                      <span className="flex items-center gap-1">
                         <Tag className="h-3 w-3" />
                         <span>{tagsCount}</span>
-                      </div>
+                      </span>
                     )}
                     {listsCount > 0 && (
-                      <div className="flex items-center gap-1">
+                      <span className="flex items-center gap-1">
                         <List className="h-3 w-3" />
                         <span>{listsCount}</span>
-                      </div>
+                      </span>
                     )}
                   </div>
                 </div>
 
-                {/* Tags */}
                 {contact.tags && contact.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-2">
+                  <div className="mb-2 flex flex-wrap gap-1">
                     {contact.tags.slice(0, 3).map((tag: string, index: number) => (
-                      <Badge 
-                        key={index} 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors"
+                      <Badge
+                        key={`${contact.id}-tag-${index}`}
+                        variant="outline"
+                        className="border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
                       >
                         {tag}
                       </Badge>
                     ))}
                     {contact.tags.length > 3 && (
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 border-gray-300"
+                      <Badge
+                        variant="outline"
+                        className="border-gray-300 bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
                       >
                         +{contact.tags.length - 3}
                       </Badge>
@@ -760,23 +728,22 @@ export function ContactsList({
                   </div>
                 )}
 
-                {/* Lists */}
                 {contact.lists && contact.lists.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {contact.lists.slice(0, 3).map((listName: string, index: number) => (
-                      <Badge 
-                        key={index} 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-200 hover:bg-green-100 transition-colors"
+                      <Badge
+                        key={`${contact.id}-list-${index}`}
+                        variant="outline"
+                        className="border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-700 hover:bg-green-100"
                       >
-                        <List className="h-3 w-3 mr-1" />
+                        <List className="mr-1 h-3 w-3" />
                         {listName}
                       </Badge>
                     ))}
                     {contact.lists.length > 3 && (
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 border-gray-300"
+                      <Badge
+                        variant="outline"
+                        className="border-gray-300 bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
                       >
                         +{contact.lists.length - 3} lists
                       </Badge>
