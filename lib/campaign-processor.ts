@@ -313,7 +313,49 @@ export class CampaignProcessor {
         }
         emailAccount = emailAccounts[0]
       }
-      console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)      
+      console.log(`📧 Using email account: ${emailAccount.email} (${emailAccount.provider})`)
+
+      // ============================================================================
+      // WARMUP & DAILY LIMIT CHECKING
+      // ============================================================================
+
+      // Check if email account has warmup enabled
+      let warmupPlan = null
+      let effectiveDailyLimit = emailAccount.daily_send_limit || 50
+
+      if (emailAccount.warmup_enabled && emailAccount.warmup_plan_id) {
+        // Fetch active warmup plan
+        const { data: warmupData } = await supabase
+          .from('warmup_plans')
+          .select('*')
+          .eq('id', emailAccount.warmup_plan_id)
+          .eq('status', 'active')
+          .single()
+
+        if (warmupData) {
+          warmupPlan = warmupData
+          // Warmup limit takes precedence over account limit
+          effectiveDailyLimit = Math.min(effectiveDailyLimit, warmupPlan.daily_target || 5)
+
+          console.log(`🔥 WARMUP ACTIVE - Week ${warmupPlan.current_week}/${warmupPlan.total_weeks}`)
+          console.log(`   Daily limit: ${warmupPlan.daily_target}/day (warmup-enforced)`)
+          console.log(`   Total sent: ${warmupPlan.total_sent} emails`)
+          console.log(`   Today sent: ${emailAccount.current_daily_sent || 0}/${warmupPlan.daily_target}`)
+        }
+      }
+
+      // Check if daily limit already reached
+      const currentDailySent = emailAccount.current_daily_sent || 0
+      const remainingToday = effectiveDailyLimit - currentDailySent
+
+      if (remainingToday <= 0) {
+        console.log(`❌ Daily limit reached for ${emailAccount.email}`)
+        console.log(`   Sent today: ${currentDailySent}/${effectiveDailyLimit}`)
+        console.log(`   Skipping campaign ${campaign.id} - will retry tomorrow after counter resets`)
+        return // Skip this batch - daily quota exhausted
+      }
+
+      console.log(`✅ Daily quota check: ${currentDailySent}/${effectiveDailyLimit} sent today, ${remainingToday} remaining`)
 
       // Check batch scheduling before processing
       const batchDelayMs = this.getBatchDelayMs()
@@ -330,10 +372,19 @@ export class CampaignProcessor {
         }
       }
 
-      // Get batch size from send_settings (this is the daily batch limit)
-      const batchSize = campaign.send_settings?.rate_limiting?.batch_size || campaign.daily_send_limit || 50
+      // Get requested batch size from campaign settings
+      const requestedBatchSize = campaign.send_settings?.rate_limiting?.batch_size || campaign.daily_send_limit || 50
+
+      // Enforce effective daily limit (warmup or account limit, whichever is lower)
+      // AND respect remaining quota for today
+      const batchSize = Math.min(requestedBatchSize, remainingToday)
+
       console.log(`🚀 Starting campaign processing for ${campaign.id}`)
-      console.log(`📊 Daily batch size: ${batchSize}`)
+      console.log(`📊 Batch size calculation:`)
+      console.log(`   - Requested: ${requestedBatchSize} emails`)
+      console.log(`   - Effective daily limit: ${effectiveDailyLimit} emails/day ${warmupPlan ? '(warmup-enforced)' : ''}`)
+      console.log(`   - Remaining today: ${remainingToday} emails`)
+      console.log(`   - Final batch size: ${batchSize} emails`)
       console.log(`📊 Campaign send_settings:`, JSON.stringify(campaign.send_settings?.rate_limiting, null, 2))
 
       // Set start date if not already set
@@ -570,6 +621,44 @@ export class CampaignProcessor {
               message_id: result.messageId || trackingId,
               tracking_pixel_id: trackingPixelId || null
             })
+
+            // ============================================================================
+            // EMAIL TRACKING: Increment counters after successful send
+            // ============================================================================
+
+            try {
+              // Update email_accounts counters (both daily and lifetime)
+              await supabase
+                .from('email_accounts')
+                .update({
+                  current_daily_sent: supabase.raw('COALESCE(current_daily_sent, 0) + 1'),
+                  total_emails_sent: supabase.raw('COALESCE(total_emails_sent, 0) + 1')
+                })
+                .eq('id', emailAccount.id)
+
+              console.log(`📊 Updated email account counters for ${emailAccount.email}`)
+
+              // If warmup is active, update warmup plan counters
+              if (warmupPlan) {
+                await supabase
+                  .from('warmup_plans')
+                  .update({
+                    actual_sent_today: supabase.raw('COALESCE(actual_sent_today, 0) + 1'),
+                    total_sent: supabase.raw('COALESCE(total_sent, 0) + 1')
+                  })
+                  .eq('id', warmupPlan.id)
+
+                console.log(`🔥 Updated warmup plan counters (Plan: ${warmupPlan.id})`)
+
+                // Check if warmup should progress to next week
+                const { WarmupSystem } = await import('./warmup-system')
+                const warmupSystem = new WarmupSystem(supabase)
+                await warmupSystem.checkWarmupProgression(warmupPlan.id)
+              }
+            } catch (trackingError) {
+              console.error('⚠️ Failed to update email tracking counters:', trackingError)
+              // Don't fail the email send if tracking update fails
+            }
 
             // Update campaign total_contacts if not set and trigger UI refresh
             await supabase

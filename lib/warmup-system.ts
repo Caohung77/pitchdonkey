@@ -142,13 +142,13 @@ export class WarmupSystem {
   private redis: any
   private notificationService: any
 
-  // Predefined warmup strategies
+  // Predefined warmup strategies (Updated: Max 50 emails/day limit)
   private readonly WARMUP_STRATEGIES = {
     conservative: {
-      total_weeks: 4,
+      total_weeks: 6, // Extended to 6 weeks for safer warmup
       max_daily_increase: 3,
       min_daily_volume: 5,
-      max_daily_volume: 30,
+      max_daily_volume: 50, // Changed from 30 to respect 50/day max
       target_open_rate: 0.25,
       target_reply_rate: 0.05,
       max_bounce_rate: 0.03,
@@ -161,10 +161,10 @@ export class WarmupSystem {
       auto_pause_on_issues: true
     },
     moderate: {
-      total_weeks: 3,
+      total_weeks: 4, // Extended to 4 weeks
       max_daily_increase: 5,
       min_daily_volume: 8,
-      max_daily_volume: 50,
+      max_daily_volume: 50, // Already compliant
       target_open_rate: 0.20,
       target_reply_rate: 0.03,
       max_bounce_rate: 0.05,
@@ -177,10 +177,10 @@ export class WarmupSystem {
       auto_pause_on_issues: true
     },
     aggressive: {
-      total_weeks: 2,
-      max_daily_increase: 8,
+      total_weeks: 3, // Extended to 3 weeks
+      max_daily_increase: 10,
       min_daily_volume: 15,
-      max_daily_volume: 80,
+      max_daily_volume: 50, // Changed from 80 to respect 50/day max
       target_open_rate: 0.15,
       target_reply_rate: 0.02,
       max_bounce_rate: 0.07,
@@ -194,13 +194,13 @@ export class WarmupSystem {
     }
   }
 
-  // Warmup schedules by strategy
+  // Warmup schedules by strategy (Updated: Milestone-based progression, 50/day max)
   private readonly WARMUP_SCHEDULES = {
     conservative: [
       {
         week: 1,
         daily_target: 5,
-        cumulative_target: 35,
+        cumulative_target: 35, // Milestone: Send 35 total emails to unlock Week 2
         focus_areas: ['Domain reputation', 'Basic deliverability'],
         content_types: ['introduction', 'follow_up'],
         recipient_types: ['internal', 'partner'],
@@ -209,7 +209,7 @@ export class WarmupSystem {
       {
         week: 2,
         daily_target: 10,
-        cumulative_target: 105,
+        cumulative_target: 105, // Milestone: Send 105 total emails to unlock Week 3
         focus_areas: ['Engagement building', 'Content variation'],
         content_types: ['introduction', 'follow_up', 'newsletter'],
         recipient_types: ['internal', 'partner', 'existing_customer'],
@@ -218,7 +218,7 @@ export class WarmupSystem {
       {
         week: 3,
         daily_target: 20,
-        cumulative_target: 245,
+        cumulative_target: 245, // Milestone: Send 245 total emails to unlock Week 4
         focus_areas: ['Volume scaling', 'Prospect outreach'],
         content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
         recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
@@ -227,18 +227,36 @@ export class WarmupSystem {
       {
         week: 4,
         daily_target: 30,
-        cumulative_target: 455,
-        focus_areas: ['Full capacity', 'Campaign readiness'],
+        cumulative_target: 455, // Milestone: Send 455 total emails to unlock Week 5
+        focus_areas: ['Increased volume', 'Campaign diversification'],
         content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
         recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
         success_criteria: { min_delivery_rate: 0.88, max_bounce_rate: 0.05, max_spam_rate: 0.004 }
+      },
+      {
+        week: 5,
+        daily_target: 40,
+        cumulative_target: 735, // Milestone: Send 735 total emails to unlock Week 6
+        focus_areas: ['Near-full capacity', 'Reputation solidification'],
+        content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
+        recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
+        success_criteria: { min_delivery_rate: 0.86, max_bounce_rate: 0.06, max_spam_rate: 0.005 }
+      },
+      {
+        week: 6,
+        daily_target: 50,
+        cumulative_target: 1085, // Milestone: Send 1085 total emails to complete warmup
+        focus_areas: ['Full capacity', 'Campaign readiness'],
+        content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
+        recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
+        success_criteria: { min_delivery_rate: 0.85, max_bounce_rate: 0.07, max_spam_rate: 0.006 }
       }
     ],
     moderate: [
       {
         week: 1,
         daily_target: 8,
-        cumulative_target: 56,
+        cumulative_target: 56, // Milestone: Send 56 total emails to unlock Week 2
         focus_areas: ['Rapid reputation building', 'Engagement focus'],
         content_types: ['introduction', 'follow_up', 'newsletter'],
         recipient_types: ['internal', 'partner', 'existing_customer'],
@@ -246,8 +264,8 @@ export class WarmupSystem {
       },
       {
         week: 2,
-        daily_target: 25,
-        cumulative_target: 231,
+        daily_target: 20,
+        cumulative_target: 196, // Milestone: Send 196 total emails to unlock Week 3
         focus_areas: ['Volume scaling', 'Content diversification'],
         content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
         recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
@@ -255,19 +273,28 @@ export class WarmupSystem {
       },
       {
         week: 3,
-        daily_target: 50,
-        cumulative_target: 581,
-        focus_areas: ['Full capacity', 'Campaign optimization'],
+        daily_target: 35,
+        cumulative_target: 441, // Milestone: Send 441 total emails to unlock Week 4
+        focus_areas: ['Accelerated scaling', 'Campaign optimization'],
         content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
         recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
-        success_criteria: { min_delivery_rate: 0.85, max_bounce_rate: 0.07, max_spam_rate: 0.005 }
+        success_criteria: { min_delivery_rate: 0.85, max_bounce_rate: 0.06, max_spam_rate: 0.004 }
+      },
+      {
+        week: 4,
+        daily_target: 50,
+        cumulative_target: 791, // Milestone: Send 791 total emails to complete warmup
+        focus_areas: ['Full capacity', 'Campaign readiness'],
+        content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
+        recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
+        success_criteria: { min_delivery_rate: 0.82, max_bounce_rate: 0.07, max_spam_rate: 0.005 }
       }
     ],
     aggressive: [
       {
         week: 1,
         daily_target: 15,
-        cumulative_target: 105,
+        cumulative_target: 105, // Milestone: Send 105 total emails to unlock Week 2
         focus_areas: ['Fast reputation building', 'High volume'],
         content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
         recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
@@ -275,12 +302,21 @@ export class WarmupSystem {
       },
       {
         week: 2,
-        daily_target: 80,
-        cumulative_target: 665,
+        daily_target: 30,
+        cumulative_target: 315, // Milestone: Send 315 total emails to unlock Week 3
+        focus_areas: ['Rapid scaling', 'Volume increase'],
+        content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
+        recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
+        success_criteria: { min_delivery_rate: 0.82, max_bounce_rate: 0.07, max_spam_rate: 0.005 }
+      },
+      {
+        week: 3,
+        daily_target: 50,
+        cumulative_target: 665, // Milestone: Send 665 total emails to complete warmup
         focus_areas: ['Maximum capacity', 'Campaign readiness'],
         content_types: ['introduction', 'follow_up', 'newsletter', 'promotional'],
         recipient_types: ['internal', 'partner', 'existing_customer', 'prospect'],
-        success_criteria: { min_delivery_rate: 0.82, max_bounce_rate: 0.08, max_spam_rate: 0.007 }
+        success_criteria: { min_delivery_rate: 0.80, max_bounce_rate: 0.08, max_spam_rate: 0.006 }
       }
     ]
   }
@@ -1072,6 +1108,83 @@ export class WarmupSystem {
     if (plan.metrics.health_score < 50) issues.push('Low health score')
 
     return issues
+  }
+
+  /**
+   * Check if warmup should progress to next week based on total emails sent (milestone-based)
+   * This is called after each email is sent from the campaign processor
+   */
+  async checkWarmupProgression(warmupPlanId: string): Promise<void> {
+    try {
+      const { data: plan, error } = await this.supabase
+        .from('warmup_plans')
+        .select('*')
+        .eq('id', warmupPlanId)
+        .single()
+
+      if (error || !plan || plan.status !== 'active') return
+
+      const schedule = this.WARMUP_SCHEDULES[plan.strategy]
+      const currentWeekData = schedule[plan.current_week - 1]
+
+      // Check if reached milestone for next week
+      if (plan.total_sent >= currentWeekData.cumulative_target) {
+        const nextWeek = plan.current_week + 1
+
+        // Check if warmup is complete
+        if (nextWeek > plan.total_weeks) {
+          console.log(`🎉 Warmup complete! Plan ${warmupPlanId} sent ${plan.total_sent} emails`)
+          await this.completeWarmup(warmupPlanId)
+          return
+        }
+
+        const nextWeekData = schedule[nextWeek - 1]
+
+        console.log(`📈 Warmup progression: Week ${plan.current_week} → ${nextWeek}`)
+        console.log(`   Milestone reached: ${plan.total_sent}/${currentWeekData.cumulative_target} emails`)
+        console.log(`   New daily limit: ${currentWeekData.daily_target} → ${nextWeekData.daily_target}`)
+
+        // Update warmup plan to next week
+        await this.supabase
+          .from('warmup_plans')
+          .update({
+            current_week: nextWeek,
+            daily_target: nextWeekData.daily_target,
+            actual_sent_today: 0 // Reset daily counter for new week
+          })
+          .eq('id', warmupPlanId)
+
+        // Update email account limits
+        await this.supabase
+          .from('email_accounts')
+          .update({
+            warmup_current_week: nextWeek,
+            warmup_current_daily_limit: nextWeekData.daily_target
+          })
+          .eq('id', plan.email_account_id)
+
+        // Send notification to user
+        await this.sendNotification(plan.user_id, plan.email_account_id, {
+          type: 'milestone',
+          title: `🎉 Warmup Week ${nextWeek} Unlocked!`,
+          message: `Congratulations! You've sent ${plan.total_sent} emails and unlocked Week ${nextWeek}. Your new daily limit is ${nextWeekData.daily_target} emails/day.`,
+          data: {
+            warmup_plan_id: warmupPlanId,
+            previous_week: plan.current_week,
+            new_week: nextWeek,
+            previous_limit: currentWeekData.daily_target,
+            new_limit: nextWeekData.daily_target,
+            total_sent: plan.total_sent,
+            next_milestone: nextWeekData.cumulative_target
+          }
+        })
+
+        console.log(`✅ Warmup progressed successfully to Week ${nextWeek}`)
+      }
+    } catch (error) {
+      console.error('Error checking warmup progression:', error)
+      // Don't throw - this is a background check that shouldn't block email sending
+    }
   }
 
   private async sendNotification(

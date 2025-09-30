@@ -192,12 +192,18 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
 
     // Clean the account data to remove any undefined values and problematic fields
     // Let the database handle default values for reputation tracking fields
-    const fieldsToExclude = ['reputation_score', 'bounce_rate', 'complaint_rate', 'daily_send_limit', 'current_daily_sent']
+    const fieldsToExclude = ['reputation_score', 'bounce_rate', 'complaint_rate', 'daily_send_limit']
     const cleanAccountData = Object.fromEntries(
-      Object.entries(accountData).filter(([key, value]) => 
+      Object.entries(accountData).filter(([key, value]) =>
         value !== undefined && !fieldsToExclude.includes(key)
       )
     )
+
+    // Initialize email tracking counters from the start
+    cleanAccountData.total_emails_sent = 0
+    cleanAccountData.current_daily_sent = 0
+    cleanAccountData.warmup_current_week = 1
+    cleanAccountData.warmup_current_daily_limit = 5
     
     console.log('Clean account data for insertion:', {
       ...cleanAccountData,

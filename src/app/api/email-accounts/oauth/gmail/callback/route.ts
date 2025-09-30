@@ -80,6 +80,11 @@ export const GET = withAuth(async (request: NextRequest, { user }) => {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       token_expires_at: new Date(tokens.expires_at).toISOString(),
+      // Initialize email tracking counters from the start
+      total_emails_sent: 0,
+      current_daily_sent: 0,
+      warmup_current_week: 1,
+      warmup_current_daily_limit: 5,
       // Store additional metadata for gmail-imap-smtp accounts
       ...(provider === 'gmail-imap-smtp' && {
         daily_send_limit: 100, // Higher limit for IMAP/SMTP accounts

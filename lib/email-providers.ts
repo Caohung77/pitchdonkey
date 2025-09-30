@@ -86,6 +86,11 @@ export class EmailAccountService {
       email: config.email,
       // Note: 'name', 'is_active', 'is_verified' fields don't exist in actual database schema
       status: 'pending', // This field exists in the actual schema
+      // Initialize email tracking counters from the start
+      total_emails_sent: 0,
+      current_daily_sent: 0,
+      warmup_current_week: 1,
+      warmup_current_daily_limit: 5,
     }
 
     // Handle OAuth tokens - store in individual columns according to supabase-setup.sql

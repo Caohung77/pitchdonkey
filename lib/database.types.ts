@@ -57,6 +57,13 @@ export type Database = {
             foreignKeyName: "agent_contact_scores_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
+          },
+          {
+            foreignKeyName: "agent_contact_scores_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
             referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
@@ -121,261 +128,18 @@ export type Database = {
             foreignKeyName: "agent_segment_members_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
           },
           {
-            foreignKeyName: "agent_segment_members_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      outreach_agent_knowledge: {
-        Row: {
-          agent_id: string
-          content: string | null
-          created_at: string | null
-          description: string | null
-          embedding_metadata: Json | null
-          embedding_status: string | null
-          id: string
-          storage_path: string | null
-          title: string
-          type: string
-          updated_at: string | null
-          url: string | null
-          user_id: string
-        }
-        Insert: {
-          agent_id: string
-          content?: string | null
-          created_at?: string | null
-          description?: string | null
-          embedding_metadata?: Json | null
-          embedding_status?: string | null
-          id?: string
-          storage_path?: string | null
-          title: string
-          type: string
-          updated_at?: string | null
-          url?: string | null
-          user_id: string
-        }
-        Update: {
-          agent_id?: string
-          content?: string | null
-          created_at?: string | null
-          description?: string | null
-          embedding_metadata?: Json | null
-          embedding_status?: string | null
-          id?: string
-          storage_path?: string | null
-          title?: string
-          type?: string
-          updated_at?: string | null
-          url?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_agent_knowledge_agent_id_fkey"
-            columns: ["agent_id"]
-            isOneToOne: false
-            referencedRelation: "outreach_agents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "outreach_agent_knowledge_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      outreach_agents: {
-        Row: {
-          company_name: string | null
-          conversation_goal: string | null
-          created_at: string | null
-          custom_prompt: string | null
-          follow_up_strategy: string | null
-          id: string
-          knowledge_summary: Json | null
-          last_used_at: string | null
-          name: string
-          language: string
-          preferred_cta: string | null
-          product_description: string | null
-          product_one_liner: string | null
-          prompt_override: string | null
-          purpose: string | null
-          quality_weights: Json | null
-          segment_config: Json | null
-          sender_name: string | null
-          sender_role: string | null
-          settings: Json | null
-          status: string
-          target_persona: string | null
-          tone: string | null
-          unique_selling_points: string[] | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          company_name?: string | null
-          conversation_goal?: string | null
-          created_at?: string | null
-          custom_prompt?: string | null
-          follow_up_strategy?: string | null
-          id?: string
-          knowledge_summary?: Json | null
-          last_used_at?: string | null
-          name: string
-          language?: string
-          preferred_cta?: string | null
-          product_description?: string | null
-          product_one_liner?: string | null
-          prompt_override?: string | null
-          purpose?: string | null
-          quality_weights?: Json | null
-          segment_config?: Json | null
-          sender_name?: string | null
-          sender_role?: string | null
-          settings?: Json | null
-          status?: string
-          target_persona?: string | null
-          tone?: string | null
-          unique_selling_points?: string[] | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          company_name?: string | null
-          conversation_goal?: string | null
-          created_at?: string | null
-          custom_prompt?: string | null
-          follow_up_strategy?: string | null
-          id?: string
-          knowledge_summary?: Json | null
-          last_used_at?: string | null
-          name?: string
-          language?: string
-          preferred_cta?: string | null
-          product_description?: string | null
-          product_one_liner?: string | null
-          prompt_override?: string | null
-          purpose?: string | null
-          quality_weights?: Json | null
-          segment_config?: Json | null
-          sender_name?: string | null
-          sender_role?: string | null
-          settings?: Json | null
-          status?: string
-          target_persona?: string | null
-          tone?: string | null
-          unique_selling_points?: string[] | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_agents_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      email_sends: {
-        Row: {
-          ab_variant: string | null
-          campaign_id: string | null
-          contact_id: string
-          content: string
-          created_at: string | null
-          email_account_id: string
-          error_message: string | null
-          id: string
-          message_id: string | null
-          retry_count: number | null
-          scheduled_at: string | null
-          send_status: string | null
-          sent_at: string | null
-          step_number: number | null
-          subject: string
-          tracking_data: Json | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          ab_variant?: string | null
-          campaign_id?: string | null
-          contact_id: string
-          content: string
-          created_at?: string | null
-          email_account_id: string
-          error_message?: string | null
-          id?: string
-          message_id?: string | null
-          retry_count?: number | null
-          scheduled_at?: string | null
-          send_status?: string | null
-          sent_at?: string | null
-          step_number?: number | null
-          subject: string
-          tracking_data?: Json | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          ab_variant?: string | null
-          campaign_id?: string | null
-          contact_id?: string
-          content?: string
-          created_at?: string | null
-          email_account_id?: string
-          error_message?: string | null
-          id?: string
-          message_id?: string | null
-          retry_count?: number | null
-          scheduled_at?: string | null
-          send_status?: string | null
-          sent_at?: string | null
-          step_number?: number | null
-          subject?: string
-          tracking_data?: Json | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_sends_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "campaigns"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_sends_contact_id_fkey"
+            foreignKeyName: "agent_segment_members_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
             referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "email_sends_email_account_id_fkey"
-            columns: ["email_account_id"]
-            isOneToOne: false
-            referencedRelation: "email_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_sends_user_id_fkey"
+            foreignKeyName: "agent_segment_members_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -390,10 +154,12 @@ export type Database = {
           body_template: string
           category: string | null
           created_at: string | null
+          custom_prompt: string | null
           description: string | null
           email_purpose: string | null
           generation_options: Json | null
           id: string
+          is_default: boolean | null
           is_public: boolean | null
           language: string | null
           max_tokens: number | null
@@ -414,10 +180,12 @@ export type Database = {
           body_template: string
           category?: string | null
           created_at?: string | null
+          custom_prompt?: string | null
           description?: string | null
           email_purpose?: string | null
           generation_options?: Json | null
           id?: string
+          is_default?: boolean | null
           is_public?: boolean | null
           language?: string | null
           max_tokens?: number | null
@@ -438,10 +206,12 @@ export type Database = {
           body_template?: string
           category?: string | null
           created_at?: string | null
+          custom_prompt?: string | null
           description?: string | null
           email_purpose?: string | null
           generation_options?: Json | null
           id?: string
+          is_default?: boolean | null
           is_public?: boolean | null
           language?: string | null
           max_tokens?: number | null
@@ -470,54 +240,43 @@ export type Database = {
         Row: {
           completed_at: string | null
           contact_ids: string[]
-          created_at: string | null
-          error: string | null
+          created_at: string
           id: string
-          options: Json | null
-          progress: Json | null
-          results: Json | null
+          options: Json
+          progress: Json
+          results: Json
           started_at: string | null
           status: string
-          updated_at: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
           completed_at?: string | null
           contact_ids: string[]
-          created_at?: string | null
-          error?: string | null
+          created_at?: string
           id?: string
-          options?: Json | null
-          progress?: Json | null
-          results?: Json | null
+          options?: Json
+          progress?: Json
+          results?: Json
           started_at?: string | null
           status?: string
-          updated_at?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
           completed_at?: string | null
           contact_ids?: string[]
-          created_at?: string | null
-          error?: string | null
+          created_at?: string
           id?: string
-          options?: Json | null
-          progress?: Json | null
-          results?: Json | null
+          options?: Json
+          progress?: Json
+          results?: Json
           started_at?: string | null
           status?: string
-          updated_at?: string | null
+          updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "bulk_enrichment_jobs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       campaign_contacts: {
         Row: {
@@ -569,6 +328,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campaigns"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
           },
           {
             foreignKeyName: "campaign_contacts_contact_id_fkey"
@@ -642,10 +408,16 @@ export type Database = {
         Row: {
           ab_test_config: Json | null
           ab_test_enabled: boolean | null
+          batch_history: Json | null
           contact_list_ids: string[] | null
+          contacts_failed: Json | null
+          contacts_processed: Json | null
+          contacts_remaining: Json | null
           created_at: string | null
+          current_batch_number: number | null
           daily_send_limit: number | null
           description: string | null
+          email_account_id: string | null
           email_subject: string | null
           emails_bounced: number | null
           emails_clicked: number | null
@@ -655,14 +427,17 @@ export type Database = {
           emails_replied: number | null
           emails_sent: number | null
           end_date: string | null
+          first_batch_sent_at: string | null
           from_email_account_id: string | null
           html_content: string | null
           id: string
           name: string
+          next_batch_send_time: string | null
           reply_to_email: string | null
           scheduled_date: string | null
           send_days: number[] | null
           send_immediately: boolean | null
+          send_settings: Json | null
           send_time_end: string | null
           send_time_start: string | null
           start_date: string | null
@@ -679,10 +454,16 @@ export type Database = {
         Insert: {
           ab_test_config?: Json | null
           ab_test_enabled?: boolean | null
+          batch_history?: Json | null
           contact_list_ids?: string[] | null
+          contacts_failed?: Json | null
+          contacts_processed?: Json | null
+          contacts_remaining?: Json | null
           created_at?: string | null
+          current_batch_number?: number | null
           daily_send_limit?: number | null
           description?: string | null
+          email_account_id?: string | null
           email_subject?: string | null
           emails_bounced?: number | null
           emails_clicked?: number | null
@@ -692,14 +473,17 @@ export type Database = {
           emails_replied?: number | null
           emails_sent?: number | null
           end_date?: string | null
+          first_batch_sent_at?: string | null
           from_email_account_id?: string | null
           html_content?: string | null
           id?: string
           name: string
+          next_batch_send_time?: string | null
           reply_to_email?: string | null
           scheduled_date?: string | null
           send_days?: number[] | null
           send_immediately?: boolean | null
+          send_settings?: Json | null
           send_time_end?: string | null
           send_time_start?: string | null
           start_date?: string | null
@@ -716,10 +500,16 @@ export type Database = {
         Update: {
           ab_test_config?: Json | null
           ab_test_enabled?: boolean | null
+          batch_history?: Json | null
           contact_list_ids?: string[] | null
+          contacts_failed?: Json | null
+          contacts_processed?: Json | null
+          contacts_remaining?: Json | null
           created_at?: string | null
+          current_batch_number?: number | null
           daily_send_limit?: number | null
           description?: string | null
+          email_account_id?: string | null
           email_subject?: string | null
           emails_bounced?: number | null
           emails_clicked?: number | null
@@ -729,14 +519,17 @@ export type Database = {
           emails_replied?: number | null
           emails_sent?: number | null
           end_date?: string | null
+          first_batch_sent_at?: string | null
           from_email_account_id?: string | null
           html_content?: string | null
           id?: string
           name?: string
+          next_batch_send_time?: string | null
           reply_to_email?: string | null
           scheduled_date?: string | null
           send_days?: number[] | null
           send_immediately?: boolean | null
+          send_settings?: Json | null
           send_time_end?: string | null
           send_time_start?: string | null
           start_date?: string | null
@@ -752,6 +545,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "campaigns_email_account_id_fkey"
+            columns: ["email_account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "campaigns_from_email_account_id_fkey"
             columns: ["from_email_account_id"]
             isOneToOne: false
@@ -763,6 +563,82 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      click_tracking: {
+        Row: {
+          campaign_id: string | null
+          click_count: number | null
+          clicked: boolean | null
+          clicked_at: string | null
+          contact_id: string | null
+          created_at: string | null
+          id: string
+          ip_address: string | null
+          last_clicked_at: string | null
+          location: Json | null
+          message_id: string
+          original_url: string
+          recipient_email: string
+          tracking_url: string
+          user_agent: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          click_count?: number | null
+          clicked?: boolean | null
+          clicked_at?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          id: string
+          ip_address?: string | null
+          last_clicked_at?: string | null
+          location?: Json | null
+          message_id: string
+          original_url: string
+          recipient_email: string
+          tracking_url: string
+          user_agent?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          click_count?: number | null
+          clicked?: boolean | null
+          clicked_at?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          id?: string
+          ip_address?: string | null
+          last_clicked_at?: string | null
+          location?: Json | null
+          message_id?: string
+          original_url?: string
+          recipient_email?: string
+          tracking_url?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_click_tracking_campaign"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_click_tracking_contact"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
+          },
+          {
+            foreignKeyName: "fk_click_tracking_contact"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
@@ -852,6 +728,49 @@ export type Database = {
           },
         ]
       }
+      contact_tags: {
+        Row: {
+          contact_id: string
+          created_at: string | null
+          id: string
+          tag_id: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string | null
+          id?: string
+          tag_id: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string | null
+          id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_tags_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
+          },
+          {
+            foreignKeyName: "contact_tags_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           address: string | null
@@ -863,11 +782,20 @@ export type Database = {
           created_at: string | null
           custom_fields: Json | null
           email: string
+          engagement_bounce_count: number
+          engagement_click_count: number
+          engagement_last_positive_at: string | null
+          engagement_open_count: number
+          engagement_reply_count: number
+          engagement_score: number
+          engagement_sent_count: number
+          engagement_status: string
+          engagement_updated_at: string | null
           enrichment_data: Json | null
+          enrichment_priority: string | null
+          enrichment_sources: string[] | null
           enrichment_status: string | null
           enrichment_updated_at: string | null
-          enrichment_sources: string[] | null
-          enrichment_priority: string | null
           first_name: string | null
           id: string
           last_clicked_at: string | null
@@ -875,46 +803,47 @@ export type Database = {
           last_name: string | null
           last_opened_at: string | null
           last_replied_at: string | null
-          linkedin_url: string | null
-          linkedin_profile_data: Json | null
-          linkedin_extraction_status: string | null
-          linkedin_extracted_at: string | null
-          // NEW: Individual LinkedIn fields
-          linkedin_first_name: string | null
-          linkedin_last_name: string | null
-          linkedin_headline: string | null
-          linkedin_summary: string | null
           linkedin_about: string | null
-          linkedin_current_company: string | null
-          linkedin_current_position: string | null
-          linkedin_industry: string | null
-          linkedin_location: string | null
-          linkedin_city: string | null
-          linkedin_country: string | null
-          linkedin_country_code: string | null
-          linkedin_follower_count: number | null
-          linkedin_connection_count: number | null
-          linkedin_recommendations_count: number | null
-          linkedin_profile_completeness: number | null
+          linkedin_activity: Json | null
           linkedin_avatar_url: string | null
           linkedin_banner_url: string | null
-          linkedin_experience: Json | null
-          linkedin_education: Json | null
-          linkedin_skills: Json | null
-          linkedin_languages: Json | null
           linkedin_certifications: Json | null
-          linkedin_volunteer_experience: Json | null
-          linkedin_honors_awards: Json | null
-          linkedin_projects: Json | null
-          linkedin_courses: Json | null
-          linkedin_publications: Json | null
-          linkedin_patents: Json | null
-          linkedin_organizations: Json | null
-          linkedin_posts: Json | null
-          linkedin_recommendations: Json | null
-          linkedin_people_also_viewed: Json | null
+          linkedin_city: string | null
+          linkedin_connection_count: number | null
           linkedin_contact_info: Json | null
+          linkedin_country: string | null
+          linkedin_country_code: string | null
+          linkedin_courses: Json | null
+          linkedin_current_company: string | null
+          linkedin_current_position: string | null
+          linkedin_education: Json | null
+          linkedin_experience: Json | null
+          linkedin_extracted_at: string | null
+          linkedin_extraction_status: string | null
+          linkedin_first_name: string | null
+          linkedin_follower_count: number | null
+          linkedin_headline: string | null
+          linkedin_honors_awards: Json | null
+          linkedin_industry: string | null
+          linkedin_languages: Json | null
+          linkedin_last_name: string | null
+          linkedin_location: string | null
+          linkedin_organizations: Json | null
+          linkedin_patents: Json | null
+          linkedin_people_also_viewed: Json | null
+          linkedin_posts: Json | null
+          linkedin_profile_completeness: number | null
+          linkedin_profile_data: Json | null
+          linkedin_projects: Json | null
+          linkedin_publications: Json | null
+          linkedin_recommendations: Json | null
+          linkedin_recommendations_count: number | null
           linkedin_services: Json | null
+          linkedin_skills: Json | null
+          linkedin_summary: string | null
+          linkedin_url: string | null
+          linkedin_volunteer_experience: Json | null
+          lists: string[] | null
           notes: string | null
           notes_updated_at: string | null
           phone: string | null
@@ -923,7 +852,6 @@ export type Database = {
           segments: string[] | null
           sex: string | null
           source: string | null
-          status: string | null
           tags: string[] | null
           timezone: string | null
           twitter_url: string | null
@@ -931,15 +859,6 @@ export type Database = {
           updated_at: string | null
           user_id: string | null
           website: string | null
-          engagement_status: string | null
-          engagement_score: number | null
-          engagement_sent_count: number | null
-          engagement_open_count: number | null
-          engagement_click_count: number | null
-          engagement_reply_count: number | null
-          engagement_bounce_count: number | null
-          engagement_last_positive_at: string | null
-          engagement_updated_at: string | null
         }
         Insert: {
           address?: string | null
@@ -951,11 +870,20 @@ export type Database = {
           created_at?: string | null
           custom_fields?: Json | null
           email: string
+          engagement_bounce_count?: number
+          engagement_click_count?: number
+          engagement_last_positive_at?: string | null
+          engagement_open_count?: number
+          engagement_reply_count?: number
+          engagement_score?: number
+          engagement_sent_count?: number
+          engagement_status?: string
+          engagement_updated_at?: string | null
           enrichment_data?: Json | null
+          enrichment_priority?: string | null
+          enrichment_sources?: string[] | null
           enrichment_status?: string | null
           enrichment_updated_at?: string | null
-          enrichment_sources?: string[] | null
-          enrichment_priority?: string | null
           first_name?: string | null
           id?: string
           last_clicked_at?: string | null
@@ -963,46 +891,47 @@ export type Database = {
           last_name?: string | null
           last_opened_at?: string | null
           last_replied_at?: string | null
-          linkedin_url?: string | null
-          linkedin_profile_data?: Json | null
-          linkedin_extraction_status?: string | null
-          linkedin_extracted_at?: string | null
-          // NEW: Individual LinkedIn fields
-          linkedin_first_name?: string | null
-          linkedin_last_name?: string | null
-          linkedin_headline?: string | null
-          linkedin_summary?: string | null
           linkedin_about?: string | null
-          linkedin_current_company?: string | null
-          linkedin_current_position?: string | null
-          linkedin_industry?: string | null
-          linkedin_location?: string | null
-          linkedin_city?: string | null
-          linkedin_country?: string | null
-          linkedin_country_code?: string | null
-          linkedin_follower_count?: number | null
-          linkedin_connection_count?: number | null
-          linkedin_recommendations_count?: number | null
-          linkedin_profile_completeness?: number | null
+          linkedin_activity?: Json | null
           linkedin_avatar_url?: string | null
           linkedin_banner_url?: string | null
-          linkedin_experience?: Json | null
-          linkedin_education?: Json | null
-          linkedin_skills?: Json | null
-          linkedin_languages?: Json | null
           linkedin_certifications?: Json | null
-          linkedin_volunteer_experience?: Json | null
-          linkedin_honors_awards?: Json | null
-          linkedin_projects?: Json | null
-          linkedin_courses?: Json | null
-          linkedin_publications?: Json | null
-          linkedin_patents?: Json | null
-          linkedin_organizations?: Json | null
-          linkedin_posts?: Json | null
-          linkedin_recommendations?: Json | null
-          linkedin_people_also_viewed?: Json | null
+          linkedin_city?: string | null
+          linkedin_connection_count?: number | null
           linkedin_contact_info?: Json | null
+          linkedin_country?: string | null
+          linkedin_country_code?: string | null
+          linkedin_courses?: Json | null
+          linkedin_current_company?: string | null
+          linkedin_current_position?: string | null
+          linkedin_education?: Json | null
+          linkedin_experience?: Json | null
+          linkedin_extracted_at?: string | null
+          linkedin_extraction_status?: string | null
+          linkedin_first_name?: string | null
+          linkedin_follower_count?: number | null
+          linkedin_headline?: string | null
+          linkedin_honors_awards?: Json | null
+          linkedin_industry?: string | null
+          linkedin_languages?: Json | null
+          linkedin_last_name?: string | null
+          linkedin_location?: string | null
+          linkedin_organizations?: Json | null
+          linkedin_patents?: Json | null
+          linkedin_people_also_viewed?: Json | null
+          linkedin_posts?: Json | null
+          linkedin_profile_completeness?: number | null
+          linkedin_profile_data?: Json | null
+          linkedin_projects?: Json | null
+          linkedin_publications?: Json | null
+          linkedin_recommendations?: Json | null
+          linkedin_recommendations_count?: number | null
           linkedin_services?: Json | null
+          linkedin_skills?: Json | null
+          linkedin_summary?: string | null
+          linkedin_url?: string | null
+          linkedin_volunteer_experience?: Json | null
+          lists?: string[] | null
           notes?: string | null
           notes_updated_at?: string | null
           phone?: string | null
@@ -1011,7 +940,6 @@ export type Database = {
           segments?: string[] | null
           sex?: string | null
           source?: string | null
-          status?: string | null
           tags?: string[] | null
           timezone?: string | null
           twitter_url?: string | null
@@ -1019,15 +947,6 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           website?: string | null
-          engagement_status?: string | null
-          engagement_score?: number | null
-          engagement_sent_count?: number | null
-          engagement_open_count?: number | null
-          engagement_click_count?: number | null
-          engagement_reply_count?: number | null
-          engagement_bounce_count?: number | null
-          engagement_last_positive_at?: string | null
-          engagement_updated_at?: string | null
         }
         Update: {
           address?: string | null
@@ -1039,11 +958,20 @@ export type Database = {
           created_at?: string | null
           custom_fields?: Json | null
           email?: string
+          engagement_bounce_count?: number
+          engagement_click_count?: number
+          engagement_last_positive_at?: string | null
+          engagement_open_count?: number
+          engagement_reply_count?: number
+          engagement_score?: number
+          engagement_sent_count?: number
+          engagement_status?: string
+          engagement_updated_at?: string | null
           enrichment_data?: Json | null
+          enrichment_priority?: string | null
+          enrichment_sources?: string[] | null
           enrichment_status?: string | null
           enrichment_updated_at?: string | null
-          enrichment_sources?: string[] | null
-          enrichment_priority?: string | null
           first_name?: string | null
           id?: string
           last_clicked_at?: string | null
@@ -1051,46 +979,47 @@ export type Database = {
           last_name?: string | null
           last_opened_at?: string | null
           last_replied_at?: string | null
-          linkedin_url?: string | null
-          linkedin_profile_data?: Json | null
-          linkedin_extraction_status?: string | null
-          linkedin_extracted_at?: string | null
-          // NEW: Individual LinkedIn fields
-          linkedin_first_name?: string | null
-          linkedin_last_name?: string | null
-          linkedin_headline?: string | null
-          linkedin_summary?: string | null
           linkedin_about?: string | null
-          linkedin_current_company?: string | null
-          linkedin_current_position?: string | null
-          linkedin_industry?: string | null
-          linkedin_location?: string | null
-          linkedin_city?: string | null
-          linkedin_country?: string | null
-          linkedin_country_code?: string | null
-          linkedin_follower_count?: number | null
-          linkedin_connection_count?: number | null
-          linkedin_recommendations_count?: number | null
-          linkedin_profile_completeness?: number | null
+          linkedin_activity?: Json | null
           linkedin_avatar_url?: string | null
           linkedin_banner_url?: string | null
-          linkedin_experience?: Json | null
-          linkedin_education?: Json | null
-          linkedin_skills?: Json | null
-          linkedin_languages?: Json | null
           linkedin_certifications?: Json | null
-          linkedin_volunteer_experience?: Json | null
-          linkedin_honors_awards?: Json | null
-          linkedin_projects?: Json | null
-          linkedin_courses?: Json | null
-          linkedin_publications?: Json | null
-          linkedin_patents?: Json | null
-          linkedin_organizations?: Json | null
-          linkedin_posts?: Json | null
-          linkedin_recommendations?: Json | null
-          linkedin_people_also_viewed?: Json | null
+          linkedin_city?: string | null
+          linkedin_connection_count?: number | null
           linkedin_contact_info?: Json | null
+          linkedin_country?: string | null
+          linkedin_country_code?: string | null
+          linkedin_courses?: Json | null
+          linkedin_current_company?: string | null
+          linkedin_current_position?: string | null
+          linkedin_education?: Json | null
+          linkedin_experience?: Json | null
+          linkedin_extracted_at?: string | null
+          linkedin_extraction_status?: string | null
+          linkedin_first_name?: string | null
+          linkedin_follower_count?: number | null
+          linkedin_headline?: string | null
+          linkedin_honors_awards?: Json | null
+          linkedin_industry?: string | null
+          linkedin_languages?: Json | null
+          linkedin_last_name?: string | null
+          linkedin_location?: string | null
+          linkedin_organizations?: Json | null
+          linkedin_patents?: Json | null
+          linkedin_people_also_viewed?: Json | null
+          linkedin_posts?: Json | null
+          linkedin_profile_completeness?: number | null
+          linkedin_profile_data?: Json | null
+          linkedin_projects?: Json | null
+          linkedin_publications?: Json | null
+          linkedin_recommendations?: Json | null
+          linkedin_recommendations_count?: number | null
           linkedin_services?: Json | null
+          linkedin_skills?: Json | null
+          linkedin_summary?: string | null
+          linkedin_url?: string | null
+          linkedin_volunteer_experience?: Json | null
+          lists?: string[] | null
           notes?: string | null
           notes_updated_at?: string | null
           phone?: string | null
@@ -1099,7 +1028,6 @@ export type Database = {
           segments?: string[] | null
           sex?: string | null
           source?: string | null
-          status?: string | null
           tags?: string[] | null
           timezone?: string | null
           twitter_url?: string | null
@@ -1107,15 +1035,6 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           website?: string | null
-          engagement_status?: string | null
-          engagement_score?: number | null
-          engagement_sent_count?: number | null
-          engagement_open_count?: number | null
-          engagement_click_count?: number | null
-          engagement_reply_count?: number | null
-          engagement_bounce_count?: number | null
-          engagement_last_positive_at?: string | null
-          engagement_updated_at?: string | null
         }
         Relationships: [
           {
@@ -1300,11 +1219,14 @@ export type Database = {
           created_at: string | null
           current_daily_sent: number | null
           daily_send_limit: number | null
+          deleted_at: string | null
           dkim_verified: boolean | null
           dmarc_verified: boolean | null
           domain: string | null
+          domain_verified_at: string | null
           email: string
           id: string
+          imap_enabled: boolean | null
           imap_host: string | null
           imap_password: string | null
           imap_port: number | null
@@ -1321,9 +1243,13 @@ export type Database = {
           spf_verified: boolean | null
           status: string | null
           token_expires_at: string | null
+          total_emails_sent: number | null
           updated_at: string | null
           user_id: string | null
+          warmup_current_daily_limit: number | null
+          warmup_current_week: number | null
           warmup_enabled: boolean | null
+          warmup_plan_id: string | null
           warmup_stage: string | null
         }
         Insert: {
@@ -1333,11 +1259,14 @@ export type Database = {
           created_at?: string | null
           current_daily_sent?: number | null
           daily_send_limit?: number | null
+          deleted_at?: string | null
           dkim_verified?: boolean | null
           dmarc_verified?: boolean | null
           domain?: string | null
+          domain_verified_at?: string | null
           email: string
           id?: string
+          imap_enabled?: boolean | null
           imap_host?: string | null
           imap_password?: string | null
           imap_port?: number | null
@@ -1354,9 +1283,13 @@ export type Database = {
           spf_verified?: boolean | null
           status?: string | null
           token_expires_at?: string | null
+          total_emails_sent?: number | null
           updated_at?: string | null
           user_id?: string | null
+          warmup_current_daily_limit?: number | null
+          warmup_current_week?: number | null
           warmup_enabled?: boolean | null
+          warmup_plan_id?: string | null
           warmup_stage?: string | null
         }
         Update: {
@@ -1366,11 +1299,14 @@ export type Database = {
           created_at?: string | null
           current_daily_sent?: number | null
           daily_send_limit?: number | null
+          deleted_at?: string | null
           dkim_verified?: boolean | null
           dmarc_verified?: boolean | null
           domain?: string | null
+          domain_verified_at?: string | null
           email?: string
           id?: string
+          imap_enabled?: boolean | null
           imap_host?: string | null
           imap_password?: string | null
           imap_port?: number | null
@@ -1387,14 +1323,380 @@ export type Database = {
           spf_verified?: boolean | null
           status?: string | null
           token_expires_at?: string | null
+          total_emails_sent?: number | null
           updated_at?: string | null
           user_id?: string | null
+          warmup_current_daily_limit?: number | null
+          warmup_current_week?: number | null
           warmup_enabled?: boolean | null
+          warmup_plan_id?: string | null
           warmup_stage?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "email_accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_events: {
+        Row: {
+          campaign_id: string | null
+          contact_id: string | null
+          event_data: Json | null
+          id: string
+          message_id: string
+          processed: boolean | null
+          provider_id: string
+          recipient_email: string
+          timestamp: string | null
+          type: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          contact_id?: string | null
+          event_data?: Json | null
+          id: string
+          message_id: string
+          processed?: boolean | null
+          provider_id?: string
+          recipient_email: string
+          timestamp?: string | null
+          type: string
+        }
+        Update: {
+          campaign_id?: string | null
+          contact_id?: string | null
+          event_data?: Json | null
+          id?: string
+          message_id?: string
+          processed?: boolean | null
+          provider_id?: string
+          recipient_email?: string
+          timestamp?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_email_events_campaign"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_email_events_contact"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
+          },
+          {
+            foreignKeyName: "fk_email_events_contact"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_processing_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          email_account_id: string
+          error_details: string[] | null
+          failed_items: number | null
+          id: string
+          job_config: Json | null
+          job_type: string
+          max_retries: number | null
+          next_retry_at: string | null
+          processed_items: number | null
+          result_summary: Json | null
+          retry_count: number | null
+          started_at: string | null
+          status: string | null
+          total_items: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          email_account_id: string
+          error_details?: string[] | null
+          failed_items?: number | null
+          id?: string
+          job_config?: Json | null
+          job_type: string
+          max_retries?: number | null
+          next_retry_at?: string | null
+          processed_items?: number | null
+          result_summary?: Json | null
+          retry_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_items?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          email_account_id?: string
+          error_details?: string[] | null
+          failed_items?: number | null
+          id?: string
+          job_config?: Json | null
+          job_type?: string
+          max_retries?: number | null
+          next_retry_at?: string | null
+          processed_items?: number | null
+          result_summary?: Json | null
+          retry_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_items?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_processing_jobs_email_account_id_fkey"
+            columns: ["email_account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_processing_jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_replies: {
+        Row: {
+          action_taken: string | null
+          action_taken_at: string | null
+          auto_reply_until: string | null
+          bounce_code: string | null
+          bounce_reason: string | null
+          bounce_type: string | null
+          campaign_id: string | null
+          confidence_score: number | null
+          contact_id: string | null
+          created_at: string | null
+          forwarded_to: string | null
+          human_reviewed_at: string | null
+          human_reviewer_id: string | null
+          id: string
+          incoming_email_id: string
+          intent: string | null
+          keywords: string[] | null
+          original_message_id: string | null
+          reply_subtype: string | null
+          reply_type: string
+          requires_human_review: boolean | null
+          sentiment: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action_taken?: string | null
+          action_taken_at?: string | null
+          auto_reply_until?: string | null
+          bounce_code?: string | null
+          bounce_reason?: string | null
+          bounce_type?: string | null
+          campaign_id?: string | null
+          confidence_score?: number | null
+          contact_id?: string | null
+          created_at?: string | null
+          forwarded_to?: string | null
+          human_reviewed_at?: string | null
+          human_reviewer_id?: string | null
+          id?: string
+          incoming_email_id: string
+          intent?: string | null
+          keywords?: string[] | null
+          original_message_id?: string | null
+          reply_subtype?: string | null
+          reply_type: string
+          requires_human_review?: boolean | null
+          sentiment?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action_taken?: string | null
+          action_taken_at?: string | null
+          auto_reply_until?: string | null
+          bounce_code?: string | null
+          bounce_reason?: string | null
+          bounce_type?: string | null
+          campaign_id?: string | null
+          confidence_score?: number | null
+          contact_id?: string | null
+          created_at?: string | null
+          forwarded_to?: string | null
+          human_reviewed_at?: string | null
+          human_reviewer_id?: string | null
+          id?: string
+          incoming_email_id?: string
+          intent?: string | null
+          keywords?: string[] | null
+          original_message_id?: string | null
+          reply_subtype?: string | null
+          reply_type?: string
+          requires_human_review?: boolean | null
+          sentiment?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_replies_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_replies_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
+          },
+          {
+            foreignKeyName: "email_replies_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_replies_human_reviewer_id_fkey"
+            columns: ["human_reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_replies_incoming_email_id_fkey"
+            columns: ["incoming_email_id"]
+            isOneToOne: false
+            referencedRelation: "incoming_emails"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_replies_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_sends: {
+        Row: {
+          ab_variant: string | null
+          campaign_id: string | null
+          contact_id: string
+          content: string
+          created_at: string | null
+          email_account_id: string
+          error_message: string | null
+          id: string
+          message_id: string | null
+          retry_count: number | null
+          scheduled_at: string | null
+          send_status: string | null
+          sent_at: string | null
+          step_number: number | null
+          subject: string
+          tracking_data: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          ab_variant?: string | null
+          campaign_id?: string | null
+          contact_id: string
+          content: string
+          created_at?: string | null
+          email_account_id: string
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          retry_count?: number | null
+          scheduled_at?: string | null
+          send_status?: string | null
+          sent_at?: string | null
+          step_number?: number | null
+          subject: string
+          tracking_data?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          ab_variant?: string | null
+          campaign_id?: string | null
+          contact_id?: string
+          content?: string
+          created_at?: string | null
+          email_account_id?: string
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          retry_count?: number | null
+          scheduled_at?: string | null
+          send_status?: string | null
+          sent_at?: string | null
+          step_number?: number | null
+          subject?: string
+          tracking_data?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_sends_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
+          },
+          {
+            foreignKeyName: "email_sends_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_email_account_id_fkey"
+            columns: ["email_account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -1414,6 +1716,7 @@ export type Database = {
           contact_id: string | null
           created_at: string | null
           delivered_at: string | null
+          email_account_id: string | null
           email_body: string | null
           first_clicked_at: string | null
           first_opened_at: string | null
@@ -1426,10 +1729,12 @@ export type Database = {
           replied_at: string | null
           sent_at: string | null
           sequence_id: string | null
+          status: string | null
           subject_line: string | null
           thread_id: string | null
           tracking_pixel_id: string | null
           unsubscribed_at: string | null
+          updated_at: string | null
           user_id: string | null
         }
         Insert: {
@@ -1443,6 +1748,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           delivered_at?: string | null
+          email_account_id?: string | null
           email_body?: string | null
           first_clicked_at?: string | null
           first_opened_at?: string | null
@@ -1455,10 +1761,12 @@ export type Database = {
           replied_at?: string | null
           sent_at?: string | null
           sequence_id?: string | null
+          status?: string | null
           subject_line?: string | null
           thread_id?: string | null
           tracking_pixel_id?: string | null
           unsubscribed_at?: string | null
+          updated_at?: string | null
           user_id?: string | null
         }
         Update: {
@@ -1472,6 +1780,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           delivered_at?: string | null
+          email_account_id?: string | null
           email_body?: string | null
           first_clicked_at?: string | null
           first_opened_at?: string | null
@@ -1484,10 +1793,12 @@ export type Database = {
           replied_at?: string | null
           sent_at?: string | null
           sequence_id?: string | null
+          status?: string | null
           subject_line?: string | null
           thread_id?: string | null
           tracking_pixel_id?: string | null
           unsubscribed_at?: string | null
+          updated_at?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -1497,6 +1808,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campaigns"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_tracking_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
           },
           {
             foreignKeyName: "email_tracking_contact_id_fkey"
@@ -1514,6 +1832,348 @@ export type Database = {
           },
           {
             foreignKeyName: "email_tracking_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_email_tracking_email_account_id"
+            columns: ["email_account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imap_connections: {
+        Row: {
+          consecutive_failures: number | null
+          created_at: string | null
+          email_account_id: string
+          folders_to_monitor: string[] | null
+          id: string
+          last_error: string | null
+          last_processed_uid: number | null
+          last_successful_connection: string | null
+          last_sync_at: string | null
+          next_sync_at: string | null
+          status: string | null
+          sync_interval_minutes: number | null
+          total_emails_processed: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          consecutive_failures?: number | null
+          created_at?: string | null
+          email_account_id: string
+          folders_to_monitor?: string[] | null
+          id?: string
+          last_error?: string | null
+          last_processed_uid?: number | null
+          last_successful_connection?: string | null
+          last_sync_at?: string | null
+          next_sync_at?: string | null
+          status?: string | null
+          sync_interval_minutes?: number | null
+          total_emails_processed?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          consecutive_failures?: number | null
+          created_at?: string | null
+          email_account_id?: string
+          folders_to_monitor?: string[] | null
+          id?: string
+          last_error?: string | null
+          last_processed_uid?: number | null
+          last_successful_connection?: string | null
+          last_sync_at?: string | null
+          next_sync_at?: string | null
+          status?: string | null
+          sync_interval_minutes?: number | null
+          total_emails_processed?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imap_connections_email_account_id_fkey"
+            columns: ["email_account_id"]
+            isOneToOne: true
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "imap_connections_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      incoming_emails: {
+        Row: {
+          archived_at: string | null
+          attachments: Json | null
+          bcc_addresses: string[] | null
+          cc_addresses: string[] | null
+          classification_confidence: number | null
+          classification_status: string | null
+          created_at: string | null
+          date_received: string
+          email_account_id: string
+          email_references: string | null
+          email_size: number | null
+          flags: string[] | null
+          from_address: string
+          html_content: string | null
+          id: string
+          imap_uid: number | null
+          in_reply_to: string | null
+          message_id: string
+          processed_at: string | null
+          processing_errors: string[] | null
+          processing_status: string | null
+          raw_email: string | null
+          subject: string | null
+          text_content: string | null
+          thread_id: string | null
+          to_address: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          attachments?: Json | null
+          bcc_addresses?: string[] | null
+          cc_addresses?: string[] | null
+          classification_confidence?: number | null
+          classification_status?: string | null
+          created_at?: string | null
+          date_received: string
+          email_account_id: string
+          email_references?: string | null
+          email_size?: number | null
+          flags?: string[] | null
+          from_address: string
+          html_content?: string | null
+          id?: string
+          imap_uid?: number | null
+          in_reply_to?: string | null
+          message_id: string
+          processed_at?: string | null
+          processing_errors?: string[] | null
+          processing_status?: string | null
+          raw_email?: string | null
+          subject?: string | null
+          text_content?: string | null
+          thread_id?: string | null
+          to_address: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          attachments?: Json | null
+          bcc_addresses?: string[] | null
+          cc_addresses?: string[] | null
+          classification_confidence?: number | null
+          classification_status?: string | null
+          created_at?: string | null
+          date_received?: string
+          email_account_id?: string
+          email_references?: string | null
+          email_size?: number | null
+          flags?: string[] | null
+          from_address?: string
+          html_content?: string | null
+          id?: string
+          imap_uid?: number | null
+          in_reply_to?: string | null
+          message_id?: string
+          processed_at?: string | null
+          processing_errors?: string[] | null
+          processing_status?: string | null
+          raw_email?: string | null
+          subject?: string | null
+          text_content?: string | null
+          thread_id?: string | null
+          to_address?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incoming_emails_email_account_id_fkey"
+            columns: ["email_account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incoming_emails_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outreach_agent_knowledge: {
+        Row: {
+          agent_id: string
+          content: string | null
+          created_at: string | null
+          description: string | null
+          embedding_metadata: Json | null
+          embedding_status: string | null
+          id: string
+          storage_path: string | null
+          title: string
+          type: string
+          updated_at: string | null
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          content?: string | null
+          created_at?: string | null
+          description?: string | null
+          embedding_metadata?: Json | null
+          embedding_status?: string | null
+          id?: string
+          storage_path?: string | null
+          title: string
+          type: string
+          updated_at?: string | null
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          content?: string | null
+          created_at?: string | null
+          description?: string | null
+          embedding_metadata?: Json | null
+          embedding_status?: string | null
+          id?: string
+          storage_path?: string | null
+          title?: string
+          type?: string
+          updated_at?: string | null
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_agent_knowledge_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outreach_agent_knowledge_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outreach_agents: {
+        Row: {
+          company_name: string | null
+          conversation_goal: string | null
+          created_at: string | null
+          custom_prompt: string | null
+          follow_up_strategy: string | null
+          id: string
+          knowledge_summary: Json | null
+          language: string
+          last_used_at: string | null
+          name: string
+          preferred_cta: string | null
+          product_description: string | null
+          product_one_liner: string | null
+          prompt_override: string | null
+          purpose: string | null
+          quality_weights: Json | null
+          segment_config: Json | null
+          sender_name: string | null
+          sender_role: string | null
+          settings: Json | null
+          status: string
+          target_persona: string | null
+          tone: string | null
+          unique_selling_points: string[] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          conversation_goal?: string | null
+          created_at?: string | null
+          custom_prompt?: string | null
+          follow_up_strategy?: string | null
+          id?: string
+          knowledge_summary?: Json | null
+          language?: string
+          last_used_at?: string | null
+          name: string
+          preferred_cta?: string | null
+          product_description?: string | null
+          product_one_liner?: string | null
+          prompt_override?: string | null
+          purpose?: string | null
+          quality_weights?: Json | null
+          segment_config?: Json | null
+          sender_name?: string | null
+          sender_role?: string | null
+          settings?: Json | null
+          status?: string
+          target_persona?: string | null
+          tone?: string | null
+          unique_selling_points?: string[] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          conversation_goal?: string | null
+          created_at?: string | null
+          custom_prompt?: string | null
+          follow_up_strategy?: string | null
+          id?: string
+          knowledge_summary?: Json | null
+          language?: string
+          last_used_at?: string | null
+          name?: string
+          preferred_cta?: string | null
+          product_description?: string | null
+          product_one_liner?: string | null
+          prompt_override?: string | null
+          purpose?: string | null
+          quality_weights?: Json | null
+          segment_config?: Json | null
+          sender_name?: string | null
+          sender_role?: string | null
+          settings?: Json | null
+          status?: string
+          target_persona?: string | null
+          tone?: string | null
+          unique_selling_points?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_agents_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -1550,6 +2210,47 @@ export type Database = {
           tier?: string
         }
         Relationships: []
+      }
+      tags: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+          usage_count: number | null
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+          usage_count?: number | null
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+          usage_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tags_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       usage_tracking: {
         Row: {
@@ -1634,52 +2335,28 @@ export type Database = {
         }
         Relationships: []
       }
-      notifications: {
+    }
+    Views: {
+      contact_tags_view: {
         Row: {
-          id: string
-          user_id: string
-          type: string
-          title: string
-          message: string | null
-          data: Json
-          is_read: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          type: string
-          title: string
-          message?: string | null
-          data?: Json
-          is_read?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          type?: string
-          title?: string
-          message?: string | null
-          data?: Json
-          is_read?: boolean
-          created_at?: string
-          updated_at?: string
+          contact_id: string | null
+          email: string | null
+          first_name: string | null
+          last_name: string | null
+          tag_names: string[] | null
+          tag_objects: Json[] | null
+          user_id: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "notifications_user_id_fkey"
+            foreignKeyName: "contacts_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
-    }
-    Views: {
       domain_auth_overview: {
         Row: {
           auto_configured: boolean | null
@@ -1701,7 +2378,14 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      reset_daily_email_counters: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      sync_legacy_tags: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
