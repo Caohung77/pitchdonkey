@@ -357,14 +357,16 @@ export class CampaignProcessor {
 
       console.log(`⚖️ Batch size: ${batchSize}, Available contacts: ${contacts.length}`)
 
+      let processedCount = 0 // Track total contacts processed (including skipped)
+
       for (let i = 0; i < contacts.length; i++) {
-        // Enforce batch size limit during sending loop (not before)
-        if (emailsSent >= batchSize) {
+        // Enforce batch size limit - stop when we've processed enough contacts
+        if (processedCount >= batchSize) {
           console.log(`⚖️ Batch size reached (${batchSize}). Stopping current batch. Remaining: ${contacts.length - i} contacts`)
           break
         }
         const contact = contacts[i]
-        
+
         // Check if email already sent to this contact to prevent duplicates
         const { data: existingTracking } = await supabase
           .from('email_tracking')
@@ -375,8 +377,11 @@ export class CampaignProcessor {
 
         if (existingTracking && existingTracking.status !== 'failed') {
           console.log(`⏭️ Skipping ${contact.email} - email already sent/delivered (status: ${existingTracking.status})`)
+          processedCount++ // Count skipped contacts toward batch limit
           continue // Skip this contact
         }
+
+        processedCount++ // Count this contact toward batch limit
 
         const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
         let trackingPixelId: string | null = null
@@ -667,12 +672,12 @@ export class CampaignProcessor {
       // Contact tracking handled via email_tracking table inserts during sending
 
       // Update campaign statistics (keeping existing logic for compatibility)
-      const processedCount = emailsSent + emailsFailed
+      const totalProcessed = emailsSent + emailsFailed
       const remainingContacts = contacts.length - processedCount
 
       // Determine if there are more contacts to send
       const hasMoreContacts = remainingContacts > 0
-      const newStatus = !hasMoreContacts ? 'completed' : (processedCount > 0 ? 'sending' : 'paused')
+      const newStatus = !hasMoreContacts ? 'completed' : (totalProcessed > 0 ? 'sending' : 'paused')
 
       // Prepare update data
       const updateData = {
@@ -702,7 +707,7 @@ export class CampaignProcessor {
       }
 
       // Set start_date if campaign is starting for the first time
-      if (campaign.status === 'sending' && processedCount > 0) {
+      if (campaign.status === 'sending' && totalProcessed > 0) {
         updateData.start_date = new Date().toISOString()
       }
 
