@@ -261,7 +261,8 @@ export default function MailboxPage() {
       setLoadingList(true)
       setErrorMessage('')
       const params = new URLSearchParams()
-      if (accountId) params.append('account_id', accountId)
+      // Always pass account_id - use 'all' for unified view
+      params.append('account_id', accountId || 'all')
       if (classificationFilter !== 'all') params.append('classification', classificationFilter)
       if (searchTerm) params.append('search', searchTerm)
       const response = await fetch(`/api/inbox/emails?${params.toString()}`)
@@ -284,7 +285,8 @@ export default function MailboxPage() {
       setLoadingList(true)
       setErrorMessage('')
       const params = new URLSearchParams()
-      if (accountId) params.append('account_id', accountId)
+      // Always pass account_id - use 'all' for unified view
+      params.append('account_id', accountId || 'all')
       if (searchTerm) params.append('search', searchTerm)
       const response = await fetch(`/api/mailbox/sent?${params.toString()}`)
       if (!response.ok) {

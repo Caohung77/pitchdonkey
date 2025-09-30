@@ -12,71 +12,62 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     const accountId = searchParams.get('account_id')
     const status = searchParams.get('status')
 
-    // Fetch sent emails directly from Gmail API using SENT label
-    let gmailSent: any[] = []
-    let gmailCount = 0
-    let gmailError = null
+    // OPTIMIZATION: Query from outgoing_emails database (like inbox)
+    // This gives us the same fast performance as inbox (~100ms vs ~3000ms with Gmail API)
 
-    try {
-      const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
-      const gmailService = new GmailIMAPSMTPServerService()
-
-      // Get the email account to fetch from
-      const { data: emailAccount } = await supabase
-        .from('email_accounts')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('provider', 'gmail')
-        .limit(1)
-        .single()
-
-      if (emailAccount) {
-        const sentEmails = await gmailService.fetchGmailEmails(emailAccount.id, 'SENT', {
-          limit: limit + offset, // Fetch more to account for pagination
-          unseen: false
-        })
-
-        gmailSent = sentEmails.map(email => ({
-          id: email.messageId,
-          subject: email.subject,
-          text_content: email.textBody,
-          html_content: email.htmlBody,
-          date_received: email.date,
-          to_address: email.to,
-          from_address: email.from,
-          created_at: email.date,
-          email_account_id: emailAccount.id
-        }))
-
-        gmailCount = gmailSent.length
-      }
-    } catch (error) {
-      console.error('Error fetching Gmail sent emails:', error)
-      gmailError = error
-    }
-
-    // Fetch campaign emails from email_sends table
-    const baseSelect = `
+    // Build query for outgoing_emails (Gmail sent emails stored in DB)
+    let outgoingQuery = supabase
+      .from('outgoing_emails')
+      .select(`
         id,
+        from_address,
+        to_address,
         subject,
-        content,
-        send_status,
-        sent_at,
+        date_sent,
+        text_content,
+        html_content,
         created_at,
         email_account_id,
-        contact_id,
-        campaign_id,
-        contacts (
+        email_accounts!inner (
           id,
-          first_name,
-          last_name,
-          email
-        ),
-        campaigns (
-          id,
-          name
+          email,
+          provider
         )
-      `
+      `, { count: 'exact' })
+      .eq('user_id', user.id)
+      .is('archived_at', null)
+      .order('date_sent', { ascending: false })
+
+    if (accountId && accountId !== 'all') {
+      outgoingQuery = outgoingQuery.eq('email_account_id', accountId)
+    }
+
+    if (search) {
+      outgoingQuery = outgoingQuery.or(`to_address.ilike.%${search}%,subject.ilike.%${search}%`)
+    }
+
+    // Build query for campaign emails (from email_sends table)
+    const baseSelect = `
+      id,
+      subject,
+      content,
+      send_status,
+      sent_at,
+      created_at,
+      email_account_id,
+      contact_id,
+      campaign_id,
+      contacts (
+        id,
+        first_name,
+        last_name,
+        email
+      ),
+      campaigns (
+        id,
+        name
+      )
+    `
 
     let campaignQuery = supabase
       .from('email_sends')
@@ -97,19 +88,28 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       campaignQuery = campaignQuery.or(`subject.ilike.%${search}%,content.ilike.%${search}%`)
     }
 
-    const { data: campaignEmails, error: campaignError, count: campaignCount } = await campaignQuery
+    // Fetch both in parallel
+    const [outgoingResult, campaignResult] = await Promise.all([
+      outgoingQuery,
+      campaignQuery
+    ])
+
+    const { data: outgoingEmails, error: outgoingError, count: outgoingCount } = outgoingResult
+    const { data: campaignEmails, error: campaignError, count: campaignCount } = campaignResult
 
     // Combine both sources
     const allEmails = [
-      ...(gmailSent || []).map(email => ({
+      ...(outgoingEmails || []).map(email => ({
         id: email.id,
         subject: email.subject,
         content: email.text_content || email.html_content,
         send_status: 'sent',
-        sent_at: email.date_received,
+        sent_at: email.date_sent,
         created_at: email.created_at,
         email_account_id: email.email_account_id,
         to_address: email.to_address,
+        from_address: email.from_address,
+        email_accounts: email.email_accounts,
         source: 'gmail'
       })),
       ...(campaignEmails || []).map(email => ({
@@ -118,7 +118,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       }))
     ]
 
-    // Sort by sent date
+    // Sort by sent date (most recent first)
     allEmails.sort((a, b) => {
       const dateA = new Date(a.sent_at || a.created_at).getTime()
       const dateB = new Date(b.sent_at || b.created_at).getTime()
@@ -127,9 +127,9 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
 
     // Apply pagination
     const paginatedEmails = allEmails.slice(offset, offset + limit)
-    const totalCount = (gmailCount || 0) + (campaignCount || 0)
+    const totalCount = (outgoingCount || 0) + (campaignCount || 0)
 
-    const error = gmailError || campaignError
+    const error = outgoingError || campaignError
     const emails = paginatedEmails
 
     if (error) {
@@ -141,38 +141,9 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       }, { status: 500 })
     }
 
-    const accountIds = (emails || [])
-      .map(email => email.email_account_id)
-      .filter((value): value is string => Boolean(value))
-
-    let accountMap: Record<string, { id: string; email: string; provider: string }> = {}
-
-    if (accountIds.length) {
-      const { data: accounts, error: accountError } = await supabase
-        .from('email_accounts')
-        .select('id, email, provider, status, deleted_at')
-        .in('id', Array.from(new Set(accountIds)))
-        .eq('user_id', user.id)
-
-      if (accountError) {
-        console.error('Error fetching account metadata for sent mailbox:', accountError)
-      } else if (accounts) {
-        for (const account of accounts) {
-          accountMap[account.id] = {
-            id: account.id,
-            email: account.email,
-            provider: account.provider,
-          }
-        }
-      }
-    }
-
     const response = NextResponse.json({
       success: true,
-      emails: (emails || []).map(email => ({
-        ...email,
-        email_accounts: email.email_account_id ? accountMap[email.email_account_id] || null : null,
-      })),
+      emails: emails || [],
       pagination: {
         total: totalCount,
         limit,
@@ -180,6 +151,9 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         hasMore: totalCount > offset + limit,
       },
     })
+
+    // Add cache headers (browser caching for 5 minutes)
+    response.headers.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=60')
 
     return addSecurityHeaders(response)
   } catch (error) {

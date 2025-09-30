@@ -290,15 +290,22 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
     const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
     const gmailService = new GmailIMAPSMTPServerService()
 
-    // Only fetch INBOX emails for incoming_emails table
-    // Sent emails will be fetched on-demand by the sent mailbox API
-    console.log('📧 Fetching inbox emails (received only)...')
-    const emails = await gmailService.fetchGmailEmails(account.id, 'INBOX', {
-      limit: 100,
-      unseen: false
-    })
+    // OPTIMIZATION: Fetch INBOX and SENT folders in parallel
+    console.log('📧 Fetching inbox and sent emails in parallel...')
+    const [inboxEmails, sentEmails] = await Promise.all([
+      gmailService.fetchGmailEmails(account.id, 'INBOX', {
+        limit: 100,
+        unseen: false
+      }),
+      gmailService.fetchGmailEmails(account.id, 'SENT', {
+        limit: 100,
+        unseen: false
+      })
+    ])
 
-    console.log(`📧 Fetched ${emails.length} inbox emails`)
+    console.log(`📧 Fetched ${inboxEmails.length} inbox emails and ${sentEmails.length} sent emails`)
+
+    const emails = inboxEmails
 
     // Store emails in incoming_emails table
     let newEmailsCount = 0
@@ -381,6 +388,55 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
       }
     }
 
+    // Store sent emails in outgoing_emails table
+    let newSentCount = 0
+    console.log(`📤 Processing ${sentEmails.length} sent emails...`)
+
+    for (const email of sentEmails) {
+      try {
+        // Check if sent email already exists by message_id
+        const { data: existingSent } = await supabase
+          .from('outgoing_emails')
+          .select('id')
+          .eq('message_id', email.messageId)
+          .single()
+
+        if (existingSent) {
+          console.log(`⏭️  Sent email ${email.messageId} already exists, skipping`)
+          continue
+        }
+
+        // Insert new sent email
+        const { error: sentInsertError } = await supabase
+          .from('outgoing_emails')
+          .insert({
+            user_id: account.user_id,
+            email_account_id: account.id,
+            message_id: email.messageId,
+            from_address: email.from,
+            to_address: email.to,
+            subject: email.subject,
+            date_sent: email.date,
+            text_content: email.textBody,
+            html_content: email.htmlBody,
+            imap_uid: email.uid
+          })
+
+        if (sentInsertError) {
+          console.error(`❌ Failed to insert sent email ${email.messageId}:`, sentInsertError)
+          errors.push(`Sent insert failed: ${sentInsertError.message}`)
+        } else {
+          newSentCount++
+          console.log(`✅ Inserted sent email: ${email.subject}`)
+        }
+      } catch (error) {
+        console.error(`❌ Error processing sent email:`, error)
+        errors.push(error.message || 'Unknown sent error')
+      }
+    }
+
+    console.log(`📊 Sync complete: ${newEmailsCount} new inbox, ${newSentCount} new sent`)
+
     // Update connection status
     await supabase
       .from('imap_connections')
@@ -404,7 +460,8 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
     return {
       success: errors.length === 0,
       newEmails: newEmailsCount,
-      totalProcessed: emails.length,
+      newSentEmails: newSentCount,
+      totalProcessed: emails.length + sentEmails.length,
       errors: errors,
       account: account.email
     }
