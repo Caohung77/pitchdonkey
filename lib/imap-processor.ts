@@ -543,6 +543,25 @@ export class IMAPProcessor {
     userId: string,
     emailAccountId: string
   ): Promise<void> {
+    // Check if email already exists (including archived ones)
+    const { data: existing } = await this.supabase
+      .from('incoming_emails')
+      .select('id, archived_at')
+      .eq('message_id', email.messageId)
+      .single()
+
+    // If email was previously archived (deleted), skip re-importing it
+    if (existing?.archived_at) {
+      console.log(`⏭️  Email ${email.messageId} was deleted, skipping re-import`)
+      return
+    }
+
+    // If email already exists and not archived, skip
+    if (existing) {
+      console.log(`⏭️  Email ${email.messageId} already exists, skipping`)
+      return
+    }
+
     // Try to include imap metadata, but fall back if columns not present
     const base = {
         user_id: userId,

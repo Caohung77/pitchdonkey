@@ -37,6 +37,7 @@ export interface GmailSMTPConfig {
 export interface EmailMessage {
   uid: number
   messageId: string
+  gmailMessageId?: string // Gmail API message ID (needed for trash/delete)
   from: string
   to: string
   subject: string
@@ -347,6 +348,7 @@ export class GmailIMAPSMTPService {
             const emailData = {
               uid: numericUid,
               messageId: getHeader('Message-ID'),
+              gmailMessageId: gmailId, // Store Gmail API message ID for trash/delete
               from: getHeader('From'),
               to: getHeader('To'),
               subject: getHeader('Subject'),
@@ -515,6 +517,78 @@ export class GmailIMAPSMTPService {
     } catch (error) {
       console.error('Gmail API sending error:', error)
       throw new Error(`Failed to send email via Gmail API: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Trash email using Gmail API (soft delete - can be restored)
+   */
+  async trashEmail(gmailMessageId: string): Promise<boolean> {
+    try {
+      const freshTokens = await this.ensureFreshTokens()
+
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret
+      )
+
+      oauth2Client.setCredentials({
+        access_token: freshTokens.access_token,
+        refresh_token: freshTokens.refresh_token,
+        expiry_date: freshTokens.expires_at,
+        scope: freshTokens.scope,
+        token_type: 'Bearer'
+      })
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+
+      // Use Gmail API to trash the message
+      await gmail.users.messages.trash({
+        userId: 'me',
+        id: gmailMessageId
+      })
+
+      console.log(`✅ Gmail API: Trashed message ${gmailMessageId}`)
+      return true
+    } catch (error) {
+      console.error('Gmail API trash error:', error)
+      return false
+    }
+  }
+
+  /**
+   * Permanently delete email using Gmail API (cannot be undone)
+   */
+  async deleteEmail(gmailMessageId: string): Promise<boolean> {
+    try {
+      const freshTokens = await this.ensureFreshTokens()
+
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret
+      )
+
+      oauth2Client.setCredentials({
+        access_token: freshTokens.access_token,
+        refresh_token: freshTokens.refresh_token,
+        expiry_date: freshTokens.expires_at,
+        scope: freshTokens.scope,
+        token_type: 'Bearer'
+      })
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+
+      // Use Gmail API to permanently delete the message
+      await gmail.users.messages.delete({
+        userId: 'me',
+        id: gmailMessageId
+      })
+
+      console.log(`✅ Gmail API: Permanently deleted message ${gmailMessageId}`)
+      return true
+    } catch (error) {
+      console.error('Gmail API delete error:', error)
+      return false
     }
   }
 

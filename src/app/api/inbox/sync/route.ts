@@ -322,14 +322,19 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
           continue
         }
 
-        // Check if email already exists by message_id
+        // Check if email already exists by message_id (excluding archived)
         const { data: existing } = await supabase
           .from('incoming_emails')
-          .select('id')
+          .select('id, archived_at')
           .eq('message_id', email.messageId)
           .single()
 
         if (existing) {
+          // If email was previously archived (deleted), skip re-importing it
+          if (existing.archived_at) {
+            console.log(`⏭️  Email ${email.messageId} was deleted, skipping re-import`)
+            continue
+          }
           console.log(`⏭️  Email ${email.messageId} already exists, skipping`)
           continue
         }
@@ -341,6 +346,7 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
             user_id: account.user_id,
             email_account_id: account.id,
             message_id: email.messageId,
+            gmail_message_id: email.gmailMessageId, // Store Gmail API message ID for trash/delete
             from_address: email.from,
             to_address: email.to,
             subject: email.subject,
