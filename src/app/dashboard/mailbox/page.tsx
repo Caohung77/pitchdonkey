@@ -555,23 +555,13 @@ export default function MailboxPage() {
           setShowEmailContent(true) // Show email content on mobile
         }}
         className={clsx(
-          'group w-full rounded-2xl border px-4 py-4 text-left transition-all duration-200',
+          'group w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
           isActive
             ? 'border-transparent bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-white shadow-lg shadow-blue-200/60'
             : 'border-transparent bg-white/95 text-slate-900 shadow-sm hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg'
         )}
       >
         <div className="flex items-start gap-3">
-          <div
-            className={clsx(
-              'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-sm',
-              isActive
-                ? 'border border-white/50 bg-white/10 text-white'
-                : 'bg-gradient-to-br from-blue-500 to-indigo-500 text-white'
-            )}
-          >
-            {getInitialFromText(from)}
-          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -627,23 +617,13 @@ export default function MailboxPage() {
           setShowEmailContent(true) // Show email content on mobile
         }}
         className={clsx(
-          'group w-full rounded-2xl border px-4 py-4 text-left transition-all duration-200',
+          'group w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
           isActive
             ? 'border-transparent bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-white shadow-lg shadow-blue-200/60'
             : 'border-transparent bg-white/95 text-slate-900 shadow-sm hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg'
         )}
       >
         <div className="flex items-start gap-3">
-          <div
-            className={clsx(
-              'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-sm',
-              isActive
-                ? 'border border-white/50 bg-white/10 text-white'
-                : 'bg-gradient-to-br from-sky-500 to-blue-500 text-white'
-            )}
-          >
-            {getInitialFromText(to)}
-          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -713,9 +693,6 @@ export default function MailboxPage() {
             <div className="flex flex-col gap-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-4">
-                  <div className="hidden h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-blue-500 text-lg font-semibold text-white shadow-sm sm:flex">
-                    {getInitialFromText(fromName)}
-                  </div>
                   <div className="min-w-0 space-y-1">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.28rem] text-blue-500">Incoming Message</p>
                     <h2 className="text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
@@ -782,17 +759,14 @@ export default function MailboxPage() {
     const sentAt = email.sent_at ? new Date(email.sent_at).toLocaleString() : null
 
     return (
-      <div className="flex h-full flex-col bg-slate-50">
-        <div className="border-b border-slate-200 bg-white px-6 py-6 shadow-sm">
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="hidden h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-blue-500 text-lg font-semibold text-white shadow-sm sm:flex">
-                  {getInitialFromText(toDisplay)}
-                </div>
-                <div className="min-w-0 space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.28rem] text-sky-500">Sent Email</p>
-                  <h2 className="text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
+        <div className="flex h-full flex-col bg-slate-50">
+          <div className="border-b border-slate-200 bg-white px-6 py-6 shadow-sm">
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28rem] text-sky-500">Sent Email</p>
+                    <h2 className="text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
                   <p className="text-sm text-slate-600">From {email.email_accounts?.email || 'Unknown account'}</p>
                   <p className="text-xs text-slate-500">To {toDisplay}</p>
                   <p className="text-xs text-slate-400">{sentAt ? `Sent ${sentAt}` : 'Queued to send soon'}</p>
