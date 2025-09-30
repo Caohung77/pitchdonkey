@@ -149,7 +149,7 @@ export const POST = withAuth(async (
   }
 })
 
-// Working sync function using fixed IMAP processor
+// Working sync function with Gmail OAuth support
 async function syncEmailAccount(supabase: any, accountId: string) {
   // Get the account details
   const { data: account, error: accountError } = await supabase
@@ -164,7 +164,10 @@ async function syncEmailAccount(supabase: any, accountId: string) {
       imap_username,
       imap_password,
       imap_secure,
-      smtp_password
+      smtp_password,
+      access_token,
+      refresh_token,
+      token_expires_at
     `)
     .eq('id', accountId)
     .single()
@@ -172,17 +175,28 @@ async function syncEmailAccount(supabase: any, accountId: string) {
   if (accountError) {
     throw new Error('Database error: ' + accountError.message)
   }
-  
+
   if (!account) {
     throw new Error('Email account not found or user does not have permission')
   }
 
-  console.log('🔄 Syncing account:', account.email)
-  
+  console.log('🔄 Syncing account:', account.email, 'Provider:', account.provider)
+
+  // Check if this is a Gmail OAuth account
+  const isGmailOAuth = account.provider === 'gmail' && account.access_token && account.refresh_token
+
+  if (isGmailOAuth) {
+    console.log('📧 Using Gmail API for OAuth account')
+    return await syncGmailOAuthAccount(supabase, account)
+  }
+
+  // Traditional IMAP sync for non-OAuth accounts
+  console.log('📧 Using traditional IMAP')
+
   // Prepare IMAP config using working logic
   let password = null
   let passwordSource = 'none'
-  
+
   if (account.imap_password) {
     password = account.imap_password
     passwordSource = 'imap_password (raw)'
@@ -190,18 +204,18 @@ async function syncEmailAccount(supabase: any, accountId: string) {
     password = account.smtp_password
     passwordSource = 'smtp_password (raw)'
   }
-  
+
   console.log(`🔐 Password source: ${passwordSource} (length: ${password?.length || 0})`)
-  
+
   // Validate IMAP configuration
   if (!account.imap_host) {
     throw new Error(`IMAP host not configured for account ${account.email}`)
   }
-  
+
   if (!password) {
     throw new Error(`IMAP password not available for account ${account.email}`)
   }
-  
+
   const imapConfig = {
     host: account.imap_host,
     port: account.imap_port || 993,
@@ -222,7 +236,7 @@ async function syncEmailAccount(supabase: any, accountId: string) {
 
   // Create IMAP processor and sync
   const imapProcessor = new IMAPProcessor()
-  
+
   const syncResult = await imapProcessor.syncEmails(
     account.user_id,
     account.id,
@@ -231,7 +245,7 @@ async function syncEmailAccount(supabase: any, accountId: string) {
   )
 
   console.log(`✅ Sync completed: ${syncResult.newEmails} new emails, ${syncResult.errors.length} errors`)
-  
+
   if (syncResult.errors.length > 0) {
     console.error('❌ Sync errors:', syncResult.errors)
   }
@@ -267,5 +281,150 @@ async function syncEmailAccount(supabase: any, accountId: string) {
     totalProcessed: syncResult.totalProcessed,
     errors: syncResult.errors,
     account: account.email
+  }
+}
+
+// Gmail OAuth sync function using Gmail API
+async function syncGmailOAuthAccount(supabase: any, account: any) {
+  try {
+    const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
+    const gmailService = new GmailIMAPSMTPServerService()
+
+    // Only fetch INBOX emails for incoming_emails table
+    // Sent emails will be fetched on-demand by the sent mailbox API
+    console.log('📧 Fetching inbox emails (received only)...')
+    const emails = await gmailService.fetchGmailEmails(account.id, 'INBOX', {
+      limit: 100,
+      unseen: false
+    })
+
+    console.log(`📧 Fetched ${emails.length} inbox emails`)
+
+    // Store emails in incoming_emails table
+    let newEmailsCount = 0
+    const errors: string[] = []
+    const newEmailIds: string[] = []
+
+    for (const email of emails) {
+      try {
+        // CRITICAL: Skip emails sent from user's own email address
+        // These are SENT emails that Gmail incorrectly labeled as INBOX
+        const isFromSelf = email.from && email.from.toLowerCase().includes(account.email.toLowerCase())
+        if (isFromSelf) {
+          console.log(`⏭️  Skipping self-sent email: "${email.subject}" from ${email.from}`)
+          continue
+        }
+
+        // Check if email already exists by message_id
+        const { data: existing } = await supabase
+          .from('incoming_emails')
+          .select('id')
+          .eq('message_id', email.messageId)
+          .single()
+
+        if (existing) {
+          console.log(`⏭️  Email ${email.messageId} already exists, skipping`)
+          continue
+        }
+
+        // Insert new email (only received emails, not sent)
+        const { data: inserted, error: insertError } = await supabase
+          .from('incoming_emails')
+          .insert({
+            user_id: account.user_id,
+            email_account_id: account.id,
+            message_id: email.messageId,
+            from_address: email.from,
+            to_address: email.to,
+            subject: email.subject,
+            date_received: email.date,
+            text_content: email.textBody,
+            html_content: email.htmlBody,
+            processing_status: 'pending',
+            classification_status: 'unclassified',
+            imap_uid: email.uid
+          })
+          .select('id')
+          .single()
+
+        if (insertError) {
+          console.error(`❌ Failed to insert email ${email.messageId}:`, insertError)
+          errors.push(`Insert failed: ${insertError.message}`)
+        } else {
+          newEmailsCount++
+          newEmailIds.push(inserted.id)
+          console.log(`✅ Inserted email: ${email.subject}`)
+        }
+      } catch (error) {
+        console.error(`❌ Error processing email:`, error)
+        errors.push(error.message || 'Unknown error')
+      }
+    }
+
+    // Classify and process new emails automatically
+    if (newEmailIds.length > 0) {
+      console.log(`🔄 Classifying ${newEmailIds.length} new emails...`)
+      try {
+        const { ReplyProcessor } = await import('@/lib/reply-processor')
+        const replyProcessor = new ReplyProcessor()
+
+        // Process unclassified emails for this user
+        const processingResult = await replyProcessor.processUnclassifiedEmails(account.user_id, newEmailIds.length)
+        console.log(`✅ Classified ${processingResult.successful}/${processingResult.processed} emails`)
+
+        if (processingResult.errors.length > 0) {
+          console.error('⚠️ Classification errors:', processingResult.errors.slice(0, 3))
+        }
+      } catch (classifyError) {
+        console.error('❌ Error classifying emails:', classifyError)
+        errors.push(`Classification failed: ${classifyError.message}`)
+      }
+    }
+
+    // Update connection status
+    await supabase
+      .from('imap_connections')
+      .upsert({
+        user_id: account.user_id,
+        email_account_id: account.id,
+        status: 'active',
+        last_sync_at: new Date().toISOString(),
+        next_sync_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        total_emails_processed: (await supabase
+          .from('incoming_emails')
+          .select('id', { count: 'exact', head: true })
+          .eq('email_account_id', account.id)).count || 0,
+        consecutive_failures: 0,
+        last_successful_connection: new Date().toISOString(),
+        last_error: null
+      }, {
+        onConflict: 'email_account_id'
+      })
+
+    return {
+      success: errors.length === 0,
+      newEmails: newEmailsCount,
+      totalProcessed: emails.length,
+      errors: errors,
+      account: account.email
+    }
+  } catch (error) {
+    console.error('❌ Gmail OAuth sync error:', error)
+
+    // Update connection with error
+    await supabase
+      .from('imap_connections')
+      .upsert({
+        user_id: account.user_id,
+        email_account_id: account.id,
+        status: 'error',
+        last_sync_at: new Date().toISOString(),
+        last_error: error.message || 'Unknown error',
+        consecutive_failures: 1
+      }, {
+        onConflict: 'email_account_id'
+      })
+
+    throw error
   }
 }

@@ -42,6 +42,8 @@ export interface EmailMessage {
   subject: string
   date: Date
   body: string
+  textBody?: string
+  htmlBody?: string
   html?: string
   attachments?: Array<{
     filename: string
@@ -256,10 +258,24 @@ export class GmailIMAPSMTPService {
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
       // Build query for Gmail API
+      // CRITICAL: Use labelIds parameter correctly per Gmail API documentation
+      // Gmail's INBOX label already filters correctly - don't overcomplicate with search queries
       let query = ''
-      if (mailbox && mailbox !== 'INBOX') {
-        query += `label:${mailbox.toLowerCase()} `
+      let labelIds: string[] | undefined = undefined
+
+      if (mailbox === 'SENT' || mailbox === 'Sent' || mailbox === '[Gmail]/Sent Mail') {
+        // For SENT folder, use labelIds
+        labelIds = ['SENT']
+      } else if (mailbox === 'INBOX' || !mailbox) {
+        // For INBOX, use labelIds parameter ONLY
+        // Gmail's INBOX label naturally excludes SENT-only emails
+        // We'll filter out self-sent emails in the sync logic instead
+        labelIds = ['INBOX']
+      } else {
+        // Custom label
+        labelIds = [mailbox]
       }
+
       if (options.unseen) {
         query += 'is:unread '
       }
@@ -268,38 +284,89 @@ export class GmailIMAPSMTPService {
         query += `after:${sinceDate} `
       }
 
-      // Get message list
+      // Get message list using Gmail API
+      console.log('📧 Gmail API Request:', {
+        mailbox,
+        labelIds,
+        query: query.trim() || undefined,
+        maxResults: options.limit || 50,
+        unseen: options.unseen,
+        since: options.since
+      })
+
       const listResponse = await gmail.users.messages.list({
         userId: 'me',
-        q: query.trim() || undefined,
+        labelIds: labelIds, // Use labelIds for SENT and custom labels, undefined for INBOX
+        q: query.trim() || undefined, // Use q for INBOX search and additional filters
         maxResults: options.limit || 50
+      })
+
+      console.log('📧 Gmail API Response:', {
+        messageCount: listResponse.data.messages?.length || 0,
+        resultSizeEstimate: listResponse.data.resultSizeEstimate,
+        nextPageToken: listResponse.data.nextPageToken ? 'exists' : 'none'
       })
 
       const messages: EmailMessage[] = []
 
       if (listResponse.data.messages) {
-        // Fetch details for each message
+        // Fetch details for each message with full content
         const messagePromises = listResponse.data.messages.map(async (message) => {
           try {
             const messageResponse = await gmail.users.messages.get({
               userId: 'me',
               id: message.id!,
-              format: 'metadata',
-              metadataHeaders: ['From', 'To', 'Subject', 'Date', 'Message-ID']
+              format: 'full' // Changed from 'metadata' to 'full' to get email body
             })
 
             const headers = messageResponse.data.payload?.headers || []
             const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
 
-            return {
-              uid: parseInt(message.id!) || 0,
+            // Extract email body (text and HTML)
+            const { textBody, htmlBody } = this.extractEmailBody(messageResponse.data.payload)
+
+            // Generate a numeric UID from Gmail API message ID for database storage
+            // Gmail API IDs are base64url strings (e.g., "18d4c8f123ab45cd")
+            // We'll use a hash function that produces a value within JavaScript safe integer range
+            // but can be stored as BIGINT in PostgreSQL
+            const gmailId = message.id!
+            let numericUid: number
+
+            // Create a stable hash from the Gmail message ID
+            // Using djb2 hash algorithm which produces consistent results
+            let hash = 5381
+            for (let i = 0; i < gmailId.length; i++) {
+              const char = gmailId.charCodeAt(i)
+              // hash * 33 + char
+              hash = ((hash << 5) + hash) + char
+            }
+
+            // Take absolute value and ensure it's a positive integer
+            numericUid = Math.abs(hash)
+
+            const emailData = {
+              uid: numericUid,
               messageId: getHeader('Message-ID'),
               from: getHeader('From'),
               to: getHeader('To'),
               subject: getHeader('Subject'),
               date: new Date(getHeader('Date') || new Date()),
-              body: '' // Body would need separate fetch
+              body: textBody,
+              textBody: textBody,
+              htmlBody: htmlBody,
+              html: htmlBody
             }
+
+            console.log('📧 Email fetched:', {
+              messageId: emailData.messageId,
+              from: emailData.from,
+              to: emailData.to,
+              subject: emailData.subject,
+              date: emailData.date,
+              labels: messageResponse.data.labelIds
+            })
+
+            return emailData
           } catch (error) {
             console.error('Error fetching message details:', error)
             return null
@@ -449,6 +516,51 @@ export class GmailIMAPSMTPService {
       console.error('Gmail API sending error:', error)
       throw new Error(`Failed to send email via Gmail API: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
+  }
+
+  /**
+   * Extract email body from Gmail API payload
+   */
+  private extractEmailBody(payload: any): { textBody: string; htmlBody: string } {
+    let textBody = ''
+    let htmlBody = ''
+
+    const decodeBase64 = (data: string) => {
+      try {
+        // Gmail API uses URL-safe base64
+        const normalized = data.replace(/-/g, '+').replace(/_/g, '/')
+        return Buffer.from(normalized, 'base64').toString('utf-8')
+      } catch (error) {
+        console.error('Error decoding base64:', error)
+        return ''
+      }
+    }
+
+    const extractFromPart = (part: any) => {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        textBody = decodeBase64(part.body.data)
+      } else if (part.mimeType === 'text/html' && part.body?.data) {
+        htmlBody = decodeBase64(part.body.data)
+      } else if (part.parts) {
+        // Recursive for multipart messages
+        part.parts.forEach(extractFromPart)
+      }
+    }
+
+    if (payload) {
+      if (payload.parts) {
+        payload.parts.forEach(extractFromPart)
+      } else if (payload.body?.data) {
+        // Single part message
+        if (payload.mimeType === 'text/plain') {
+          textBody = decodeBase64(payload.body.data)
+        } else if (payload.mimeType === 'text/html') {
+          htmlBody = decodeBase64(payload.body.data)
+        }
+      }
+    }
+
+    return { textBody, htmlBody }
   }
 
   /**

@@ -12,6 +12,50 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     const accountId = searchParams.get('account_id')
     const status = searchParams.get('status')
 
+    // Fetch sent emails directly from Gmail API using SENT label
+    let gmailSent: any[] = []
+    let gmailCount = 0
+    let gmailError = null
+
+    try {
+      const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
+      const gmailService = new GmailIMAPSMTPServerService()
+
+      // Get the email account to fetch from
+      const { data: emailAccount } = await supabase
+        .from('email_accounts')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('provider', 'gmail')
+        .limit(1)
+        .single()
+
+      if (emailAccount) {
+        const sentEmails = await gmailService.fetchGmailEmails(emailAccount.id, 'SENT', {
+          limit: limit + offset, // Fetch more to account for pagination
+          unseen: false
+        })
+
+        gmailSent = sentEmails.map(email => ({
+          id: email.messageId,
+          subject: email.subject,
+          text_content: email.textBody,
+          html_content: email.htmlBody,
+          date_received: email.date,
+          to_address: email.to,
+          from_address: email.from,
+          created_at: email.date,
+          email_account_id: emailAccount.id
+        }))
+
+        gmailCount = gmailSent.length
+      }
+    } catch (error) {
+      console.error('Error fetching Gmail sent emails:', error)
+      gmailError = error
+    }
+
+    // Fetch campaign emails from email_sends table
     const baseSelect = `
         id,
         subject,
@@ -34,27 +78,59 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         )
       `
 
-    let query = supabase
+    let campaignQuery = supabase
       .from('email_sends')
       .select(baseSelect, { count: 'exact' })
       .eq('user_id', user.id)
       .order('sent_at', { ascending: false, nullsLast: false })
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
 
     if (accountId && accountId !== 'all') {
-      query = query.eq('email_account_id', accountId)
+      campaignQuery = campaignQuery.eq('email_account_id', accountId)
     }
 
     if (status && status !== 'all') {
-      query = query.eq('send_status', status)
+      campaignQuery = campaignQuery.eq('send_status', status)
     }
 
     if (search) {
-      query = query.or(`subject.ilike.%${search}%,content.ilike.%${search}%`)
+      campaignQuery = campaignQuery.or(`subject.ilike.%${search}%,content.ilike.%${search}%`)
     }
 
-    const { data: emails, error, count } = await query
+    const { data: campaignEmails, error: campaignError, count: campaignCount } = await campaignQuery
+
+    // Combine both sources
+    const allEmails = [
+      ...(gmailSent || []).map(email => ({
+        id: email.id,
+        subject: email.subject,
+        content: email.text_content || email.html_content,
+        send_status: 'sent',
+        sent_at: email.date_received,
+        created_at: email.created_at,
+        email_account_id: email.email_account_id,
+        to_address: email.to_address,
+        source: 'gmail'
+      })),
+      ...(campaignEmails || []).map(email => ({
+        ...email,
+        source: 'campaign'
+      }))
+    ]
+
+    // Sort by sent date
+    allEmails.sort((a, b) => {
+      const dateA = new Date(a.sent_at || a.created_at).getTime()
+      const dateB = new Date(b.sent_at || b.created_at).getTime()
+      return dateB - dateA
+    })
+
+    // Apply pagination
+    const paginatedEmails = allEmails.slice(offset, offset + limit)
+    const totalCount = (gmailCount || 0) + (campaignCount || 0)
+
+    const error = gmailError || campaignError
+    const emails = paginatedEmails
 
     if (error) {
       console.error('Error fetching sent emails:', error)
@@ -98,10 +174,10 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         email_accounts: email.email_account_id ? accountMap[email.email_account_id] || null : null,
       })),
       pagination: {
-        total: count || 0,
+        total: totalCount,
         limit,
         offset,
-        hasMore: (count || 0) > offset + limit,
+        hasMore: totalCount > offset + limit,
       },
     })
 
