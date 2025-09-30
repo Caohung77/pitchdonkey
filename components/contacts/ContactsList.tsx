@@ -25,6 +25,7 @@ interface ContactsListProps {
   scoreRange?: [number, number] | null
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
+  overrideContacts?: Contact[] // AI query results override
 }
 
 interface ContactsListState {
@@ -46,7 +47,8 @@ export function ContactsList({
   engagementFilter = null,
   scoreRange = null,
   sortBy = 'updated_at',
-  sortOrder = 'desc'
+  sortOrder = 'desc',
+  overrideContacts
 }: ContactsListProps) {
   const router = useRouter()
   const [state, setState] = useState<ContactsListState>({
@@ -251,8 +253,23 @@ export function ContactsList({
 
   // Effects
   useEffect(() => {
-    fetchContacts()
-  }, [userId, searchTerm, enrichmentFilter, engagementFilter, scoreRange, sortBy, sortOrder])
+    // If overrideContacts is provided (from AI query), use those instead of fetching
+    if (overrideContacts) {
+      setState({
+        contacts: overrideContacts,
+        loading: false,
+        error: null,
+        pagination: {
+          page: 1,
+          limit: overrideContacts.length,
+          total: overrideContacts.length,
+          pages: 1
+        }
+      })
+    } else {
+      fetchContacts()
+    }
+  }, [userId, searchTerm, enrichmentFilter, engagementFilter, scoreRange, sortBy, sortOrder, overrideContacts])
 
   // Render loading state
   if (state.loading) {

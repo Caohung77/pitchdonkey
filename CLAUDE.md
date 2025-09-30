@@ -201,6 +201,50 @@ try {
 - **Authentication Recovery**: Automatic token refresh and re-authentication prompts
 - **Structured Logging**: Comprehensive error context for debugging
 
+## MCP Server Integration
+
+### When to Use MCP Servers
+
+#### Supabase MCP (Database Operations)
+**Always consult Supabase MCP when:**
+- Creating, modifying, or reviewing database schema/migrations
+- Adding new tables, columns, or constraints
+- Implementing RLS (Row Level Security) policies
+- Optimizing database queries or indexes
+- Debugging database-related errors
+- Validating SQL syntax and best practices
+
+**How to use:**
+```typescript
+// Before making database changes, check with Supabase MCP:
+// - Review existing schema with list_tables
+// - Apply migrations with apply_migration
+// - Execute queries with execute_sql for data operations
+```
+
+#### Context7 MCP (Framework & Library Documentation)
+**Always consult Context7 MCP when:**
+- Using Next.js App Router features (server actions, routing, middleware)
+- Working with Radix UI components or shadcn/ui patterns
+- Implementing Supabase client/server patterns
+- Using React hooks or state management patterns
+- Integrating third-party libraries or APIs
+- Following framework-specific best practices
+
+**How to use:**
+```typescript
+// Before implementing framework features:
+// 1. Use resolve-library-id to find the library (e.g., "next.js", "supabase")
+// 2. Use get-library-docs with specific topics (e.g., "server actions", "authentication")
+// 3. Apply the recommended patterns from official documentation
+```
+
+### MCP Integration Best Practices
+1. **Database First**: Check Supabase MCP before any schema changes
+2. **Documentation Second**: Verify framework patterns with Context7 MCP
+3. **Test After**: Validate changes work as expected
+4. **Document Changes**: Update CLAUDE.md if patterns change
+
 ## Development Guidelines
 
 ### Component Patterns

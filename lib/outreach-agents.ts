@@ -907,7 +907,6 @@ export async function previewSegment(
     .from('contacts')
     .select('*')
     .eq('user_id', userId)
-    .neq('status', 'deleted')
     .limit(Math.max(limit * 4, 200))
 
   if (error) {

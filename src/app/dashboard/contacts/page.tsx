@@ -13,8 +13,12 @@ import { AddContactModal } from '@/components/contacts/AddContactModal'
 import { ImportContactsModal } from '@/components/contacts/ImportContactsModal'
 import { SegmentManager } from '@/components/contacts/SegmentManager'
 import { ContactListManager } from '@/components/contacts/ContactListManager'
+import { AIContactQuery } from '@/components/contacts/AIContactQuery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToastProvider } from '@/components/ui/toast'
+import type { Database } from '@/lib/database.types'
+
+type Contact = Database['public']['Tables']['contacts']['Row']
 
 interface ContactsPageState {
   searchTerm: string
@@ -24,6 +28,7 @@ interface ContactsPageState {
   sortBy: string
   sortOrder: 'asc' | 'desc'
   activeTab: string
+  aiQueryResults: Contact[] | null
 }
 
 function ContactsPageContent() {
@@ -37,7 +42,8 @@ function ContactsPageContent() {
     scoreRange: null,
     sortBy: 'updated_at',
     sortOrder: 'desc',
-    activeTab: 'contacts'
+    activeTab: 'contacts',
+    aiQueryResults: null
   })
 
   // Filter handlers
@@ -82,6 +88,15 @@ function ContactsPageContent() {
 
   const handleNavigateToContacts = () => {
     setState(prev => ({ ...prev, activeTab: 'contacts' }))
+  }
+
+  // AI Query handlers
+  const handleAIQueryResults = (contacts: Contact[]) => {
+    setState(prev => ({ ...prev, aiQueryResults: contacts }))
+  }
+
+  const handleClearAIQuery = () => {
+    setState(prev => ({ ...prev, aiQueryResults: null }))
   }
 
   // Loading state
@@ -183,33 +198,54 @@ function ContactsPageContent() {
             {/* Contact Statistics */}
             <ContactsStats userId={user.id} />
 
-            {/* Search and Filters */}
-            <ContactsFilters
-              searchTerm={state.searchTerm}
-              enrichmentFilter={state.enrichmentFilter}
-              engagementFilter={state.engagementFilter}
-              scoreRange={state.scoreRange}
-              sortBy={state.sortBy}
-              sortOrder={state.sortOrder}
-              userId={user.id}
-              onSearchChange={handleSearchChange}
-              onEnrichmentFilterChange={handleEnrichmentFilterChange}
-              onEngagementFilterChange={handleEngagementFilterChange}
-              onScoreRangeChange={handleScoreRangeChange}
-              onSortChange={handleSortChange}
-              onClearFilters={handleClearFilters}
+            {/* AI Contact Query */}
+            <AIContactQuery
+              onResultsReady={handleAIQueryResults}
+              onClear={handleClearAIQuery}
             />
 
-            {/* Contacts List */}
-            <ContactsList
-              userId={user.id}
-              searchTerm={state.searchTerm}
-              enrichmentFilter={state.enrichmentFilter}
-              engagementFilter={state.engagementFilter}
-              scoreRange={state.scoreRange}
-              sortBy={state.sortBy}
-              sortOrder={state.sortOrder}
-            />
+            {/* Search and Filters - Only show when not using AI results */}
+            {!state.aiQueryResults && (
+              <ContactsFilters
+                searchTerm={state.searchTerm}
+                enrichmentFilter={state.enrichmentFilter}
+                engagementFilter={state.engagementFilter}
+                scoreRange={state.scoreRange}
+                sortBy={state.sortBy}
+                sortOrder={state.sortOrder}
+                userId={user.id}
+                onSearchChange={handleSearchChange}
+                onEnrichmentFilterChange={handleEnrichmentFilterChange}
+                onEngagementFilterChange={handleEngagementFilterChange}
+                onScoreRangeChange={handleScoreRangeChange}
+                onSortChange={handleSortChange}
+                onClearFilters={handleClearFilters}
+              />
+            )}
+
+            {/* Contacts List - Show AI results or filtered results */}
+            {state.aiQueryResults ? (
+              <ContactsList
+                userId={user.id}
+                overrideContacts={state.aiQueryResults}
+                searchTerm=""
+                enrichmentFilter={null}
+                engagementFilter={null}
+                scoreRange={null}
+                sortBy="updated_at"
+                sortOrder="desc"
+              />
+            ) : (
+              <ContactsList
+                userId={user.id}
+                searchTerm={state.searchTerm}
+                enrichmentFilter={state.enrichmentFilter}
+                engagementFilter={state.engagementFilter}
+                scoreRange={state.scoreRange}
+                sortBy={state.sortBy}
+                sortOrder={state.sortOrder}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="segments">
