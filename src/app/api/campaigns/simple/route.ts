@@ -117,6 +117,27 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const allowedDaily = new Set([10,20,30,40,50])
     const finalDailyLimit = allowedDaily.has(Number(daily_send_limit)) ? Number(daily_send_limit) : 50
 
+    // CRITICAL FIX: Create send_settings object with proper batch_size configuration
+    // This is what the campaign processor reads to determine batch size
+    const sendSettings = {
+      rate_limiting: {
+        daily_limit: finalDailyLimit,
+        hourly_limit: 10,
+        domain_limit: 10,
+        account_rotation: true,
+        warmup_mode: false,
+        batch_size: finalDailyLimit, // This is the actual batch size enforced per cycle
+        batch_delay_minutes: 5
+      },
+      send_immediately: send_immediately || false,
+      avoid_weekends: true,
+      avoid_holidays: true,
+      holiday_list: [],
+      time_windows: []
+    }
+
+    console.log('🔧 Creating campaign with send_settings:', JSON.stringify(sendSettings, null, 2))
+
     // Create the simple campaign
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
@@ -140,6 +161,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         // New: sending controls
         from_email_account_id,
         daily_send_limit: finalDailyLimit,
+        send_settings: sendSettings, // CRITICAL FIX: Store send_settings with batch_size
         track_opens: true,
         track_clicks: true,
         track_replies: true,
