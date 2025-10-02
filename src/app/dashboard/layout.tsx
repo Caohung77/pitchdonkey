@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Card, CardContent } from '@/components/ui/card'
 import { EnrichmentProgressBar } from '@/components/enrichment/EnrichmentProgressBar'
+import { ToastProvider } from '@/components/ui/toast'
 
 interface Notification {
   id: string
@@ -282,7 +283,8 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <ToastProvider>
+      <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar */}
       <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
@@ -497,5 +499,6 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
+    </ToastProvider>
   )
 }
