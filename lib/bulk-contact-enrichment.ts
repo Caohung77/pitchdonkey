@@ -196,10 +196,9 @@ export class BulkContactEnrichmentService {
         return { success: false, error: 'Failed to create enrichment job' }
       }
 
-      // Start processing the job asynchronously
-      this.processBulkEnrichmentJob(job.id).catch(error => {
-        console.error('Bulk enrichment job processing failed:', error)
-      })
+      // Don't start processing here - let the cron job or manual trigger handle it
+      // This prevents Vercel serverless timeout issues
+      console.log(`📋 Job ${job.id} created and queued for processing`)
 
       const returnResult = {
         success: true,
@@ -225,7 +224,125 @@ export class BulkContactEnrichmentService {
   }
 
   /**
-   * Process a bulk enrichment job
+   * Process the next batch for a job (serverless-friendly version)
+   * This processes ONE batch and then triggers itself for the next batch
+   */
+  async processNextBatch(jobId: string): Promise<{ hasMore: boolean; completed: boolean }> {
+    const supabase = await createServerSupabaseClient()
+
+    try {
+      // Get job details
+      const { data: job, error: jobError } = await supabase
+        .from('bulk_enrichment_jobs')
+        .select('*')
+        .eq('id', jobId)
+        .single()
+
+      if (jobError || !job) {
+        console.error('Job not found:', jobError)
+        return { hasMore: false, completed: false }
+      }
+
+      // If job is pending, mark it as running and send start notification
+      if (job.status === 'pending') {
+        await this.updateJobStatus(jobId, 'running')
+        await this.createNotification(job.user_id, {
+          type: 'enrichment_started',
+          title: 'Contact Enrichment Started',
+          message: `Enriching ${job.contact_ids.length} contacts in the background`,
+          data: {
+            job_id: jobId,
+            total_contacts: job.contact_ids.length
+          }
+        })
+      }
+
+      // If job is not running, don't process
+      if (job.status !== 'running' && job.status !== 'pending') {
+        console.log(`Job ${jobId} is ${job.status}, skipping processing`)
+        return { hasMore: false, completed: job.status === 'completed' }
+      }
+
+      const progress = job.progress as any || { total: 0, completed: 0, failed: 0, current_batch: 1 }
+      const batchSize = (job.options as any)?.batch_size || 3
+
+      // Calculate which contacts to process in this batch
+      const startIndex = progress.completed + progress.failed
+      const endIndex = Math.min(startIndex + batchSize, job.contact_ids.length)
+      const contactsToProcess = job.contact_ids.slice(startIndex, endIndex)
+
+      if (contactsToProcess.length === 0) {
+        // All contacts processed - mark as completed
+        await this.updateJobStatus(jobId, 'completed')
+        await this.createNotification(job.user_id, {
+          type: 'enrichment_completed',
+          title: 'Contact Enrichment Completed',
+          message: `Successfully enriched ${progress.completed} contacts${progress.failed > 0 ? ` (${progress.failed} failed)` : ''}`,
+          data: {
+            job_id: jobId,
+            total_completed: progress.completed,
+            total_failed: progress.failed,
+            total_contacts: job.contact_ids.length
+          }
+        })
+        return { hasMore: false, completed: true }
+      }
+
+      console.log(`📦 Processing batch: contacts ${startIndex + 1}-${endIndex} of ${job.contact_ids.length}`)
+
+      // Process this batch
+      const batchResults = await this.processBatch(jobId, contactsToProcess, job.user_id, job.options)
+
+      // Update progress
+      const batchCompleted = batchResults.filter(r => r.success).length
+      const batchFailed = batchResults.filter(r => !r.success).length
+
+      await this.updateJobProgress(jobId, {
+        completed: progress.completed + batchCompleted,
+        failed: progress.failed + batchFailed,
+        current_batch: progress.current_batch + 1
+      })
+
+      const hasMore = endIndex < job.contact_ids.length
+
+      // If there are more contacts to process, trigger the next batch
+      if (hasMore) {
+        console.log(`🔄 Triggering next batch for job ${jobId}`)
+        const processorUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://pitchdonkey.vercel.app'}/api/contacts/bulk-enrich/process`
+        fetch(processorUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId })
+        }).catch(err => {
+          console.error('Failed to trigger next batch:', err)
+        })
+      }
+
+      return { hasMore, completed: !hasMore }
+
+    } catch (error) {
+      console.error('Batch processing failed:', error)
+      await this.updateJobStatus(jobId, 'failed', error instanceof Error ? error.message : 'Unknown error')
+
+      const job = await this.getJobDetails(jobId)
+      if (job) {
+        await this.createNotification(job.user_id, {
+          type: 'enrichment_failed',
+          title: 'Contact Enrichment Failed',
+          message: `Enrichment job failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          data: {
+            job_id: jobId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        })
+      }
+
+      return { hasMore: false, completed: false }
+    }
+  }
+
+  /**
+   * Process a bulk enrichment job (deprecated - use processNextBatch for serverless)
    */
   async processBulkEnrichmentJob(jobId: string): Promise<void> {
     const supabase = await createServerSupabaseClient()

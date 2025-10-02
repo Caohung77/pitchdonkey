@@ -53,11 +53,21 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     console.log(`✅ Bulk enrichment job created successfully: ${result.job_id}`)
-    
+
+    // Immediately trigger the processor endpoint to start processing the first batch
+    const processorUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/contacts/bulk-enrich/process`
+    fetch(processorUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: result.job_id })
+    }).catch(err => {
+      console.error('Failed to trigger processor:', err)
+    })
+
     return createSuccessResponse({
       success: true,
       job_id: result.job_id,
-      message: 'Bulk enrichment job started successfully',
+      message: 'Bulk enrichment started. Processing in background.',
       summary: result.summary
     })
 
