@@ -31,6 +31,21 @@ interface CampaignProgressBarProps {
     emails_failed?: number
     created_at: string
     updated_at: string
+    next_batch_send_time?: string
+    batch_schedule?: {
+      batches: Array<{
+        batch_number: number
+        scheduled_time: string
+        contact_ids: string[]
+        contact_count: number
+        status: 'pending' | 'sent'
+      }>
+      batch_size: number
+      batch_interval_minutes: number
+      total_batches: number
+      total_contacts: number
+      estimated_completion: string
+    }
   }
   showDetails?: boolean
   onProgressUpdate?: (campaignId: string, progress: any) => void
@@ -46,13 +61,19 @@ interface ProgressStats {
   lastUpdated: string
 }
 
-export function CampaignProgressBar({ 
-  campaign, 
+export function CampaignProgressBar({
+  campaign,
   showDetails = true,
-  onProgressUpdate 
+  onProgressUpdate
 }: CampaignProgressBarProps) {
+  // Use batch_schedule total if available, otherwise fall back to contact count
+  const totalContactsFromSchedule = campaign.batch_schedule?.total_contacts || 0
+  const effectiveTotal = totalContactsFromSchedule > 0
+    ? totalContactsFromSchedule
+    : (campaign.total_contacts || campaign.contactCount || 0)
+
   const [progress, setProgress] = useState<ProgressStats>({
-    total: campaign.total_contacts || campaign.contactCount || 0,
+    total: effectiveTotal,
     sent: campaign.emailsSent || 0,
     delivered: campaign.emails_delivered || 0,
     opened: campaign.emails_opened || 0,
@@ -60,7 +81,7 @@ export function CampaignProgressBar({
     queued: 0,
     lastUpdated: campaign.updated_at
   })
-  
+
   const [isLoading, setIsLoading] = useState(false)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string | null>(null)
 
@@ -69,6 +90,11 @@ export function CampaignProgressBar({
   const deliveryRate = progress.sent > 0 ? Math.round((progress.delivered / progress.sent) * 100) : 0
   const openRate = progress.delivered > 0 ? Math.round((progress.opened / progress.delivered) * 100) : 0
   const queuedEmails = Math.max(0, progress.total - progress.sent - progress.failed)
+
+  // Calculate batch schedule progress
+  const sentBatches = campaign.batch_schedule?.batches.filter(b => b.status === 'sent').length || 0
+  const totalBatches = campaign.batch_schedule?.total_batches || 0
+  const nextPendingBatch = campaign.batch_schedule?.batches.find(b => b.status === 'pending')
 
   // Use actual campaign status from database - don't override status based on progress calculations
   // This ensures campaigns show correct status: 'sending'/'running' for active campaigns, 'completed' only when actually finished
@@ -417,6 +443,28 @@ export function CampaignProgressBar({
 
   return (
     <div className="space-y-3">
+      {/* Batch Schedule Info - Show for campaigns with batch scheduling */}
+      {campaign.batch_schedule && (campaign.status === 'sending' || campaign.status === 'running' || campaign.status === 'completed') && (
+        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-white border-blue-300 text-blue-700">
+                Batch {sentBatches}/{totalBatches}
+              </Badge>
+              <span className="text-xs text-blue-700">
+                {campaign.batch_schedule.batch_size} emails per batch • {campaign.batch_schedule.batch_interval_minutes} min intervals
+              </span>
+            </div>
+            {nextPendingBatch && (
+              <div className="text-xs text-blue-700 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Next: {new Date(nextPendingBatch.scheduled_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Status and Progress Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
@@ -442,7 +490,7 @@ export function CampaignProgressBar({
             </button>
           )}
         </div>
-        
+
         {estimatedTimeRemaining && (
           <span className="text-xs text-gray-500 flex items-center">
             <Clock className="h-3 w-3 mr-1" />

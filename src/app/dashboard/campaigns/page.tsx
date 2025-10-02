@@ -76,6 +76,20 @@ interface Campaign {
   first_batch_sent_at?: string
   next_batch_send_time?: string
   current_batch_number?: number
+  batch_schedule?: {
+    batches: Array<{
+      batch_number: number
+      scheduled_time: string
+      contact_ids: string[]
+      contact_count: number
+      status: 'pending' | 'sent'
+    }>
+    batch_size: number
+    batch_interval_minutes: number
+    total_batches: number
+    total_contacts: number
+    estimated_completion: string
+  }
 }
 
 type EmailAccountInfo = {

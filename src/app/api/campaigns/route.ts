@@ -34,7 +34,8 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         from_email_account_id,
         first_batch_sent_at,
         next_batch_send_time,
-        current_batch_number
+        current_batch_number,
+        batch_schedule
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
