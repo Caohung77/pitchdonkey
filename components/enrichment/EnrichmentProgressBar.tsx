@@ -135,7 +135,7 @@ export function EnrichmentProgressBar({
                 <span className="text-sm font-semibold">
                   {job.percentage}%
                 </span>
-                {job.isActive && (
+                {(job.status === 'running' || job.status === 'pending') && (
                   <Button
                     variant="ghost"
                     size="sm"
