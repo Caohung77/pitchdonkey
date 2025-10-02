@@ -254,8 +254,9 @@ export class CampaignProcessor {
         batchContactIds = pendingBatch.contact_ids
 
         // Get contacts for this specific batch
-        if (batchContactIds.length > 0) {
-          const { data: contactData, error: contactsError } = await supabase
+        // If contact_ids is empty (backfilled campaigns), fetch from contact lists instead
+        if (batchContactIds && batchContactIds.length > 0) {
+          const { data: contactData, error: contactsError} = await supabase
             .from('contacts')
             .select('*')
             .in('id', batchContactIds)
@@ -265,6 +266,57 @@ export class CampaignProcessor {
           }
 
           contacts = contactData || []
+        } else {
+          // Fallback: Get contacts from contact lists and take the batch size amount
+          console.log(`⚠️ Batch has no contact_ids, fetching from contact lists`)
+
+          if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
+            const { data: contactLists, error: listError } = await supabase
+              .from('contact_lists')
+              .select('contact_ids')
+              .in('id', campaign.contact_list_ids)
+
+            if (listError) {
+              throw new Error(`Failed to get contact lists: ${listError.message}`)
+            }
+
+            // Get unique contact IDs
+            const allContactIds = new Set<string>()
+            contactLists?.forEach((list: any) => {
+              if (list.contact_ids && Array.isArray(list.contact_ids)) {
+                list.contact_ids.forEach((id: string) => allContactIds.add(id))
+              }
+            })
+
+            const contactIds = Array.from(allContactIds)
+
+            // Get contacts that haven't been sent to yet
+            const { data: sentEmails } = await supabase
+              .from('email_tracking')
+              .select('contact_id')
+              .eq('campaign_id', campaign.id)
+              .in('status', ['sent', 'delivered'])
+
+            const sentContactIds = new Set(sentEmails?.map((e: any) => e.contact_id) || [])
+            const remainingContactIds = contactIds.filter(id => !sentContactIds.has(id))
+
+            // Take only batch_size contacts for this batch
+            const batchSize = pendingBatch.contact_count || campaign.batch_schedule.batch_size
+            const batchContactIds = remainingContactIds.slice(0, batchSize)
+
+            if (batchContactIds.length > 0) {
+              const { data: contactData, error: contactsError } = await supabase
+                .from('contacts')
+                .select('*')
+                .in('id', batchContactIds)
+
+              if (contactsError) {
+                throw new Error(`Failed to get contacts: ${contactsError.message}`)
+              }
+
+              contacts = contactData || []
+            }
+          }
         }
       } else {
         // Fallback to old approach if no batch schedule (backward compatibility)
