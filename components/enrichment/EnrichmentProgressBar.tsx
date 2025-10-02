@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { useEnrichmentProgress } from '@/hooks/useEnrichmentProgress'
 import { Progress } from '@/components/ui/progress'
 import { Card } from '@/components/ui/card'
-import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Loader2, CheckCircle2, XCircle, Clock, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useToast } from '@/components/ui/toast'
 
 interface EnrichmentProgressBarProps {
   userId: string | undefined
@@ -18,6 +21,47 @@ export function EnrichmentProgressBar({
   compact = false
 }: EnrichmentProgressBarProps) {
   const { activeJobs, hasActiveJobs } = useEnrichmentProgress(userId)
+  const { addToast } = useToast()
+  const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
+
+  const handleCancelJob = async (jobId: string) => {
+    if (cancellingJobs.has(jobId)) return
+
+    setCancellingJobs(prev => new Set(prev).add(jobId))
+
+    try {
+      const response = await fetch(`/api/contacts/bulk-enrich/${jobId}/cancel`, {
+        method: 'POST'
+      })
+
+      const result = await response.json()
+
+      if (result.success || result.data?.success) {
+        addToast({
+          type: 'success',
+          title: 'Job Cancelled',
+          message: 'Enrichment job has been cancelled successfully',
+          duration: 3000
+        })
+      } else {
+        throw new Error(result.error || result.data?.error || 'Failed to cancel job')
+      }
+    } catch (error) {
+      console.error('Failed to cancel job:', error)
+      addToast({
+        type: 'error',
+        title: 'Cancel Failed',
+        message: error instanceof Error ? error.message : 'Failed to cancel enrichment job',
+        duration: 5000
+      })
+    } finally {
+      setCancellingJobs(prev => {
+        const next = new Set(prev)
+        next.delete(jobId)
+        return next
+      })
+    }
+  }
 
   if (!hasActiveJobs) {
     return null
@@ -91,6 +135,22 @@ export function EnrichmentProgressBar({
                 <span className="text-sm font-semibold">
                   {job.percentage}%
                 </span>
+                {job.isActive && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                    onClick={() => handleCancelJob(job.jobId)}
+                    disabled={cancellingJobs.has(job.jobId)}
+                    title="Cancel enrichment"
+                  >
+                    {cancellingJobs.has(job.jobId) ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <X className="h-3 w-3" />
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
             <Progress
