@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { withAuth, createSuccessResponse, handleApiError } from '@/lib/api-auth'
 import { BulkContactEnrichmentService } from '@/lib/bulk-contact-enrichment'
 import { ValidationError } from '@/lib/errors'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
@@ -17,6 +18,27 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     console.log(`🚀 Starting bulk enrichment for ${contact_ids.length} contacts by user ${user.id}`)
+
+    // Check for existing running/pending jobs to prevent concurrent enrichment
+    const supabase = createServerSupabaseClient()
+    const { data: runningJobs } = await supabase
+      .from('bulk_enrichment_jobs')
+      .select('id, status, progress')
+      .eq('user_id', user.id)
+      .in('status', ['running', 'pending'])
+
+    if (runningJobs && runningJobs.length > 0) {
+      const job = runningJobs[0]
+      const progress = job.progress as any
+      const progressText = progress
+        ? `${progress.completed || 0}/${progress.total || 0} contacts enriched`
+        : 'in progress'
+
+      console.log(`⚠️ Enrichment job already running for user ${user.id}`)
+      throw new ValidationError(
+        `An enrichment job is already running (${progressText}). Please wait for it to complete before starting a new one.`
+      )
+    }
 
     const enrichmentService = new BulkContactEnrichmentService()
 
