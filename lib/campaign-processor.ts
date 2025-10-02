@@ -302,13 +302,13 @@ export class CampaignProcessor {
 
             // Take only batch_size contacts for this batch
             const batchSize = pendingBatch.contact_count || campaign.batch_schedule.batch_size
-            const batchContactIds = remainingContactIds.slice(0, batchSize)
+            const contactIdsForBatch = remainingContactIds.slice(0, batchSize)
 
-            if (batchContactIds.length > 0) {
+            if (contactIdsForBatch.length > 0) {
               const { data: contactData, error: contactsError } = await supabase
                 .from('contacts')
                 .select('*')
-                .in('id', batchContactIds)
+                .in('id', contactIdsForBatch)
 
               if (contactsError) {
                 throw new Error(`Failed to get contacts: ${contactsError.message}`)
