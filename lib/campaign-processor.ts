@@ -229,52 +229,91 @@ export class CampaignProcessor {
     const supabase = createServerSupabaseClient()
 
     try {
-      // Get contacts from contact lists with proper duplicate prevention
+      // Use batch schedule if available (new proactive approach)
       let contacts = []
+      let batchContactIds: string[] = []
 
-      if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
-        // Get all contacts from contact lists
-        const { data: contactLists, error: listError } = await supabase
-          .from('contact_lists')
-          .select('contact_ids')
-          .in('id', campaign.contact_list_ids)
+      if (campaign.batch_schedule?.batches) {
+        console.log(`📅 Using batch schedule for campaign ${campaign.id}`)
 
-        if (listError) {
-          throw new Error(`Failed to get contact lists: ${listError.message}`)
+        // Find the next pending batch
+        const now = new Date()
+        const pendingBatch = campaign.batch_schedule.batches.find((batch: any) =>
+          batch.status === 'pending' && new Date(batch.scheduled_time) <= now
+        )
+
+        if (!pendingBatch) {
+          console.log(`⏰ No pending batches ready to send yet`)
+          return
         }
 
-        // Collect all unique contact IDs
-        const allContactIds = new Set<string>()
-        contactLists?.forEach((list: any) => {
-          if (list.contact_ids && Array.isArray(list.contact_ids)) {
-            list.contact_ids.forEach((id: string) => allContactIds.add(id))
+        console.log(`📧 Processing batch ${pendingBatch.batch_number}/${campaign.batch_schedule.total_batches}`)
+        console.log(`   Scheduled: ${pendingBatch.scheduled_time}`)
+        console.log(`   Contacts: ${pendingBatch.contact_count}`)
+
+        batchContactIds = pendingBatch.contact_ids
+
+        // Get contacts for this specific batch
+        if (batchContactIds.length > 0) {
+          const { data: contactData, error: contactsError } = await supabase
+            .from('contacts')
+            .select('*')
+            .in('id', batchContactIds)
+
+          if (contactsError) {
+            throw new Error(`Failed to get batch contacts: ${contactsError.message}`)
           }
-        })
 
-        const contactIds = Array.from(allContactIds)
+          contacts = contactData || []
+        }
+      } else {
+        // Fallback to old approach if no batch schedule (backward compatibility)
+        console.log(`⚠️ No batch schedule found, using fallback approach`)
 
-        if (contactIds.length > 0) {
-          // Get contacts that haven't been sent to yet
-          const { data: sentEmails } = await supabase
-            .from('email_tracking')
-            .select('contact_id')
-            .eq('campaign_id', campaign.id)
-            .in('status', ['sent', 'delivered'])
+        if (campaign.contact_list_ids && campaign.contact_list_ids.length > 0) {
+          // Get all contacts from contact lists
+          const { data: contactLists, error: listError } = await supabase
+            .from('contact_lists')
+            .select('contact_ids')
+            .in('id', campaign.contact_list_ids)
 
-          const sentContactIds = new Set(sentEmails?.map((e: any) => e.contact_id) || [])
-          const remainingContactIds = contactIds.filter(id => !sentContactIds.has(id))
+          if (listError) {
+            throw new Error(`Failed to get contact lists: ${listError.message}`)
+          }
 
-          if (remainingContactIds.length > 0) {
-            const { data: contactData, error: contactsError } = await supabase
-              .from('contacts')
-              .select('*')
-              .in('id', remainingContactIds)
-
-            if (contactsError) {
-              throw new Error(`Failed to get contacts: ${contactsError.message}`)
+          // Collect all unique contact IDs
+          const allContactIds = new Set<string>()
+          contactLists?.forEach((list: any) => {
+            if (list.contact_ids && Array.isArray(list.contact_ids)) {
+              list.contact_ids.forEach((id: string) => allContactIds.add(id))
             }
+          })
 
-            contacts = contactData || []
+          const contactIds = Array.from(allContactIds)
+
+          if (contactIds.length > 0) {
+            // Get contacts that haven't been sent to yet
+            const { data: sentEmails } = await supabase
+              .from('email_tracking')
+              .select('contact_id')
+              .eq('campaign_id', campaign.id)
+              .in('status', ['sent', 'delivered'])
+
+            const sentContactIds = new Set(sentEmails?.map((e: any) => e.contact_id) || [])
+            const remainingContactIds = contactIds.filter(id => !sentContactIds.has(id))
+
+            if (remainingContactIds.length > 0) {
+              const { data: contactData, error: contactsError } = await supabase
+                .from('contacts')
+                .select('*')
+                .in('id', remainingContactIds)
+
+              if (contactsError) {
+                throw new Error(`Failed to get contacts: ${contactsError.message}`)
+              }
+
+              contacts = contactData || []
+            }
           }
         }
       }
@@ -760,51 +799,81 @@ export class CampaignProcessor {
 
       // Contact tracking handled via email_tracking table inserts during sending
 
-      // Update campaign statistics (keeping existing logic for compatibility)
+      // Update campaign statistics and batch schedule
       const totalProcessed = emailsSent + emailsFailed
-      const remainingContacts = contacts.length - processedCount
-
-      // Determine if there are more contacts to send
-      const hasMoreContacts = remainingContacts > 0
-      const newStatus = !hasMoreContacts ? 'completed' : (totalProcessed > 0 ? 'sending' : 'paused')
 
       // Prepare update data
-      const updateData = {
+      const updateData: any = {
         emails_sent: emailsSent,
-        emails_bounced: emailsFailed, // Bounced emails are tracked as failures in this context
-        total_contacts: contacts.length,
-        status: newStatus,
+        emails_bounced: emailsFailed,
         updated_at: new Date().toISOString()
       }
 
-      // Schedule next batch if there are more contacts
-      if (hasMoreContacts && emailsSent > 0) {
-        const nextBatchTime = new Date(Date.now() + batchDelayMs)
-        updateData.next_batch_send_time = nextBatchTime.toISOString()
+      // Update batch schedule if using new system
+      if (campaign.batch_schedule?.batches) {
+        console.log(`📅 Updating batch schedule after processing`)
 
-        // Set first batch time if this is the first batch
-        if (!campaign.first_batch_sent_at) {
-          updateData.first_batch_sent_at = new Date().toISOString()
+        // Mark current batch as sent
+        const updatedBatches = campaign.batch_schedule.batches.map((batch: any) =>
+          batch.status === 'pending' && new Date(batch.scheduled_time) <= new Date()
+            ? { ...batch, status: 'sent', completed_at: new Date().toISOString() }
+            : batch
+        )
+
+        // Find next pending batch
+        const nextPendingBatch = updatedBatches.find((batch: any) => batch.status === 'pending')
+
+        // Update batch schedule
+        updateData.batch_schedule = {
+          ...campaign.batch_schedule,
+          batches: updatedBatches
         }
 
-        console.log(`📅 Next batch scheduled for: ${nextBatchTime.toISOString()}`)
-        console.log(`📊 Remaining contacts: ${remainingContacts}`)
-        console.log(`⏰ Next batch in: ${Math.round(batchDelayMs / 1000 / 60)} minutes`)
-      } else if (emailsSent > 0) {
-        // Clear next batch time if no more contacts
-        updateData.next_batch_send_time = null
+        if (nextPendingBatch) {
+          updateData.next_batch_send_time = nextPendingBatch.scheduled_time
+          updateData.status = 'sending'
+          console.log(`📅 Next batch scheduled for: ${nextPendingBatch.scheduled_time}`)
+          console.log(`📊 Batch ${nextPendingBatch.batch_number}/${campaign.batch_schedule.total_batches}`)
+        } else {
+          // All batches completed
+          updateData.next_batch_send_time = null
+          updateData.status = 'completed'
+          updateData.end_date = new Date().toISOString()
+          console.log(`🎉 All batches completed! Campaign finished.`)
+        }
+      } else {
+        // Fallback to old logic if no batch schedule
+        const remainingContacts = contacts.length - processedCount
+        const hasMoreContacts = remainingContacts > 0
+        const newStatus = !hasMoreContacts ? 'completed' : (totalProcessed > 0 ? 'sending' : 'paused')
+
+        updateData.total_contacts = contacts.length
+        updateData.status = newStatus
+
+        if (hasMoreContacts && emailsSent > 0) {
+          const batchDelayMs = this.getBatchDelayMs()
+          const nextBatchTime = new Date(Date.now() + batchDelayMs)
+          updateData.next_batch_send_time = nextBatchTime.toISOString()
+
+          if (!campaign.first_batch_sent_at) {
+            updateData.first_batch_sent_at = new Date().toISOString()
+          }
+
+          console.log(`📅 Next batch scheduled for: ${nextBatchTime.toISOString()}`)
+        } else if (emailsSent > 0) {
+          updateData.next_batch_send_time = null
+        }
+
+        if (newStatus === 'completed') {
+          updateData.end_date = new Date().toISOString()
+          updateData.next_batch_send_time = null
+          console.log(`🎉 Campaign completed!`)
+        }
       }
 
       // Set start_date if campaign is starting for the first time
-      if (campaign.status === 'sending' && totalProcessed > 0) {
+      if (!campaign.start_date && totalProcessed > 0) {
         updateData.start_date = new Date().toISOString()
-      }
-
-      // Set end_date if campaign is completing
-      if (newStatus === 'completed') {
-        updateData.end_date = new Date().toISOString()
-        updateData.next_batch_send_time = null // Clear any scheduled batch
-        console.log(`🎉 Campaign completed!`)
       }
 
       await supabase

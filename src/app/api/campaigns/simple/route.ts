@@ -113,8 +113,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     console.log('✅ No conflicting campaigns found, proceeding with campaign creation')
 
-    // Validate daily limit (allowed: 10,20,30,40,50)
-    const allowedDaily = new Set([10,20,30,40,50])
+    // Validate daily limit (allowed: 5,10,15,20,30,50 to match UI options)
+    const allowedDaily = new Set([5,10,15,20,30,50])
     const finalDailyLimit = allowedDaily.has(Number(daily_send_limit)) ? Number(daily_send_limit) : 50
 
     // CRITICAL FIX: Create send_settings object with proper batch_size configuration
@@ -215,6 +215,64 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     console.log(`📋 Campaign ${campaign.id} will target ${allContactIds.length} contacts`)
 
+    // Calculate batch schedule with 20-minute intervals
+    const batchSize = finalDailyLimit
+    const totalContacts = allContactIds.length
+    const totalBatches = Math.ceil(totalContacts / batchSize)
+    const startTime = new Date(scheduled_date || new Date())
+    const BATCH_INTERVAL_MINUTES = 20
+
+    console.log(`📅 Calculating batch schedule:`, {
+      totalContacts,
+      batchSize,
+      totalBatches,
+      startTime: startTime.toISOString(),
+      intervalMinutes: BATCH_INTERVAL_MINUTES
+    })
+
+    // Create batch schedule with contact assignments
+    const batches = []
+    for (let i = 0; i < totalBatches; i++) {
+      const batchStartIndex = i * batchSize
+      const batchEndIndex = Math.min((i + 1) * batchSize, totalContacts)
+      const batchContactIds = allContactIds.slice(batchStartIndex, batchEndIndex)
+      const batchTime = new Date(startTime.getTime() + (i * BATCH_INTERVAL_MINUTES * 60 * 1000))
+
+      batches.push({
+        batch_number: i + 1,
+        scheduled_time: batchTime.toISOString(),
+        contact_ids: batchContactIds,
+        contact_count: batchContactIds.length,
+        status: 'pending'
+      })
+
+      console.log(`  Batch ${i + 1}: ${batchTime.toISOString()} → ${batchContactIds.length} contacts`)
+    }
+
+    const batchSchedule = {
+      batches,
+      batch_size: batchSize,
+      batch_interval_minutes: BATCH_INTERVAL_MINUTES,
+      total_batches: totalBatches,
+      total_contacts: totalContacts,
+      estimated_completion: batches[batches.length - 1]?.scheduled_time
+    }
+
+    console.log(`✅ Batch schedule created: ${totalBatches} batches over ${(totalBatches - 1) * BATCH_INTERVAL_MINUTES} minutes`)
+    console.log(`📊 Estimated completion: ${batchSchedule.estimated_completion}`)
+
+    // Update campaign with batch schedule and set next_batch_send_time to first batch
+    await supabase
+      .from('campaigns')
+      .update({
+        batch_schedule: batchSchedule,
+        next_batch_send_time: batches[0]?.scheduled_time,
+        total_contacts: totalContacts
+      })
+      .eq('id', campaign.id)
+
+    console.log(`💾 Saved batch schedule to campaign ${campaign.id}`)
+
     // Helper function to replace placeholders in content when personalized version isn't available
     const replacePersonalizedReasonFallback = (content: string) => {
       if (!content.includes('((personalised_reason))')) {
@@ -278,12 +336,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         console.log(`✅ Created ${campaignContacts.length} campaign contact entries`)
         console.log(`🤖 ${Object.keys(personalized_emails).length} contacts have AI-generated content`)
       }
-
-      // Update campaign with total contacts count
-      await supabase
-        .from('campaigns')
-        .update({ total_contacts: allContactIds.length })
-        .eq('id', campaign.id)
     }
 
     // Log campaign creation but don't process here - let separate API handle processing

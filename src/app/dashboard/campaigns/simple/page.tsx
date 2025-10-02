@@ -91,6 +91,7 @@ export default function SimpleCampaignPage() {
   const [campaignResult, setCampaignResult] = useState<any>(null)
   const [templates, setTemplates] = useState<any[]>([])
   const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
+  const [warmupStatus, setWarmupStatus] = useState<any>(null)
   
   // Debug personalized emails changes
   useEffect(() => {
@@ -225,6 +226,30 @@ export default function SimpleCampaignPage() {
     }
   }, [campaignData.send_immediately])
 
+  // Fetch warmup status when email account is selected
+  useEffect(() => {
+    const fetchWarmupStatus = async () => {
+      if (campaignData.from_email_account_id) {
+        try {
+          const response = await ApiClient.get(`/api/email-accounts/${campaignData.from_email_account_id}/warmup-status`)
+          if (response.success) {
+            setWarmupStatus(response.data)
+            // Auto-adjust batch size if current selection exceeds warmup limit
+            if (campaignData.daily_send_limit && campaignData.daily_send_limit > response.data.currentDailyLimit) {
+              setCampaignData(prev => ({ ...prev, daily_send_limit: response.data.currentDailyLimit }))
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch warmup status:', error)
+          setWarmupStatus(null)
+        }
+      } else {
+        setWarmupStatus(null)
+      }
+    }
+    fetchWarmupStatus()
+  }, [campaignData.from_email_account_id])
+
   const fetchContactLists = async () => {
     try {
       const lists = await ApiClient.get('/api/contacts/lists')
@@ -352,7 +377,7 @@ export default function SimpleCampaignPage() {
           newErrors.from_email_account_id = 'Please select an email account'
         }
         if (![5,10,15,20,30,50].includes(Number(campaignData.daily_send_limit))) {
-          newErrors.daily_send_limit = 'Choose 5, 10, 15, 20, 30, or 50 per day'
+          newErrors.daily_send_limit = 'Please select a valid batch size (5, 10, 15, 20, 30, or 50 per day)'
         }
         break
     }
@@ -826,20 +851,65 @@ export default function SimpleCampaignPage() {
                 {/* Daily Send Limit (Batch Size) */}
                 <div>
                   <label className="block text-sm font-medium mb-2">Daily Send Limit (Batch Size) *</label>
+
+                  {/* Warmup Info Banner */}
+                  {warmupStatus?.warmupActive && (
+                    <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
+                        <div className="text-xs text-amber-800">
+                          <p className="font-semibold">Warmup Active - Week {warmupStatus.warmupInfo.week}/{warmupStatus.warmupInfo.totalWeeks}</p>
+                          <p>Current limit: {warmupStatus.currentDailyLimit}/day • Strategy: {warmupStatus.warmupInfo.strategy}</p>
+                          <p className="text-amber-600 mt-1">Higher batch sizes will unlock as warmup progresses</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-6 gap-2">
-                    {[5,10,15,20,30,50].map(v => (
-                      <button
-                        key={v}
-                        type="button"
-                        className={`px-3 py-2 border rounded-md text-sm transition-colors ${campaignData.daily_send_limit === v ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 hover:border-gray-400'}`}
-                        onClick={() => setCampaignData(prev => ({ ...prev, daily_send_limit: v }))}
-                      >
-                        {v}/day
-                      </button>
-                    ))}
+                    {[5,10,15,20,30,50].map(v => {
+                      const isLocked = warmupStatus?.currentDailyLimit ? v > warmupStatus.currentDailyLimit : false
+                      const isSelected = campaignData.daily_send_limit === v
+
+                      return (
+                        <div key={v} className="relative group">
+                          <button
+                            type="button"
+                            disabled={isLocked}
+                            className={`w-full px-3 py-2 border rounded-md text-sm transition-colors ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                : isLocked
+                                ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
+                                : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                            onClick={() => !isLocked && setCampaignData(prev => ({ ...prev, daily_send_limit: v }))}
+                          >
+                            {v}/day
+                            {isLocked && <span className="ml-1">🔒</span>}
+                          </button>
+
+                          {/* Tooltip for locked options */}
+                          {isLocked && (
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                              <div className="bg-gray-900 text-white text-xs rounded-md py-2 px-3 whitespace-nowrap">
+                                Unlocks at week {Math.ceil(v / (warmupStatus?.warmupInfo?.dailyTarget || 5))}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                                  <div className="border-4 border-transparent border-t-gray-900"></div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
+
                   <p className="text-xs text-gray-500 mt-2">
-                    Choose how many emails to send per day. Smaller batches (5-10) are better for deliverability and warmup.
+                    {warmupStatus?.warmupActive
+                      ? `Currently limited to ${warmupStatus.currentDailyLimit}/day due to warmup. Batches will increase weekly.`
+                      : 'Choose how many emails to send per day. Smaller batches (5-10) are better for deliverability and warmup.'
+                    }
                   </p>
                   {errors.daily_send_limit && (
                     <p className="text-red-500 text-sm mt-1">{errors.daily_send_limit}</p>
@@ -992,6 +1062,117 @@ export default function SimpleCampaignPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Batch Schedule Preview */}
+            {(() => {
+              const totalContacts = getTotalContacts()
+              const batchSize = campaignData.daily_send_limit || 5
+              const totalBatches = Math.ceil(totalContacts / batchSize)
+              const BATCH_INTERVAL_MINUTES = 20
+
+              const startTime = campaignData.send_immediately
+                ? new Date()
+                : (scheduleDate && scheduleTime ? parseLocalDateTime(scheduleDate, scheduleTime) : new Date())
+
+              const batches = []
+              for (let i = 0; i < totalBatches; i++) {
+                const batchTime = new Date(startTime.getTime() + (i * BATCH_INTERVAL_MINUTES * 60 * 1000))
+                const batchStartIndex = i * batchSize
+                const batchEndIndex = Math.min((i + 1) * batchSize, totalContacts)
+                const batchContactCount = batchEndIndex - batchStartIndex
+
+                batches.push({
+                  number: i + 1,
+                  time: batchTime,
+                  contactCount: batchContactCount
+                })
+              }
+
+              const estimatedCompletion = batches[batches.length - 1]?.time
+              const durationMinutes = (totalBatches - 1) * BATCH_INTERVAL_MINUTES
+
+              if (totalContacts === 0 || !campaignData.from_email_account_id) {
+                return null
+              }
+
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <BarChart3 className="h-5 w-5 mr-2" />
+                      Batch Schedule Preview
+                    </CardTitle>
+                    <CardDescription>
+                      Your campaign will be sent in {totalBatches} batch{totalBatches > 1 ? 'es' : ''} with 20-minute intervals
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="bg-blue-50 p-4 rounded-lg grid grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm text-blue-600 font-medium">Total Batches</p>
+                        <p className="text-2xl font-bold text-blue-900">{totalBatches}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-blue-600 font-medium">Batch Size</p>
+                        <p className="text-2xl font-bold text-blue-900">{batchSize} emails</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-blue-600 font-medium">Duration</p>
+                        <p className="text-2xl font-bold text-blue-900">
+                          {durationMinutes < 60 ? `${durationMinutes}m` : `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {batches.slice(0, 5).map((batch) => (
+                        <div key={batch.number} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                          <div className="flex items-center gap-3">
+                            <div className="bg-blue-100 text-blue-700 font-semibold rounded-full w-8 h-8 flex items-center justify-center text-sm">
+                              {batch.number}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">Batch {batch.number}</p>
+                              <p className="text-xs text-gray-600">{batch.contactCount} contacts</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium">
+                              {batch.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {batch.time.toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                      {totalBatches > 5 && (
+                        <div className="text-center py-2 text-sm text-gray-500">
+                          + {totalBatches - 5} more batch{totalBatches - 5 > 1 ? 'es' : ''}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <div className="text-sm">
+                          <p className="font-medium text-green-900">Estimated Completion</p>
+                          <p className="text-green-700">
+                            {estimatedCompletion?.toLocaleString([], {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })()}
 
             {/* Campaign Summary */}
             <Card>
