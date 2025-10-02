@@ -17,7 +17,6 @@ import {
   Mail,
   Search,
   Settings,
-  ChevronLeft,
   ChevronRight,
   CircleDot,
   Trash2,
@@ -87,6 +86,33 @@ type MailboxTarget = {
   key: string
   accountId: string | null
   folder: 'inbox' | 'outbox'
+}
+
+interface EmailInsight {
+  sender_name: string
+  sender_email: string
+  subject: string
+  firstliner: string
+  summary: string
+  intent: string
+  contact_status: 'green' | 'yellow' | 'red'
+}
+
+const INTENT_META: Record<string, { label: string; icon: string; color: string }> = {
+  purchase_interest: { label: 'Purchase Interest', icon: '💰', color: 'bg-emerald-100 text-emerald-700' },
+  meeting_request: { label: 'Meeting Request', icon: '📅', color: 'bg-blue-100 text-blue-700' },
+  info_request: { label: 'Info Request', icon: '❓', color: 'bg-sky-100 text-sky-700' },
+  positive_reply: { label: 'Positive Reply', icon: '✨', color: 'bg-indigo-100 text-indigo-700' },
+  negative_reply: { label: 'Negative Reply', icon: '⚠️', color: 'bg-rose-100 text-rose-700' },
+  unsubscribe: { label: 'Unsubscribe', icon: '🚫', color: 'bg-rose-100 text-rose-700' },
+  auto_reply: { label: 'Auto Reply', icon: '🤖', color: 'bg-slate-100 text-slate-600' },
+  other: { label: 'Other', icon: '📨', color: 'bg-slate-100 text-slate-600' },
+}
+
+const STATUS_META: Record<'green' | 'yellow' | 'red', { label: string; className: string }> = {
+  green: { label: 'Engaged', className: 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30' },
+  yellow: { label: 'Neutral', className: 'bg-amber-500/10 text-amber-700 border border-amber-500/30' },
+  red: { label: 'At Risk', className: 'bg-rose-500/10 text-rose-700 border border-rose-500/30' },
 }
 
 const parseMailboxKey = (key: string): MailboxTarget => {
@@ -189,9 +215,9 @@ export default function MailboxPage() {
   const [composeSending, setComposeSending] = useState(false)
   const [composeError, setComposeError] = useState('')
 
-  // Mobile navigation state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  const [showEmailContent, setShowEmailContent] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [emailInsights, setEmailInsights] = useState<Record<string, EmailInsight>>({})
 
   useEffect(() => {
     fetchEmailAccounts()
@@ -272,11 +298,45 @@ export default function MailboxPage() {
       }
       const data = await response.json()
       setInboxEmails(data.emails || [])
+
+      if (data.emails?.length) {
+        const toFetch = (data.emails as IncomingEmail[]).filter((email: IncomingEmail) => !emailInsights[email.id])
+        if (toFetch.length) {
+          await Promise.all(toFetch.map((email) => fetchEmailInsight(email.id)))
+        }
+      }
     } catch (error) {
       console.error('Error fetching inbox emails:', error)
       setErrorMessage('Failed to load inbox emails')
     } finally {
       setLoadingList(false)
+    }
+  }
+
+  const fetchEmailInsight = async (emailId: string) => {
+    try {
+      const response = await fetch('/api/mailbox/email-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailId }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to load email insight')
+      }
+
+      const payload = await response.json()
+      if (!payload?.success) {
+        throw new Error(payload?.error || 'Failed to generate insight')
+      }
+
+      const insight = payload.data as EmailInsight
+      console.log('🔍 Insight received', emailId, insight)
+      setEmailInsights((prev) => ({ ...prev, [emailId]: insight }))
+      return insight
+    } catch (error) {
+      console.error('Error fetching email insight:', error)
+      return null
     }
   }
 
@@ -541,20 +601,30 @@ export default function MailboxPage() {
     setSearchTerm('')
     setClassificationFilter('all')
     setSelectedItem(null)
-    setIsMobileSidebarOpen(false) // Close mobile sidebar after selection
-    setShowEmailContent(false) // Reset to show email list on mobile
+    setIsMobileSidebarOpen(false)
+    setDetailOpen(false)
   }
 
   const renderInboxListItem = (email: IncomingEmail) => {
-    const from = email.from_address || 'Unknown sender'
-    const preview = email.text_content?.slice(0, 120) || email.html_content?.replace(/<[^>]*>/g, '').slice(0, 120) || ''
+    const insight = emailInsights[email.id]
     const isActive = selectedItem?.type === 'inbox' && selectedItem.email.id === email.id
+    const fallbackPreview = email.text_content?.slice(0, 160) || cleanHtmlPreview(email.html_content).slice(0, 160) || ''
+    const subject = insight?.subject || email.subject || '(No subject)'
+    const senderEmail = insight?.sender_email || extractEmailAddress(email.from_address) || 'unknown@example.com'
+    const senderName = insight?.sender_name || getSenderName(email.from_address, senderEmail)
+    const firstLine = insight?.firstliner || fallbackPreview
+    const summary = insight?.summary?.trim()
+    const summaryText = summary && summary.length > 0 ? summary : 'Analyzing conversation…'
+    const receivedLabel = formatDate(email.date_received)
+    const intentMeta = insight ? INTENT_META[insight.intent] || INTENT_META.other : null
+    const statusMeta = insight ? STATUS_META[insight.contact_status] : null
+
     return (
       <button
         key={email.id}
         onClick={() => {
           setSelectedItem({ type: 'inbox', email })
-          setShowEmailContent(true) // Show email content on mobile
+          setDetailOpen(true)
         }}
         className={clsx(
           'group w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
@@ -563,44 +633,46 @@ export default function MailboxPage() {
             : 'border-transparent bg-white/95 text-slate-900 shadow-sm hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg'
         )}
       >
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>
-                  {email.subject || '(No subject)'}
-                </p>
-                <p className={clsx('mt-1 truncate text-xs', isActive ? 'text-white/80' : 'text-slate-500')}>
-                  {from}
-                </p>
-              </div>
-              <span className={clsx('whitespace-nowrap text-xs font-medium', isActive ? 'text-white/80' : 'text-slate-400')}>
-                {formatDate(email.date_received)}
-              </span>
-            </div>
-            {preview && (
-              <p className={clsx('mt-3 line-clamp-2 text-xs leading-relaxed', isActive ? 'text-white/80' : 'text-slate-500')}>
-                {preview}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>
+                {senderName}
               </p>
-            )}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span
-                className={clsx(
-                  'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium capitalize',
-                  isActive ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
-                )}
-              >
-                {email.classification_status.replace('_', ' ')}
+              <p className={clsx('truncate text-xs', isActive ? 'text-white/80' : 'text-slate-500')}>
+                {senderEmail}
+              </p>
+            </div>
+            {statusMeta && (
+              <span className={clsx('rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', statusMeta.className)}>
+                {statusMeta.label}
               </span>
-              <span
-                className={clsx(
-                  'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium',
-                  isActive ? 'bg-white/10 text-white/90' : 'bg-slate-100 text-slate-600'
-                )}
-              >
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>{subject}</p>
+            <p className={clsx('truncate text-xs', isActive ? 'text-white/80' : 'text-slate-400')}>{firstLine}</p>
+            <p className={clsx('text-xs leading-relaxed', isActive ? 'text-white/80' : 'text-slate-500')}>
+              {summaryText}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={clsx('rounded-full px-2.5 py-1 font-medium capitalize', isActive ? 'bg-white/10 text-white/90' : 'bg-slate-100 text-slate-600')}>
                 {email.email_accounts?.email || 'Unknown account'}
               </span>
+              {intentMeta && (
+                <span className={clsx('inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium', intentMeta.color)}>
+                  <span>{intentMeta.icon}</span>
+                  <span>{intentMeta.label}</span>
+                </span>
+              )}
             </div>
+            <span className={clsx('whitespace-nowrap font-medium', isActive ? 'text-white/80' : 'text-slate-400')}>
+              {receivedLabel}
+            </span>
           </div>
         </div>
       </button>
@@ -616,7 +688,7 @@ export default function MailboxPage() {
         key={email.id}
         onClick={() => {
           setSelectedItem({ type: 'outbox', email })
-          setShowEmailContent(true) // Show email content on mobile
+          setDetailOpen(true)
         }}
         className={clsx(
           'group w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
@@ -667,6 +739,23 @@ export default function MailboxPage() {
         </div>
       </button>
     )
+  }
+
+  function cleanHtmlPreview(value?: string | null) {
+    if (!value) return ''
+    return value
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function getSenderName(fromAddress: string, fallback: string) {
+    const trimmed = fromAddress?.split('<')[0]?.trim()
+    if (trimmed) return trimmed
+    return fallback
   }
 
   const renderDetail = () => {
@@ -993,16 +1082,6 @@ export default function MailboxPage() {
                   >
                     <Menu className="h-5 w-5" />
                   </Button>
-                  {showEmailContent && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowEmailContent(false)}
-                      className="md:hidden text-white hover:bg-white/10"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </Button>
-                  )}
                   <div>
                     <div className="flex items-center gap-2 text-white/80">
                       <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25rem]">ColdReach</span>
@@ -1079,51 +1158,33 @@ export default function MailboxPage() {
           )}
 
           <div className="flex flex-1 min-h-0 overflow-hidden">
-            <section
-              className={clsx(
-                'relative flex-shrink-0 border-r border-slate-200 bg-slate-100/80',
-                'w-full md:w-[300px] lg:w-[320px] xl:w-[340px]',
-                showEmailContent ? 'hidden md:flex' : 'flex'
-              )}
-            >
-              <div className="flex w-full flex-col">
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white/60 to-transparent" />
-                {loadingList ? (
-                  <div className="flex h-full items-center justify-center text-slate-400">
-                    <RefreshCw className="h-6 w-6 animate-spin" />
-                  </div>
-                ) : currentEmails.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center px-6 text-center text-slate-400">
-                    <Mail className="h-12 w-12" />
-                    <p className="mt-3 text-sm font-semibold">No email yet</p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      Adjust your filters or sync a connected account to see messages here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex-1 space-y-6 overflow-y-auto px-4 py-6">
-                    {emailSections.map((section) => (
-                      <div key={section.key} className="space-y-3">
-                        <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{section.label}</p>
-                        <div className="space-y-3">
-                          {mailboxTarget.folder === 'inbox'
-                            ? (section.emails as IncomingEmail[]).map((email) => renderInboxListItem(email))
-                            : (section.emails as SentEmail[]).map((email) => renderSentListItem(email))}
-                        </div>
+            <section className="flex-1 overflow-hidden bg-white">
+              {loadingList ? (
+                <div className="flex h-full items-center justify-center text-slate-400">
+                  <RefreshCw className="h-6 w-6 animate-spin" />
+                </div>
+              ) : currentEmails.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center px-6 text-center text-slate-400">
+                  <Mail className="h-12 w-12" />
+                  <p className="mt-3 text-sm font-semibold">No email yet</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Adjust your filters or sync a connected account to see messages here.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex-1 space-y-6 overflow-y-auto px-4 py-6 md:px-6">
+                  {emailSections.map((section) => (
+                    <div key={section.key} className="space-y-3">
+                      <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{section.label}</p>
+                      <div className="space-y-3">
+                        {mailboxTarget.folder === 'inbox'
+                          ? (section.emails as IncomingEmail[]).map((email) => renderInboxListItem(email))
+                          : (section.emails as SentEmail[]).map((email) => renderSentListItem(email))}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section
-              className={clsx(
-                'min-w-0 flex-1 bg-white',
-                showEmailContent ? 'block' : 'hidden md:block'
+                    </div>
+                  ))}
+                </div>
               )}
-            >
-              {renderDetail()}
             </section>
           </div>
         </div>
@@ -1182,6 +1243,49 @@ export default function MailboxPage() {
               Send
             </Button>
           </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+      <Dialog
+        open={detailOpen && !!selectedItem}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) {
+            setSelectedItem(null)
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl p-0">
+          <div className="flex h-full flex-col">
+            <DialogHeader className="flex flex-col gap-4 border-b border-slate-200 px-6 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.3rem] text-slate-400">Conversation</p>
+                  <DialogTitle className="text-lg font-semibold text-slate-900">
+                    {selectedItem?.type === 'inbox'
+                      ? selectedItem?.email.subject || 'Incoming message'
+                      : selectedItem?.email.subject || 'Sent email'}
+                  </DialogTitle>
+                </div>
+                {selectedItem && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (selectedItem.type === 'inbox') beginCompose('reply')
+                      else beginCompose('new')
+                    }}
+                    className="rounded-full border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                  >
+                    Reply
+                  </Button>
+                )}
+              </div>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto">
+              {renderDetail()}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </>

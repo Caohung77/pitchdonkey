@@ -326,31 +326,34 @@ export function ContactsList({
 
   return (
     <>
-      {/* Contacts grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {state.contacts.map((contact) => (
-          <ContactCard
-            key={contact.id}
-            contact={contact}
-            isSelected={selectedContacts.includes(contact.id)}
-            onSelect={(contactId, selected) => handleSelectContact(contactId, selected)}
-            onClick={handleView}
-            onEdit={handleEdit}
-            onDelete={handleDeleteConfirm}
-            onAddTag={handleAddTag}
-          />
-        ))}
-      </div>
+      {/* Main content container with bottom padding for drawer */}
+      <div className={selectedContacts.length > 0 ? "pb-32" : ""}>
+        {/* Contacts grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {state.contacts.map((contact) => (
+            <ContactCard
+              key={contact.id}
+              contact={contact}
+              isSelected={selectedContacts.includes(contact.id)}
+              onSelect={(contactId, selected) => handleSelectContact(contactId, selected)}
+              onClick={handleView}
+              onEdit={handleEdit}
+              onDelete={handleDeleteConfirm}
+              onAddTag={handleAddTag}
+            />
+          ))}
+        </div>
 
-      {/* Pagination */}
-      <Pagination
-        currentPage={state.pagination.page}
-        totalItems={state.pagination.total}
-        itemsPerPage={state.pagination.limit}
-        onPageChange={handlePageChange}
-        showInfo={true}
-        showFirstLast={true}
-      />
+        {/* Pagination */}
+        <Pagination
+          currentPage={state.pagination.page}
+          totalItems={state.pagination.total}
+          itemsPerPage={state.pagination.limit}
+          onPageChange={handlePageChange}
+          showInfo={true}
+          showFirstLast={true}
+        />
+      </div>
 
       {/* Modals */}
       {isEditModalOpen && editingContact && (

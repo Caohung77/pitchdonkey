@@ -78,7 +78,8 @@ export class CampaignProcessor {
           *,
           next_batch_send_time,
           first_batch_sent_at,
-          current_batch_number
+          current_batch_number,
+          batch_schedule
         `)
         .in('status', ['sending', 'scheduled'])
         .order('created_at', { ascending: true })
@@ -102,44 +103,66 @@ export class CampaignProcessor {
         console.log(`  ${i+1}. ${campaign.name} (${campaign.id}) - Status: ${campaign.status}`)
       })
 
-      // Filter out campaigns that are already fully processed but status wasn't updated
+      // Filter campaigns ready to process based on batch schedule
       const campaignsToProcess = []
+      const now = new Date()
+
       for (const campaign of campaigns) {
-        // Check completion using the new contact tracking system (with fallback to old method)
-        let isComplete = false
-        let processedCount = 0
-        let totalContacts = campaign.total_contacts || 0
+        // Check if campaign has batch schedule (new system)
+        if (campaign.batch_schedule?.batches) {
+          // Check if there's a pending batch ready to send
+          const hasPendingBatch = campaign.batch_schedule.batches.some((batch: any) =>
+            batch.status === 'pending' && new Date(batch.scheduled_time) <= now
+          )
 
-        // Use email_tracking method to check completion
-        const { data: emailStats } = await supabase
-          .from('email_tracking')
-          .select('sent_at, bounced_at')
-          .eq('campaign_id', campaign.id)
-
-        processedCount = emailStats?.filter(e => e.sent_at !== null).length || 0
-        isComplete = processedCount >= totalContacts && totalContacts > 0
-        console.log(`📊 Email tracking: ${campaign.name} has ${processedCount}/${totalContacts} processed`)
-
-        if (isComplete) {
-          console.log(`⏭️ Skipping ${campaign.name} - already completed`)
-
-          // Mark as completed if not already
-          if (campaign.status !== 'completed') {
-            await supabase
-              .from('campaigns')
-              .update({
-                status: 'completed',
-                emails_sent: processedCount,
-                emails_bounced: emailStats?.filter(e => e.bounced_at !== null).length || 0,
-                end_date: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', campaign.id)
-            console.log(`✅ Marked ${campaign.name} as completed`)
+          if (hasPendingBatch) {
+            console.log(`🔄 Will process ${campaign.name} - has pending batch ready`)
+            campaignsToProcess.push(campaign)
+          } else {
+            const nextBatch = campaign.batch_schedule.batches.find((b: any) => b.status === 'pending')
+            if (nextBatch) {
+              console.log(`⏰ Skipping ${campaign.name} - next batch at ${nextBatch.scheduled_time}`)
+            } else {
+              console.log(`✅ Skipping ${campaign.name} - all batches completed`)
+            }
           }
         } else {
-          console.log(`🔄 Will process ${campaign.name} (${processedCount}/${totalContacts} processed)`)
-          campaignsToProcess.push(campaign)
+          // Fallback to old completion check for campaigns without batch schedule
+          let isComplete = false
+          let processedCount = 0
+          let totalContacts = campaign.total_contacts || 0
+
+          // Use email_tracking method to check completion
+          const { data: emailStats } = await supabase
+            .from('email_tracking')
+            .select('sent_at, bounced_at')
+            .eq('campaign_id', campaign.id)
+
+          processedCount = emailStats?.filter(e => e.sent_at !== null).length || 0
+          isComplete = processedCount >= totalContacts && totalContacts > 0
+          console.log(`📊 Email tracking: ${campaign.name} has ${processedCount}/${totalContacts} processed`)
+
+          if (isComplete) {
+            console.log(`⏭️ Skipping ${campaign.name} - already completed`)
+
+            // Mark as completed if not already
+            if (campaign.status !== 'completed') {
+              await supabase
+                .from('campaigns')
+                .update({
+                  status: 'completed',
+                  emails_sent: processedCount,
+                  emails_bounced: emailStats?.filter(e => e.bounced_at !== null).length || 0,
+                  end_date: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', campaign.id)
+              console.log(`✅ Marked ${campaign.name} as completed`)
+            }
+          } else {
+            console.log(`🔄 Will process ${campaign.name} (${processedCount}/${totalContacts} processed)`)
+            campaignsToProcess.push(campaign)
+          }
         }
       }
 

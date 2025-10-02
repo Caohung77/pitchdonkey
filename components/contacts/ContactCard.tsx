@@ -82,6 +82,14 @@ export function ContactCard({
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    // In selection mode, double-click should also toggle selection, not navigate
+    if (onSelect) {
+      onSelect(contact.id, !isSelected)
+      return
+    }
+
+    // Normal mode: double-click opens detail view
     if (onClick) {
       onClick(contact)
     }
