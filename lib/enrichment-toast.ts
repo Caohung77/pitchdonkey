@@ -24,12 +24,8 @@ export function useEnrichmentToast() {
     addToast({
       type: 'info',
       title: 'Enrichment Started',
-      message: `Processing ${contactCount} contacts in the background`,
-      action: {
-        label: 'View Dashboard',
-        onClick: () => router.push('/dashboard')
-      },
-      duration: 7000
+      message: `Processing ${contactCount} contact${contactCount > 1 ? 's' : ''} in the background. Progress will be visible on the dashboard.`,
+      duration: 3000 // Auto-dismiss after 3 seconds
     })
   }
 

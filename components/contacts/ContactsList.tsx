@@ -407,6 +407,8 @@ export function ContactsList({
           onEnrichmentStarted={(jobId) => {
             setCurrentJobId(jobId)
             setIsBulkEnrichModalOpen(false)
+            // Clear selected contacts so user sees full list again
+            setSelectedContacts([])
             // Don't open progress modal - enrichment now runs in background
             // User will see progress in dashboard and get completion notifications
           }}

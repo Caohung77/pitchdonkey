@@ -59,6 +59,23 @@ export function BulkEnrichmentModal({
     }
   }, [isOpen, selectedContacts])
 
+  // Helper to check if email domain can be used for enrichment
+  const canEnrichFromEmail = (email: string): boolean => {
+    if (!email) return false
+    const domain = email.split('@')[1]?.toLowerCase()
+    if (!domain) return false
+
+    // Personal email domains that should NOT be used for enrichment
+    const personalDomains = new Set([
+      'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+      'web.de', 'gmx.de', 'gmx.net', 't-online.de', 'freenet.de',
+      'aol.com', 'live.com', 'me.com', 'msn.com', 'ymail.com',
+      'protonmail.com', 'tutanota.com', '1und1.de', 'arcor.de'
+    ])
+
+    return !personalDomains.has(domain)
+  }
+
   const analyzeEligibility = () => {
     const eligible: Contact[] = []
     const already_enriched: Contact[] = []
@@ -69,21 +86,23 @@ export function BulkEnrichmentModal({
     selectedContacts.forEach(contact => {
       const hasWebsite = !!contact.website
       const hasLinkedIn = !!contact.linkedin_url
+      const canUseEmailDomain = canEnrichFromEmail(contact.email)
       const isWebsiteEnriched = contact.enrichment_status === 'completed' && isRecentlyEnriched(contact.enrichment_updated_at)
       const isLinkedInEnriched = contact.linkedin_extraction_status === 'completed' && isRecentlyEnriched(contact.linkedin_extracted_at)
       const isProcessing = contact.enrichment_status === 'pending' || contact.linkedin_extraction_status === 'pending'
-      
+
       if (isProcessing) {
         processing.push(contact)
       } else if ((isWebsiteEnriched || isLinkedInEnriched)) {
         already_enriched.push(contact)
-      } else if (!hasWebsite && !hasLinkedIn) {
+      } else if (!hasWebsite && !hasLinkedIn && !canUseEmailDomain) {
+        // Only mark as "No Sources" if truly no sources available
         no_sources.push(contact)
-      } else if (!hasWebsite && hasLinkedIn) {
-        // Has LinkedIn but no website - can use LinkedIn-only enrichment
+      } else if (!hasWebsite && !canUseEmailDomain && hasLinkedIn) {
+        // Has LinkedIn but no website/email domain - LinkedIn-only enrichment
         linkedin_only.push(contact)
       } else {
-        // Has website (and maybe LinkedIn) - can use standard or smart enrichment
+        // Has website, email domain, or LinkedIn - eligible for enrichment
         eligible.push(contact)
       }
     })
@@ -337,22 +356,27 @@ export function BulkEnrichmentModal({
                   <TableCell>
                     <div className="space-y-1">
                       {contact.website ? (
-                        <a 
-                          href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`} 
-                          target="_blank" 
+                        <a
+                          href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:underline text-sm flex items-center gap-1"
                         >
                           <Globe className="h-3 w-3" />
                           {contact.website.replace(/^https?:\/\//, '')}
                         </a>
+                      ) : canEnrichFromEmail(contact.email) ? (
+                        <span className="text-green-600 text-sm flex items-center gap-1">
+                          <Globe className="h-3 w-3" />
+                          Email domain ({contact.email.split('@')[1]})
+                        </span>
                       ) : (
                         <span className="text-gray-400 text-sm">No website</span>
                       )}
                       {contact.linkedin_url && (
-                        <a 
-                          href={contact.linkedin_url} 
-                          target="_blank" 
+                        <a
+                          href={contact.linkedin_url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:underline text-sm flex items-center gap-1"
                         >

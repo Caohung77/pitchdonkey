@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Card, CardContent } from '@/components/ui/card'
+import { EnrichmentProgressBar } from '@/components/enrichment/EnrichmentProgressBar'
 
 interface Notification {
   id: string
@@ -380,8 +381,11 @@ export default function DashboardLayout({
           </Button>
 
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <div className="flex flex-1" />
-            
+            <div className="flex flex-1 items-center">
+              {/* Enrichment progress bar */}
+              <EnrichmentProgressBar userId={user?.id} compact={true} />
+            </div>
+
             {/* Notifications */}
             <div className="flex items-center gap-x-4 lg:gap-x-6">
               <DropdownMenu>

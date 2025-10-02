@@ -398,7 +398,9 @@ export class CampaignProcessor {
         return
       }
 
-      console.log(`👥 Found ${contacts.length} contacts to email`)
+      const totalCampaignContacts = campaign.batch_schedule?.total_contacts || campaign.total_contacts || contacts.length
+
+      console.log(`👥 Found ${contacts.length} contacts to email in this batch (campaign total: ${totalCampaignContacts})`)
 
       // Choose email account: honor campaign.from_email_account_id if provided
       let emailAccount: any = null
@@ -778,7 +780,7 @@ export class CampaignProcessor {
             await supabase
               .from('campaigns')
               .update({
-                total_contacts: contacts.length,
+                total_contacts: totalCampaignContacts,
                 updated_at: new Date().toISOString()
               })
               .eq('id', campaign.id)
@@ -804,7 +806,7 @@ export class CampaignProcessor {
             await supabase
               .from('campaigns')
               .update({
-                total_contacts: contacts.length,
+                total_contacts: totalCampaignContacts,
                 updated_at: new Date().toISOString()
               })
               .eq('id', campaign.id)
@@ -863,7 +865,7 @@ export class CampaignProcessor {
           await supabase
             .from('campaigns')
             .update({
-              total_contacts: contacts.length,
+              total_contacts: totalCampaignContacts,
               updated_at: new Date().toISOString()
             })
             .eq('id', campaign.id)
@@ -879,8 +881,9 @@ export class CampaignProcessor {
 
       // Prepare update data
       const updateData: any = {
-        emails_sent: emailsSent,
-        emails_bounced: emailsFailed,
+        emails_sent: (campaign.emails_sent || 0) + emailsSent,
+        emails_bounced: (campaign.emails_bounced || 0) + emailsFailed,
+        total_contacts: totalCampaignContacts,
         updated_at: new Date().toISOString()
       }
 

@@ -19,6 +19,8 @@ import {
   Target
 } from 'lucide-react'
 import Link from 'next/link'
+import { EnrichmentProgressBar } from '@/components/enrichment/EnrichmentProgressBar'
+import { useAuth } from '@/components/auth/AuthProvider'
 
 interface DashboardStats {
   emailsSent: number
@@ -60,6 +62,7 @@ interface RecentActivity {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [accountHealth, setAccountHealth] = useState<AccountHealth | null>(null)
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
@@ -149,6 +152,9 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* Enrichment Progress */}
+      <EnrichmentProgressBar userId={user?.id} />
 
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
