@@ -10,6 +10,8 @@ type EmailInsightResponse = {
   summary: string
   intent: string
   contact_status: 'green' | 'yellow' | 'red'
+  agent_id?: string | null
+  agent_persona?: string | null
 }
 
 const FALLBACK_INSIGHTS: EmailInsightResponse = {
@@ -65,7 +67,63 @@ const stripQuotedLines = (value: string) => {
     .trim()
 }
 
-const buildPrompt = (email: { senderName: string; senderEmail: string; subject: string; body: string }) => {
+const buildPrompt = (
+  email: { senderName: string; senderEmail: string; subject: string; body: string },
+  agent?: {
+    sender_name: string | null
+    sender_role: string | null
+    company_name: string | null
+    purpose: string | null
+    tone: string | null
+    target_persona: string | null
+    product_one_liner: string | null
+    conversation_goal: string | null
+    language: string
+  } | null
+) => {
+  // Build persona-aware prompt if agent is linked
+  if (agent && agent.sender_name && agent.company_name) {
+    const languageNote = agent.language === 'de'
+      ? '- Analyze in German and return summary/firstliner in German.'
+      : '- Analyze in English and return summary/firstliner in English.'
+
+    return `You are ${agent.sender_name}${agent.sender_role ? `, ${agent.sender_role}` : ''} at ${agent.company_name}.
+
+YOUR CONTEXT:
+${agent.purpose ? `- Your purpose: ${agent.purpose}` : ''}
+${agent.tone ? `- Your communication style: ${agent.tone}` : ''}
+${agent.target_persona ? `- Your target audience: ${agent.target_persona}` : ''}
+${agent.product_one_liner ? `- Your product/service: ${agent.product_one_liner}` : ''}
+${agent.conversation_goal ? `- Your goal: ${agent.conversation_goal}` : ''}
+
+You received a reply from ${email.senderName} (${email.senderEmail}) with subject "${email.subject}".
+
+ANALYZE THIS EMAIL FROM YOUR PERSPECTIVE:
+- Does it show interest in your offering?
+- Is it relevant to your outreach goals?
+- What's their intent and how should YOU respond?
+${languageNote}
+- Keep intent/contact_status in English.
+- Output JSON only, no code fences.
+
+Email body:
+"""
+${email.body}
+"""
+
+Return JSON:
+{
+  "sender_name": "...",
+  "sender_email": "...",
+  "subject": "...",
+  "firstliner": "...",
+  "summary": "... (persona-aware summary from YOUR perspective)",
+  "intent": "purchase_interest | meeting_request | info_request | positive_reply | negative_reply | unsubscribe | auto_reply | other",
+  "contact_status": "green | yellow | red"
+}`
+  }
+
+  // Generic prompt for emails without agent linkage
   return `You are an AI assistant that processes inbound emails for an outreach dashboard. Emails can be in English or German. Your task is to analyze the raw email body and return a compact JSON object. Follow the rules strictly. Remember:
 
 - If the email is in English → return summary and firstliner in English.
@@ -191,9 +249,33 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
 
     const { data: email, error } = await supabase
       .from('incoming_emails')
-      .select(
-        `id, from_address, subject, text_content, html_content, ai_summary`
-      )
+      .select(`
+        id,
+        from_address,
+        subject,
+        text_content,
+        html_content,
+        ai_summary,
+        email_account_id,
+        email_accounts!inner (
+          id,
+          email,
+          outreach_agent_id,
+          outreach_agents (
+            id,
+            name,
+            sender_name,
+            sender_role,
+            company_name,
+            purpose,
+            tone,
+            target_persona,
+            product_one_liner,
+            conversation_goal,
+            language
+          )
+        )
+      `)
       .eq('user_id', user.id)
       .eq('id', emailId)
       .maybeSingle()
@@ -224,6 +306,8 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
             summary: summary.summary,
             intent: summary.intent,
             contact_status: summary.contact_status,
+            agent_id: summary.agent_id || null,
+            agent_persona: summary.agent_persona || null,
           } as EmailInsightResponse
         }))
       }
@@ -238,14 +322,27 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
     const senderEmail = extractEmailAddress(email.from_address)
     const senderName = email.from_address?.split('<')[0]?.trim() || senderEmail || 'Unknown'
 
-  const prompt = buildPrompt({
-    senderName,
-    senderEmail: senderEmail || 'unknown@example.com',
-    subject: email.subject || '(No subject)',
-    body: stripQuotedLines(bodyText || '(No body)').slice(0, 6000),
-  })
+    // Get linked outreach agent if available
+    const emailAccount = (email as any).email_accounts
+    const agent = emailAccount?.outreach_agents?.[0] || null
 
-  let insights = await runGemini(prompt)
+    if (agent) {
+      console.log(`🎭 Using agent persona: ${agent.name} (${agent.id})`)
+    } else {
+      console.log('📧 No agent linked - using generic prompt')
+    }
+
+    const prompt = buildPrompt(
+      {
+        senderName,
+        senderEmail: senderEmail || 'unknown@example.com',
+        subject: email.subject || '(No subject)',
+        body: stripQuotedLines(bodyText || '(No body)').slice(0, 6000),
+      },
+      agent
+    )
+
+    let insights = await runGemini(prompt)
 
   if (!insights) {
     const fallbackBody = stripQuotedLines(bodyText || '')
@@ -288,7 +385,9 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
     const aiSummaryData = {
       ...payload,
       generated_at: new Date().toISOString(),
-      model: 'gemini-2.5-flash-lite'
+      model: 'gemini-2.5-flash-lite',
+      agent_id: agent?.id || null,
+      agent_persona: agent ? `${agent.sender_name} at ${agent.company_name}` : null,
     }
 
     const { error: updateError } = await supabase

@@ -30,6 +30,8 @@ import clsx from 'clsx'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
 import { MailboxToolbar } from '../../../components/mailbox/MailboxToolbar'
+import { AISummaryButton } from '@/components/mailbox/AISummaryButton'
+import { AISummaryCard } from '@/components/mailbox/AISummaryCard'
 
 interface EmailAccount {
   id: string
@@ -97,6 +99,8 @@ interface EmailInsight {
   summary: string
   intent: string
   contact_status: 'green' | 'yellow' | 'red'
+  agent_id?: string | null
+  agent_persona?: string | null
 }
 
 const INTENT_META: Record<string, { label: string; icon: string; color: string }> = {
@@ -219,6 +223,7 @@ export default function MailboxPage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [emailInsights, setEmailInsights] = useState<Record<string, EmailInsight>>({})
+  const [generatingInsights, setGeneratingInsights] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetchEmailAccounts()
@@ -300,32 +305,18 @@ export default function MailboxPage() {
       const data = await response.json()
       setInboxEmails(data.emails || [])
 
+      // Load cached AI summaries from email data (no auto-generation)
       if (data.emails?.length) {
-        // First, load cached AI summaries from the email data itself
         const cachedInsights: Record<string, EmailInsight> = {}
-        const emailsNeedingAI: IncomingEmail[] = []
 
         ;(data.emails as IncomingEmail[]).forEach((email: IncomingEmail) => {
           if (email.ai_summary) {
-            // We have a cached summary - use it directly
             cachedInsights[email.id] = email.ai_summary
-          } else {
-            // No cached summary - need to generate one
-            emailsNeedingAI.push(email)
           }
         })
 
-        // Update state with cached insights immediately
         if (Object.keys(cachedInsights).length > 0) {
           setEmailInsights(prev => ({ ...prev, ...cachedInsights }))
-        }
-
-        // Generate AI summaries for emails that don't have them yet (in background)
-        if (emailsNeedingAI.length > 0) {
-          console.log(`🤖 Generating AI summaries for ${emailsNeedingAI.length} emails...`)
-          emailsNeedingAI.forEach(email => {
-            fetchEmailInsight(email.id) // Fire and forget - UI will update when ready
-          })
         }
       }
     } catch (error) {
@@ -338,6 +329,8 @@ export default function MailboxPage() {
 
   const fetchEmailInsight = async (emailId: string) => {
     try {
+      setGeneratingInsights(prev => ({ ...prev, [emailId]: true }))
+
       const response = await fetch('/api/mailbox/email-insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -360,6 +353,8 @@ export default function MailboxPage() {
     } catch (error) {
       console.error('Error fetching email insight:', error)
       return null
+    } finally {
+      setGeneratingInsights(prev => ({ ...prev, [emailId]: false }))
     }
   }
 
@@ -636,13 +631,7 @@ export default function MailboxPage() {
     const senderEmail = insight?.sender_email || extractEmailAddress(email.from_address) || 'unknown@example.com'
     const senderName = insight?.sender_name || getSenderName(email.from_address, senderEmail)
     const firstLine = insight?.firstliner || fallbackPreview
-    const summary = insight?.summary?.trim()
-
-    // Show loading state while AI is generating, otherwise show summary or fallback
-    const isGeneratingSummary = !insight
-    const summaryText = isGeneratingSummary
-      ? 'Generating AI summary...'
-      : (summary && summary.length > 0 ? summary : fallbackPreview || 'No content available')
+    const isGenerating = generatingInsights[email.id]
 
     const receivedLabel = formatDate(email.date_received)
     const intentMeta = insight ? INTENT_META[insight.intent] || INTENT_META.other : null
@@ -682,13 +671,25 @@ export default function MailboxPage() {
           <div className="space-y-2">
             <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>{subject}</p>
             <p className={clsx('truncate text-xs', isActive ? 'text-white/80' : 'text-slate-400')}>{firstLine}</p>
-            <div className={clsx('flex items-start gap-2 text-xs leading-relaxed', isActive ? 'text-white/80' : 'text-slate-500')}>
-              {isGeneratingSummary && (
-                <RefreshCw className={clsx('h-3 w-3 shrink-0 animate-spin mt-0.5', isActive ? 'text-white/60' : 'text-blue-500')} />
+            <div className="mt-2">
+              {!insight && !isGenerating && (
+                <AISummaryButton
+                  variant="compact"
+                  onGenerate={() => fetchEmailInsight(email.id)}
+                  loading={false}
+                />
               )}
-              <p className={clsx(isGeneratingSummary && 'italic')}>
-                {summaryText}
-              </p>
+              {isGenerating && (
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-3 w-3 animate-spin text-purple-600" />
+                  <span className="text-xs italic text-slate-500">Generating summary...</span>
+                </div>
+              )}
+              {insight && (
+                <div className="rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-700">
+                  <p className="line-clamp-2">{insight.summary}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -862,18 +863,29 @@ export default function MailboxPage() {
           </div>
 
           <div className="flex-1 overflow-auto px-6 py-8">
-            <article className="mx-auto max-w-3xl rounded-3xl bg-white px-6 py-8 shadow-sm ring-1 ring-slate-100">
-              {email.html_content ? (
-                <div
-                  className="prose prose-lg max-w-none prose-headings:text-slate-900 prose-p:text-slate-600 prose-a:text-blue-600"
-                  dangerouslySetInnerHTML={{ __html: email.html_content }}
-                />
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-slate-600">
-                  {email.text_content || 'No content available'}
-                </pre>
-              )}
-            </article>
+            <div className="mx-auto max-w-3xl space-y-6">
+              {/* AI Summary Card */}
+              <AISummaryCard
+                insight={emailInsights[email.id]}
+                loading={generatingInsights[email.id] || false}
+                onGenerate={() => fetchEmailInsight(email.id)}
+                onRegenerate={() => fetchEmailInsight(email.id)}
+              />
+
+              {/* Email Content */}
+              <article className="rounded-3xl bg-white px-6 py-8 shadow-sm ring-1 ring-slate-100">
+                {email.html_content ? (
+                  <div
+                    className="prose prose-lg max-w-none prose-headings:text-slate-900 prose-p:text-slate-600 prose-a:text-blue-600"
+                    dangerouslySetInnerHTML={{ __html: email.html_content }}
+                  />
+                ) : (
+                  <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-slate-600">
+                    {email.text_content || 'No content available'}
+                  </pre>
+                )}
+              </article>
+            </div>
           </div>
         </div>
       )
