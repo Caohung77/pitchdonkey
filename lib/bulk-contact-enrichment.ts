@@ -316,6 +316,28 @@ export class BulkContactEnrichmentService {
         }).catch(err => {
           console.error('Failed to trigger next batch:', err)
         })
+      } else {
+        // No more contacts - mark job as completed
+        const finalProgress = {
+          ...(job.progress as any),
+          completed: progress.completed + batchCompleted,
+          failed: progress.failed + batchFailed
+        }
+
+        console.log(`🎉 Job ${jobId} completed: ${finalProgress.completed}/${job.contact_ids.length} successful, ${finalProgress.failed} failed`)
+
+        await this.updateJobStatus(jobId, 'completed')
+        await this.createNotification(job.user_id, {
+          type: 'enrichment_completed',
+          title: 'Contact Enrichment Completed',
+          message: `Successfully enriched ${finalProgress.completed} contacts${finalProgress.failed > 0 ? ` (${finalProgress.failed} failed)` : ''}`,
+          data: {
+            job_id: jobId,
+            total_completed: finalProgress.completed,
+            total_failed: finalProgress.failed,
+            total_contacts: job.contact_ids.length
+          }
+        })
       }
 
       return { hasMore, completed: !hasMore }
