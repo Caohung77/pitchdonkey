@@ -59,6 +59,7 @@ interface IncomingEmail {
   processing_status: 'pending' | 'processing' | 'completed' | 'failed'
   text_content: string | null
   html_content: string | null
+  ai_summary?: EmailInsight | null
   email_accounts: EmailAccount
   email_replies?: Array<{
     campaigns: Campaign | null
@@ -300,9 +301,31 @@ export default function MailboxPage() {
       setInboxEmails(data.emails || [])
 
       if (data.emails?.length) {
-        const toFetch = (data.emails as IncomingEmail[]).filter((email: IncomingEmail) => !emailInsights[email.id])
-        if (toFetch.length) {
-          await Promise.all(toFetch.map((email) => fetchEmailInsight(email.id)))
+        // First, load cached AI summaries from the email data itself
+        const cachedInsights: Record<string, EmailInsight> = {}
+        const emailsNeedingAI: IncomingEmail[] = []
+
+        ;(data.emails as IncomingEmail[]).forEach((email: IncomingEmail) => {
+          if (email.ai_summary) {
+            // We have a cached summary - use it directly
+            cachedInsights[email.id] = email.ai_summary
+          } else {
+            // No cached summary - need to generate one
+            emailsNeedingAI.push(email)
+          }
+        })
+
+        // Update state with cached insights immediately
+        if (Object.keys(cachedInsights).length > 0) {
+          setEmailInsights(prev => ({ ...prev, ...cachedInsights }))
+        }
+
+        // Generate AI summaries for emails that don't have them yet (in background)
+        if (emailsNeedingAI.length > 0) {
+          console.log(`🤖 Generating AI summaries for ${emailsNeedingAI.length} emails...`)
+          emailsNeedingAI.forEach(email => {
+            fetchEmailInsight(email.id) // Fire and forget - UI will update when ready
+          })
         }
       }
     } catch (error) {

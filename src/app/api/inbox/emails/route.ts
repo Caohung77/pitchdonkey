@@ -30,6 +30,7 @@ export const GET = withAuth(async (
         classification_confidence,
         text_content,
         html_content,
+        ai_summary,
         created_at,
         updated_at,
         email_accounts!inner (
