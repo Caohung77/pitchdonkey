@@ -147,6 +147,37 @@ const determineStatus = (intent: string): EmailInsightResponse['contact_status']
   return INTENT_STATUS_MAP[intent] || 'yellow'
 }
 
+const buildFallbackSummary = (
+  intent: string,
+  firstLine: string,
+  bodyText: string,
+  senderName: string,
+): string => {
+  if (firstLine) {
+    return firstLine
+  }
+
+  const trimmed = bodyText.trim()
+  if (trimmed.length) {
+    return trimmed.slice(0, 220)
+  }
+
+  switch (intent) {
+    case 'auto_reply':
+      return `${senderName} sent an automatic reply.`
+    case 'negative_reply':
+      return `${senderName} is not interested.`
+    case 'purchase_interest':
+      return `${senderName} is asking about pricing or next steps.`
+    case 'meeting_request':
+      return `${senderName} is requesting a call or meeting.`
+    case 'unsubscribe':
+      return `${senderName} wants to unsubscribe.`
+    default:
+      return 'Inbound email received.'
+  }
+}
+
 export const POST = withAuth(async (request: NextRequest, { user, supabase }) => {
   try {
     const { emailId } = await request.json()
@@ -161,7 +192,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
     const { data: email, error } = await supabase
       .from('incoming_emails')
       .select(
-        `id, from_address, subject, text_content, html_content`
+        `id, from_address, subject, text_content, html_content, ai_summary`
       )
       .eq('user_id', user.id)
       .eq('id', emailId)
@@ -174,6 +205,31 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
         error: 'Email not found',
       }, { status: 404 })
     }
+
+    // Check if we have a cached AI summary that's less than 7 days old
+    if (email.ai_summary && typeof email.ai_summary === 'object') {
+      const summary = email.ai_summary as any
+      const generatedAt = summary.generated_at ? new Date(summary.generated_at) : null
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+      if (generatedAt && generatedAt > sevenDaysAgo) {
+        console.log('✅ Using cached AI summary for email', emailId)
+        return addSecurityHeaders(NextResponse.json({
+          success: true,
+          data: {
+            sender_name: summary.sender_name,
+            sender_email: summary.sender_email,
+            subject: summary.subject,
+            firstliner: summary.firstliner,
+            summary: summary.summary,
+            intent: summary.intent,
+            contact_status: summary.contact_status,
+          } as EmailInsightResponse
+        }))
+      }
+    }
+
+    console.log('🤖 Generating new AI summary for email', emailId)
 
     const bodyText = email.text_content?.trim().length
       ? email.text_content
@@ -217,7 +273,36 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       contact_status: contactStatus,
     }
 
+    if (!payload.summary || !payload.summary.trim()) {
+      payload.summary = buildFallbackSummary(
+        normalizedIntent,
+        payload.firstliner,
+        bodyText || '',
+        payload.sender_name,
+      )
+    }
+
     console.log('✅ Email insight summary', emailId, payload.summary)
+
+    // Cache the AI summary in the database for future use
+    const aiSummaryData = {
+      ...payload,
+      generated_at: new Date().toISOString(),
+      model: 'gemini-2.5-flash-lite'
+    }
+
+    const { error: updateError } = await supabase
+      .from('incoming_emails')
+      .update({ ai_summary: aiSummaryData })
+      .eq('id', emailId)
+      .eq('user_id', user.id)
+
+    if (updateError) {
+      console.error('Failed to cache AI summary:', updateError)
+      // Don't fail the request if caching fails, just log the error
+    } else {
+      console.log('💾 Cached AI summary for email', emailId)
+    }
 
     return addSecurityHeaders(NextResponse.json({ success: true, data: payload }))
   } catch (error) {

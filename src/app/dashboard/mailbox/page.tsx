@@ -614,7 +614,13 @@ export default function MailboxPage() {
     const senderName = insight?.sender_name || getSenderName(email.from_address, senderEmail)
     const firstLine = insight?.firstliner || fallbackPreview
     const summary = insight?.summary?.trim()
-    const summaryText = summary && summary.length > 0 ? summary : 'Analyzing conversation…'
+
+    // Show loading state while AI is generating, otherwise show summary or fallback
+    const isGeneratingSummary = !insight
+    const summaryText = isGeneratingSummary
+      ? 'Generating AI summary...'
+      : (summary && summary.length > 0 ? summary : fallbackPreview || 'No content available')
+
     const receivedLabel = formatDate(email.date_received)
     const intentMeta = insight ? INTENT_META[insight.intent] || INTENT_META.other : null
     const statusMeta = insight ? STATUS_META[insight.contact_status] : null
@@ -653,9 +659,14 @@ export default function MailboxPage() {
           <div className="space-y-2">
             <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>{subject}</p>
             <p className={clsx('truncate text-xs', isActive ? 'text-white/80' : 'text-slate-400')}>{firstLine}</p>
-            <p className={clsx('text-xs leading-relaxed', isActive ? 'text-white/80' : 'text-slate-500')}>
-              {summaryText}
-            </p>
+            <div className={clsx('flex items-start gap-2 text-xs leading-relaxed', isActive ? 'text-white/80' : 'text-slate-500')}>
+              {isGeneratingSummary && (
+                <RefreshCw className={clsx('h-3 w-3 shrink-0 animate-spin mt-0.5', isActive ? 'text-white/60' : 'text-blue-500')} />
+              )}
+              <p className={clsx(isGeneratingSummary && 'italic')}>
+                {summaryText}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
