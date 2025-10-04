@@ -498,6 +498,7 @@ export default function DashboardLayout({
           </div>
         </main>
       </div>
+      </div>
     </ToastProvider>
   )
 }

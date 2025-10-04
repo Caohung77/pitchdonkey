@@ -524,14 +524,9 @@ export class CampaignProcessor {
 
       console.log(`⚖️ Batch size: ${batchSize}, Available contacts: ${contacts.length}`)
 
-      let processedCount = 0 // Track total contacts processed (including skipped)
+      let emailsProcessedInThisBatch = 0 // Track only NEW emails sent in this batch
 
       for (let i = 0; i < contacts.length; i++) {
-        // Enforce batch size limit - stop when we've processed enough contacts
-        if (processedCount >= batchSize) {
-          console.log(`⚖️ Batch size reached (${batchSize}). Stopping current batch. Remaining: ${contacts.length - i} contacts`)
-          break
-        }
         const contact = contacts[i]
 
         // Check if email already sent to this contact to prevent duplicates
@@ -544,11 +539,17 @@ export class CampaignProcessor {
 
         if (existingTracking && existingTracking.status !== 'failed') {
           console.log(`⏭️ Skipping ${contact.email} - email already sent/delivered (status: ${existingTracking.status})`)
-          processedCount++ // Count skipped contacts toward batch limit
+          // DON'T count skipped contacts toward batch limit - they're already done
           continue // Skip this contact
         }
 
-        processedCount++ // Count this contact toward batch limit
+        // Enforce batch size limit ONLY for NEW emails to be sent
+        if (emailsProcessedInThisBatch >= batchSize) {
+          console.log(`⚖️ Batch size reached (${batchSize} new emails sent). Stopping current batch. Remaining: ${contacts.length - i} contacts`)
+          break
+        }
+
+        emailsProcessedInThisBatch++ // Count this NEW email toward batch limit
 
         const trackingId = `${campaign.id}_${contact.id}_${Date.now()}`
         let trackingPixelId: string | null = null
@@ -921,11 +922,11 @@ export class CampaignProcessor {
         }
       } else {
         // Fallback to old logic if no batch schedule
-        const remainingContacts = contacts.length - processedCount
+        const remainingContacts = totalCampaignContacts - ((campaign.emails_sent || 0) + emailsSent)
         const hasMoreContacts = remainingContacts > 0
         const newStatus = !hasMoreContacts ? 'completed' : (totalProcessed > 0 ? 'sending' : 'paused')
 
-        updateData.total_contacts = contacts.length
+        updateData.total_contacts = totalCampaignContacts
         updateData.status = newStatus
 
         if (hasMoreContacts && emailsSent > 0) {
