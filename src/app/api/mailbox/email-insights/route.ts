@@ -155,13 +155,19 @@ Return JSON with this structure:
 
 const runGemini = async (prompt: string) => {
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY
-  if (!apiKey) return null
+  if (!apiKey) {
+    console.error('❌ GOOGLE_GEMINI_API_KEY not found in environment')
+    return null
+  }
+
+  console.log('🔑 Gemini API key found, initializing...')
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash-lite',
     })
+    console.log('🤖 Gemini model initialized: gemini-2.5-flash-lite')
 
     const response = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -172,7 +178,7 @@ const runGemini = async (prompt: string) => {
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-        { category: HarmCategory.HARM_CATEGORY_SEXUAL, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
         { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
       ],
     })
@@ -238,7 +244,7 @@ const buildFallbackSummary = (
 
 export const POST = withAuth(async (request: NextRequest, { user, supabase }) => {
   try {
-    const { emailId } = await request.json()
+    const { emailId, forceRegenerate } = await request.json()
 
     if (!emailId || typeof emailId !== 'string') {
       return NextResponse.json({
@@ -246,6 +252,8 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
         error: 'emailId is required',
       }, { status: 400 })
     }
+
+    console.log('🔄 Email insights request:', { emailId, forceRegenerate })
 
     const { data: email, error } = await supabase
       .from('incoming_emails')
@@ -288,11 +296,13 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       }, { status: 404 })
     }
 
-    // Check if we have a cached AI summary that's less than 7 days old
-    if (email.ai_summary && typeof email.ai_summary === 'object') {
+    // Check if we have a cached AI summary that's less than 7 days old (skip if force regenerate)
+    if (!forceRegenerate && email.ai_summary && typeof email.ai_summary === 'object') {
       const summary = email.ai_summary as any
       const generatedAt = summary.generated_at ? new Date(summary.generated_at) : null
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+      console.log('🔍 Checking cached summary:', { emailId, hasCache: true, generatedAt, isExpired: generatedAt ? generatedAt <= sevenDaysAgo : true })
 
       if (generatedAt && generatedAt > sevenDaysAgo) {
         console.log('✅ Using cached AI summary for email', emailId)
@@ -311,6 +321,12 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
           } as EmailInsightResponse
         }))
       }
+
+      console.log('⏰ Cached summary expired or invalid, regenerating...')
+    } else if (forceRegenerate) {
+      console.log('🔄 Force regenerate requested, bypassing cache...')
+    } else {
+      console.log('🔍 No cached summary found')
     }
 
     console.log('🤖 Generating new AI summary for email', emailId)
@@ -342,9 +358,13 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       agent
     )
 
+    console.log('📤 Sending prompt to Gemini...')
+    console.log('📝 Prompt preview:', prompt.slice(0, 200))
     let insights = await runGemini(prompt)
+    console.log('📥 Gemini response:', insights)
 
   if (!insights) {
+    console.warn('⚠️ Gemini returned null, using fallback')
     const fallbackBody = stripQuotedLines(bodyText || '')
     const firstLine = extractFirstLine(fallbackBody)
     insights = {
@@ -355,6 +375,8 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       firstliner: firstLine,
       summary: '',
     }
+  } else {
+    console.log('✅ Gemini generated summary:', insights.summary)
   }
 
     const normalizedIntent = insights.intent || 'other'

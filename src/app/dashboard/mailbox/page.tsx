@@ -224,6 +224,7 @@ export default function MailboxPage() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [emailInsights, setEmailInsights] = useState<Record<string, EmailInsight>>({})
   const [generatingInsights, setGeneratingInsights] = useState<Record<string, boolean>>({})
+  const [showingSummary, setShowingSummary] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetchEmailAccounts()
@@ -327,14 +328,14 @@ export default function MailboxPage() {
     }
   }
 
-  const fetchEmailInsight = async (emailId: string) => {
+  const fetchEmailInsight = async (emailId: string, forceRegenerate = false) => {
     try {
       setGeneratingInsights(prev => ({ ...prev, [emailId]: true }))
 
       const response = await fetch('/api/mailbox/email-insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emailId }),
+        body: JSON.stringify({ emailId, forceRegenerate }),
       })
 
       if (!response.ok) {
@@ -348,6 +349,8 @@ export default function MailboxPage() {
 
       const insight = payload.data as EmailInsight
       console.log('🔍 Insight received', emailId, insight)
+      console.log('📝 Summary content:', insight.summary)
+      console.log('📊 Full insight object:', JSON.stringify(insight, null, 2))
       setEmailInsights((prev) => ({ ...prev, [emailId]: insight }))
       return insight
     } catch (error) {
@@ -626,34 +629,138 @@ export default function MailboxPage() {
   const renderInboxListItem = (email: IncomingEmail) => {
     const insight = emailInsights[email.id]
     const isActive = selectedItem?.type === 'inbox' && selectedItem.email.id === email.id
-    const fallbackPreview = email.text_content?.slice(0, 160) || cleanHtmlPreview(email.html_content).slice(0, 160) || ''
+    const fallbackPreview = email.text_content?.slice(0, 300) || cleanHtmlPreview(email.html_content).slice(0, 300) || ''
     const subject = insight?.subject || email.subject || '(No subject)'
     const senderEmail = insight?.sender_email || extractEmailAddress(email.from_address) || 'unknown@example.com'
     const senderName = insight?.sender_name || getSenderName(email.from_address, senderEmail)
-    const firstLine = insight?.firstliner || fallbackPreview
     const isGenerating = generatingInsights[email.id]
+    const isSummaryShowing = showingSummary[email.id]
 
     const receivedLabel = formatDate(email.date_received)
     const intentMeta = insight ? INTENT_META[insight.intent] || INTENT_META.other : null
     const statusMeta = insight ? STATUS_META[insight.contact_status] : null
 
+    // Debug logging
+    if (isSummaryShowing) {
+      console.log('📋 Rendering email card:', {
+        emailId: email.id.slice(0, 8),
+        isSummaryShowing,
+        hasInsight: !!insight,
+        summaryContent: insight?.summary?.slice(0, 100),
+        summaryLength: insight?.summary?.length,
+        firstliner: insight?.firstliner?.slice(0, 50)
+      })
+    }
+
+    const handleSummaryToggle = async (e: React.MouseEvent) => {
+      e.stopPropagation()
+
+      console.log('🔘 Smart Summary clicked', email.id, {
+        hasInsight: !!insight,
+        isSummaryShowing,
+        summaryPreview: insight?.summary?.slice(0, 100)
+      })
+
+      // If showing summary, toggle back to preview
+      if (isSummaryShowing) {
+        console.log('🔄 Hiding AI summary, showing preview')
+        setShowingSummary(prev => ({ ...prev, [email.id]: false }))
+        return
+      }
+
+      // Enhanced bad summary detection with pattern matching and logging
+      let isBadSummary = false
+      let detectionReason = ''
+
+      if (insight?.summary) {
+        const summary = insight.summary
+        const first50 = summary.slice(0, 50)
+
+        // Check 1: Quote markers anywhere in first 50 chars
+        if (first50.includes('>')) {
+          isBadSummary = true
+          detectionReason = 'Contains quote marker (>) in first 50 chars'
+        }
+        // Check 2: German email forwarding patterns
+        else if (summary.includes('Anfang der weitergeleiteten') ||
+                 summary.includes('Anfang der') ||
+                 summary.includes('Von:') ||
+                 summary.includes('Gesendet:')) {
+          isBadSummary = true
+          detectionReason = 'Contains German email forwarding pattern'
+        }
+        // Check 3: German email reply patterns
+        else if ((summary.includes('Am ') && summary.includes('schrieb')) ||
+                 summary.includes('Am ') && summary.includes('um ')) {
+          isBadSummary = true
+          detectionReason = 'Contains German email reply pattern'
+        }
+        // Check 4: English email patterns
+        else if (summary.match(/^On .* wrote:/i) ||
+                 summary.match(/^From:/i) ||
+                 summary.match(/^Sent:/i)) {
+          isBadSummary = true
+          detectionReason = 'Contains English email header pattern'
+        }
+        // Check 5: Summary equals firstliner (Gemini API failure)
+        else if (insight.firstliner && summary.trim() === insight.firstliner.trim()) {
+          isBadSummary = true
+          detectionReason = 'Summary equals firstliner (API returned original text)'
+        }
+        // Check 6: Too short to be useful
+        else if (summary.trim().length < 10) {
+          isBadSummary = true
+          detectionReason = 'Summary too short (<10 chars)'
+        }
+
+        if (isBadSummary) {
+          console.log('⚠️ Bad summary detected:', {
+            reason: detectionReason,
+            summaryPreview: summary.slice(0, 100),
+            emailId: email.id.slice(0, 8)
+          })
+        }
+      }
+
+      // If no insight exists OR cached summary is bad, regenerate
+      if (!insight || isBadSummary) {
+        if (isBadSummary) {
+          console.log('⚠️ Cached summary is bad quality, regenerating...')
+        } else {
+          console.log('📡 Generating new AI summary...')
+        }
+        const generatedInsight = await fetchEmailInsight(email.id, true)
+        console.log('✅ API response:', generatedInsight)
+        if (generatedInsight) {
+          setShowingSummary(prev => ({ ...prev, [email.id]: true }))
+        }
+      } else {
+        // Already have good insight, just show it
+        console.log('✅ Showing existing AI summary')
+        setShowingSummary(prev => ({ ...prev, [email.id]: true }))
+      }
+    }
+
+    const displayContent = isSummaryShowing && insight ? insight.summary : fallbackPreview
+
     return (
-      <button
+      <div
         key={email.id}
-        onClick={() => {
-          setSelectedItem({ type: 'inbox', email })
-          setDetailOpen(true)
-        }}
         className={clsx(
-          'group w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
+          'group w-full rounded-2xl border px-4 py-3 transition-all duration-200 cursor-pointer',
           isActive
             ? 'border-transparent bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 text-white shadow-lg shadow-blue-200/60'
             : 'border-transparent bg-white/95 text-slate-900 shadow-sm hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg'
         )}
+        onClick={() => {
+          setSelectedItem({ type: 'inbox', email })
+          setDetailOpen(true)
+        }}
       >
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
+          {/* Header with sender info and Smart Summary button */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>
                 {senderName}
               </p>
@@ -661,6 +768,37 @@ export default function MailboxPage() {
                 {senderEmail}
               </p>
             </div>
+
+            {/* Smart Summary Button - Top Right */}
+            <button
+              onClick={handleSummaryToggle}
+              disabled={isGenerating}
+              className={clsx(
+                'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all shrink-0 z-10',
+                isGenerating && 'cursor-not-allowed opacity-60',
+                isSummaryShowing && insight
+                  ? 'bg-gradient-to-r from-blue-500 to-sky-500 text-white hover:from-blue-600 hover:to-sky-600'
+                  : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+              )}
+            >
+              {isGenerating ? (
+                <>
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  <span>Loading...</span>
+                </>
+              ) : isSummaryShowing && insight ? (
+                <>
+                  <span>📄</span>
+                  <span>Preview</span>
+                </>
+              ) : (
+                <>
+                  <span>✨</span>
+                  <span>Smart Summary</span>
+                </>
+              )}
+            </button>
+
             {statusMeta && (
               <span className={clsx('rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', statusMeta.className)}>
                 {statusMeta.label}
@@ -668,31 +806,23 @@ export default function MailboxPage() {
             )}
           </div>
 
+          {/* Subject and Content Preview */}
           <div className="space-y-2">
-            <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>{subject}</p>
-            <p className={clsx('truncate text-xs', isActive ? 'text-white/80' : 'text-slate-400')}>{firstLine}</p>
-            <div className="mt-2">
-              {!insight && !isGenerating && (
-                <AISummaryButton
-                  variant="compact"
-                  onGenerate={() => fetchEmailInsight(email.id)}
-                  loading={false}
-                />
-              )}
-              {isGenerating && (
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="h-3 w-3 animate-spin text-purple-600" />
-                  <span className="text-xs italic text-slate-500">Generating summary...</span>
-                </div>
-              )}
-              {insight && (
-                <div className="rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-700">
-                  <p className="line-clamp-2">{insight.summary}</p>
-                </div>
-              )}
-            </div>
+            <p className={clsx('truncate text-sm font-semibold', isActive ? 'text-white' : 'text-slate-900')}>
+              {subject}
+            </p>
+
+            {/* Content area with 3-line max truncation */}
+            <p className={clsx(
+              'text-xs leading-relaxed line-clamp-3',
+              isActive ? 'text-white/80' : 'text-slate-600',
+              isSummaryShowing && insight && 'italic'
+            )}>
+              {displayContent}
+            </p>
           </div>
 
+          {/* Footer with metadata */}
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex flex-wrap items-center gap-2">
               <span className={clsx('rounded-full px-2.5 py-1 font-medium capitalize', isActive ? 'bg-white/10 text-white/90' : 'bg-slate-100 text-slate-600')}>
@@ -710,7 +840,7 @@ export default function MailboxPage() {
             </span>
           </div>
         </div>
-      </button>
+      </div>
     )
   }
 
