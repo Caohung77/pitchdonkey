@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
 import { MailboxToolbar } from '../../../components/mailbox/MailboxToolbar'
 import { AISummaryButton } from '@/components/mailbox/AISummaryButton'
@@ -627,14 +627,16 @@ export default function MailboxPage() {
   }
 
   const renderInboxListItem = (email: IncomingEmail) => {
-    const insight = emailInsights[email.id]
+    const insight = emailInsights[email.id] || email.ai_summary || null
     const isActive = selectedItem?.type === 'inbox' && selectedItem.email.id === email.id
     const fallbackPreview = email.text_content?.slice(0, 300) || cleanHtmlPreview(email.html_content).slice(0, 300) || ''
     const subject = insight?.subject || email.subject || '(No subject)'
     const senderEmail = insight?.sender_email || extractEmailAddress(email.from_address) || 'unknown@example.com'
     const senderName = insight?.sender_name || getSenderName(email.from_address, senderEmail)
     const isGenerating = generatingInsights[email.id]
-    const isSummaryShowing = showingSummary[email.id]
+    const hasInsight = Boolean(insight?.summary && insight.summary.trim().length > 0)
+    const summaryPreference = showingSummary[email.id]
+    const isSummaryShowing = summaryPreference === undefined ? hasInsight : summaryPreference
 
     const receivedLabel = formatDate(email.date_received)
     const intentMeta = insight ? INTENT_META[insight.intent] || INTENT_META.other : null
@@ -656,13 +658,13 @@ export default function MailboxPage() {
       e.stopPropagation()
 
       console.log('🔘 Smart Summary clicked', email.id, {
-        hasInsight: !!insight,
+        hasInsight,
         isSummaryShowing,
         summaryPreview: insight?.summary?.slice(0, 100)
       })
 
-      // If showing summary, toggle back to preview
-      if (isSummaryShowing) {
+      // If a summary already exists and is currently displayed, allow toggling back to preview
+      if (hasInsight && isSummaryShowing) {
         console.log('🔄 Hiding AI summary, showing preview')
         setShowingSummary(prev => ({ ...prev, [email.id]: false }))
         return
@@ -723,7 +725,7 @@ export default function MailboxPage() {
       }
 
       // If no insight exists OR cached summary is bad, regenerate
-      if (!insight || isBadSummary) {
+      if (!hasInsight || isBadSummary) {
         if (isBadSummary) {
           console.log('⚠️ Cached summary is bad quality, regenerating...')
         } else {
@@ -741,7 +743,7 @@ export default function MailboxPage() {
       }
     }
 
-    const displayContent = isSummaryShowing && insight ? insight.summary : fallbackPreview
+    const displayContent = isSummaryShowing && hasInsight ? insight?.summary || fallbackPreview : fallbackPreview
 
     return (
       <div
@@ -776,7 +778,7 @@ export default function MailboxPage() {
               className={clsx(
                 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all shrink-0 z-10',
                 isGenerating && 'cursor-not-allowed opacity-60',
-                isSummaryShowing && insight
+                hasInsight
                   ? 'bg-gradient-to-r from-blue-500 to-sky-500 text-white hover:from-blue-600 hover:to-sky-600'
                   : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
               )}
@@ -786,15 +788,10 @@ export default function MailboxPage() {
                   <RefreshCw className="h-3 w-3 animate-spin" />
                   <span>Loading...</span>
                 </>
-              ) : isSummaryShowing && insight ? (
-                <>
-                  <span>📄</span>
-                  <span>Preview</span>
-                </>
               ) : (
                 <>
                   <span>✨</span>
-                  <span>Smart Summary</span>
+                  <span>{hasInsight ? 'Smart Summary' : 'Smart Summarize'}</span>
                 </>
               )}
             </button>
@@ -816,7 +813,7 @@ export default function MailboxPage() {
             <p className={clsx(
               'text-xs leading-relaxed line-clamp-3',
               isActive ? 'text-white/80' : 'text-slate-600',
-              isSummaryShowing && insight && 'italic'
+              isSummaryShowing && hasInsight && 'italic'
             )}>
               {displayContent}
             </p>
@@ -959,14 +956,28 @@ export default function MailboxPage() {
                     <p className="text-xs text-slate-400">Received {receivedAt}</p>
                   </div>
                 </div>
-                <MailboxToolbar
-                  onReply={() => beginCompose('reply')}
-                  onForward={() => beginCompose('forward')}
-                  onNewEmail={() => beginCompose('new')}
-                  onDelete={() => deleteInboxEmail(email.id)}
-                  isInboxEmail={true}
-                  className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
-                />
+                <div className="flex items-center gap-3 sm:self-start">
+                  <MailboxToolbar
+                    onReply={() => beginCompose('reply')}
+                    onForward={() => beginCompose('forward')}
+                    onNewEmail={() => beginCompose('new')}
+                    onDelete={() => deleteInboxEmail(email.id)}
+                    isInboxEmail={true}
+                    className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
+                  />
+                  <DialogClose asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
+                      onClick={() => {
+                        setSelectedItem(null)
+                      }}
+                    >
+                      Close
+                    </Button>
+                  </DialogClose>
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-medium capitalize text-blue-600">
@@ -1431,33 +1442,8 @@ export default function MailboxPage() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl p-0">
-          <div className="flex h-full flex-col">
-            <DialogHeader className="flex flex-col gap-4 border-b border-slate-200 px-6 py-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3rem] text-slate-400">Conversation</p>
-                  <DialogTitle className="text-lg font-semibold text-slate-900">
-                    {selectedItem?.type === 'inbox'
-                      ? selectedItem?.email.subject || 'Incoming message'
-                      : selectedItem?.email.subject || 'Sent email'}
-                  </DialogTitle>
-                </div>
-                {selectedItem && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (selectedItem.type === 'inbox') beginCompose('reply')
-                      else beginCompose('new')
-                    }}
-                    className="rounded-full border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-                  >
-                    Reply
-                  </Button>
-                )}
-              </div>
-            </DialogHeader>
+        <DialogContent hideCloseButton className="w-full max-w-4xl rounded-3xl p-0">
+          <div className="flex max-h-[90vh] flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto">
               {renderDetail()}
             </div>
