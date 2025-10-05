@@ -259,8 +259,8 @@ export class GmailIMAPSMTPService {
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
       // Build query for Gmail API
-      // CRITICAL: Use labelIds parameter correctly per Gmail API documentation
-      // Gmail's INBOX label already filters correctly - don't overcomplicate with search queries
+      // CRITICAL: Gmail's INBOX label is a computed label that may not include all emails
+      // visible in traditional IMAP clients. We need to fetch emails more broadly.
       let query = ''
       let labelIds: string[] | undefined = undefined
 
@@ -268,10 +268,11 @@ export class GmailIMAPSMTPService {
         // For SENT folder, use labelIds
         labelIds = ['SENT']
       } else if (mailbox === 'INBOX' || !mailbox) {
-        // For INBOX, use labelIds parameter ONLY
-        // Gmail's INBOX label naturally excludes SENT-only emails
-        // We'll filter out self-sent emails in the sync logic instead
-        labelIds = ['INBOX']
+        // For INBOX, fetch ALL emails excluding SPAM and TRASH
+        // This matches what traditional IMAP clients show in the inbox
+        // We exclude only SPAM and TRASH, allowing all other categories
+        query = '-in:spam -in:trash'
+        labelIds = undefined // Don't restrict by labelIds for inbox
       } else {
         // Custom label
         labelIds = [mailbox]
@@ -281,81 +282,102 @@ export class GmailIMAPSMTPService {
         query += 'is:unread '
       }
       if (options.since) {
-        const sinceDate = options.since.toISOString().split('T')[0]
+        const sinceDate = options.since.toISOString().split('T')[0].replace(/-/g, '/')
         query += `after:${sinceDate} `
       }
 
-      // Get message list using Gmail API
-      console.log('📧 Gmail API Request:', {
-        mailbox,
-        labelIds,
-        query: query.trim() || undefined,
-        maxResults: options.limit || 50,
-        unseen: options.unseen,
-        since: options.since
-      })
-
-      const listResponse = await gmail.users.messages.list({
-        userId: 'me',
-        labelIds: labelIds, // Use labelIds for SENT and custom labels, undefined for INBOX
-        q: query.trim() || undefined, // Use q for INBOX search and additional filters
-        maxResults: options.limit || 50
-      })
-
-      console.log('📧 Gmail API Response:', {
-        messageCount: listResponse.data.messages?.length || 0,
-        resultSizeEstimate: listResponse.data.resultSizeEstimate,
-        nextPageToken: listResponse.data.nextPageToken ? 'exists' : 'none'
-      })
-
       const messages: EmailMessage[] = []
+      const seenGmailMessageIds = new Set<string>()
+      const totalLimit = typeof options.limit === 'number' && options.limit > 0
+        ? options.limit
+        : 500 // Default limit to prevent quota exhaustion: fetch max 500 emails per sync
+      const pageSizeCeiling = 100 // Keep request size reasonable to stay within quota
 
-      if (listResponse.data.messages) {
-        // Fetch details for each message with full content
-        const messagePromises = listResponse.data.messages.map(async (message) => {
+      let remaining = totalLimit
+      let pageToken: string | undefined
+
+      do {
+        const pageSize = Number.isFinite(remaining)
+          ? Math.min(pageSizeCeiling, Math.max(1, Math.floor(remaining)))
+          : pageSizeCeiling
+
+        console.log('📧 Gmail API Request:', {
+          mailbox,
+          labelIds,
+          query: query.trim() || undefined,
+          maxResults: pageSize,
+          unseen: options.unseen,
+          since: options.since,
+          pageToken: pageToken ? 'present' : 'none'
+        })
+
+        const listResponse = await gmail.users.messages.list({
+          userId: 'me',
+          labelIds,
+          q: query.trim() || undefined,
+          maxResults: pageSize,
+          pageToken
+        })
+
+        const messageIds = listResponse.data.messages || []
+
+        console.log('📧 Gmail API Response:', {
+          requested: pageSize,
+          returned: messageIds.length,
+          accumulated: messages.length,
+          resultSizeEstimate: listResponse.data.resultSizeEstimate,
+          nextPageToken: listResponse.data.nextPageToken ? 'exists' : 'none'
+        })
+
+        if (messageIds.length === 0) {
+          break
+        }
+
+        // Fetch details for each unique message (full content)
+        const messagePromises = messageIds.map(async (message) => {
+          const gmailId = message.id
+          if (!gmailId) {
+            return null
+          }
+
+          if (seenGmailMessageIds.has(gmailId)) {
+            return null
+          }
+
+          seenGmailMessageIds.add(gmailId)
+
           try {
             const messageResponse = await gmail.users.messages.get({
               userId: 'me',
-              id: message.id!,
-              format: 'full' // Changed from 'metadata' to 'full' to get email body
+              id: gmailId,
+              format: 'full'
             })
 
             const headers = messageResponse.data.payload?.headers || []
             const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
 
-            // Extract email body (text and HTML)
             const { textBody, htmlBody } = this.extractEmailBody(messageResponse.data.payload)
 
-            // Generate a numeric UID from Gmail API message ID for database storage
-            // Gmail API IDs are base64url strings (e.g., "18d4c8f123ab45cd")
-            // We'll use a hash function that produces a value within JavaScript safe integer range
-            // but can be stored as BIGINT in PostgreSQL
-            const gmailId = message.id!
-            let numericUid: number
-
-            // Create a stable hash from the Gmail message ID
-            // Using djb2 hash algorithm which produces consistent results
             let hash = 5381
             for (let i = 0; i < gmailId.length; i++) {
               const char = gmailId.charCodeAt(i)
-              // hash * 33 + char
               hash = ((hash << 5) + hash) + char
             }
+            const numericUid = Math.abs(hash)
 
-            // Take absolute value and ensure it's a positive integer
-            numericUid = Math.abs(hash)
+            const messageId = getHeader('Message-ID') || gmailId
 
             const emailData = {
               uid: numericUid,
-              messageId: getHeader('Message-ID'),
-              gmailMessageId: gmailId, // Store Gmail API message ID for trash/delete
+              messageId,
+              gmailMessageId: gmailId,
               from: getHeader('From'),
               to: getHeader('To'),
               subject: getHeader('Subject'),
               date: new Date(getHeader('Date') || new Date()),
               body: textBody,
-              textBody: textBody,
-              htmlBody: htmlBody,
+              textBody,
+              htmlBody,
               html: htmlBody
             }
 
@@ -376,8 +398,28 @@ export class GmailIMAPSMTPService {
         })
 
         const messageResults = await Promise.all(messagePromises)
-        messages.push(...messageResults.filter(msg => msg !== null) as EmailMessage[])
-      }
+        for (const message of messageResults) {
+          if (!message) continue
+          messages.push(message)
+
+          if (Number.isFinite(totalLimit)) {
+            remaining -= 1
+            if (remaining <= 0) {
+              break
+            }
+          }
+        }
+
+        if (!Number.isFinite(totalLimit) || remaining > 0) {
+          pageToken = listResponse.data.nextPageToken ?? undefined
+        } else {
+          pageToken = undefined
+        }
+
+        if (!pageToken) {
+          break
+        }
+      } while (true)
 
       return messages
     } catch (error) {

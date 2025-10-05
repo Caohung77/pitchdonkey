@@ -17,6 +17,9 @@ export const GET = withAuth(async (
     const accountId = searchParams.get('account_id')
 
     // Build the query with JOINs for email account, campaign, and contact info
+    // IMPORTANT: Use LEFT join for email_accounts instead of INNER to include emails
+    // even if the email account relationship has issues. The email_account_id filter
+    // will handle account-specific queries.
     let query = supabase
       .from('incoming_emails')
       .select(`
@@ -33,7 +36,7 @@ export const GET = withAuth(async (
         ai_summary,
         created_at,
         updated_at,
-        email_accounts!inner (
+        email_accounts (
           id,
           email,
           provider
@@ -73,7 +76,43 @@ export const GET = withAuth(async (
       query = query.or(`from_address.ilike.%${search}%,subject.ilike.%${search}%`)
     }
 
-    const { data: emails, error, count } = await query
+    // Execute query
+    const { data: emails, error } = await query
+
+    // Get total count separately for pagination
+    let totalCount = 0
+    if (!error) {
+      const countQuery = supabase
+        .from('incoming_emails')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .is('archived_at', null)
+
+      if (accountId && accountId !== 'all') {
+        countQuery.eq('email_account_id', accountId)
+      }
+      if (classification && classification !== 'all') {
+        countQuery.eq('classification_status', classification)
+      }
+      if (search) {
+        countQuery.or(`from_address.ilike.%${search}%,subject.ilike.%${search}%`)
+      }
+
+      const { count } = await countQuery
+      totalCount = count || 0
+    }
+
+    // Enhanced debugging for mailbox display issues
+    console.log('📧 Inbox query results:', {
+      user_id: user.id,
+      account_id: accountId || 'all',
+      classification: classification || 'all',
+      search: search || 'none',
+      total_count: totalCount,
+      returned_emails: emails?.length || 0,
+      limit,
+      offset
+    })
 
     if (error) {
       console.error('Error fetching inbox emails:', error)
@@ -100,10 +139,10 @@ export const GET = withAuth(async (
       success: true,
       emails: emails || [],
       pagination: {
-        total: count || 0,
+        total: totalCount,
         limit,
         offset,
-        hasMore: (count || 0) > offset + limit
+        hasMore: totalCount > offset + limit
       },
       stats: {
         total: stats?.length || 0,

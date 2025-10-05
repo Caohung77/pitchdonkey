@@ -290,25 +290,91 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
     const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
     const gmailService = new GmailIMAPSMTPServerService()
 
+    // Determine lookback window
+    // For initial sync (no emails in DB), fetch last 30 days
+    // For subsequent syncs, use 7-day safety window to catch any gaps
+    const INITIAL_SYNC_DAYS = 30
+    const LOOKBACK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // 7 days safety window
+
+    const [latestIncomingResult, latestSentResult] = await Promise.all([
+      supabase
+        .from('incoming_emails')
+        .select('date_received')
+        .eq('email_account_id', account.id)
+        .order('date_received', { ascending: false })
+        .limit(1),
+      supabase
+        .from('outgoing_emails')
+        .select('date_sent')
+        .eq('email_account_id', account.id)
+        .order('date_sent', { ascending: false })
+        .limit(1)
+    ])
+
+    if (latestIncomingResult.error) {
+      console.error('⚠️ Failed to read latest incoming email timestamp:', latestIncomingResult.error)
+    }
+    if (latestSentResult.error) {
+      console.error('⚠️ Failed to read latest sent email timestamp:', latestSentResult.error)
+    }
+
+    let inboxSince: Date | undefined
+    const latestIncomingDate = latestIncomingResult.data?.[0]?.date_received
+    if (latestIncomingDate) {
+      const parsed = new Date(latestIncomingDate)
+      if (!Number.isNaN(parsed.getTime())) {
+        inboxSince = new Date(parsed.getTime() - LOOKBACK_WINDOW_MS)
+        console.log(`📧 Incremental sync: fetching emails since ${inboxSince.toISOString()}`)
+      }
+    } else {
+      // First sync - fetch last 30 days
+      inboxSince = new Date(Date.now() - (INITIAL_SYNC_DAYS * 24 * 60 * 60 * 1000))
+      console.log(`📧 Initial sync: fetching last ${INITIAL_SYNC_DAYS} days of emails since ${inboxSince.toISOString()}`)
+    }
+
+    let sentSince: Date | undefined
+    const latestSentDate = latestSentResult.data?.[0]?.date_sent
+    if (latestSentDate) {
+      const parsed = new Date(latestSentDate)
+      if (!Number.isNaN(parsed.getTime())) {
+        sentSince = new Date(parsed.getTime() - LOOKBACK_WINDOW_MS)
+        console.log(`📤 Incremental sync: fetching sent emails since ${sentSince.toISOString()}`)
+      }
+    } else {
+      // First sync - fetch last 30 days
+      sentSince = new Date(Date.now() - (INITIAL_SYNC_DAYS * 24 * 60 * 60 * 1000))
+      console.log(`📤 Initial sync: fetching last ${INITIAL_SYNC_DAYS} days of sent emails since ${sentSince.toISOString()}`)
+    }
+
     // OPTIMIZATION: Fetch INBOX and SENT folders in parallel
     console.log('📧 Fetching inbox and sent emails in parallel...')
     const [inboxEmails, sentEmails] = await Promise.all([
       gmailService.fetchGmailEmails(account.id, 'INBOX', {
-        limit: 100,
-        unseen: false
+        unseen: false,
+        since: inboxSince
       }),
       gmailService.fetchGmailEmails(account.id, 'SENT', {
-        limit: 100,
-        unseen: false
+        unseen: false,
+        since: sentSince
       })
     ])
 
     console.log(`📧 Fetched ${inboxEmails.length} inbox emails and ${sentEmails.length} sent emails`)
 
+    // DEBUG: Log all fetched emails to understand what's being filtered
+    console.log('🔍 DEBUG: All fetched INBOX emails:')
+    inboxEmails.forEach((email, index) => {
+      const isFromSelf = email.from && email.from.toLowerCase().includes(account.email.toLowerCase())
+      console.log(`  ${index + 1}. "${email.subject}" | From: ${email.from} | Date: ${email.date} | Self-sent: ${isFromSelf}`)
+    })
+
     const emails = inboxEmails
 
     // Store emails in incoming_emails table
     let newEmailsCount = 0
+    let skippedSelfSent = 0
+    let skippedAlreadyExists = 0
+    let skippedArchived = 0
     const errors: string[] = []
     const newEmailIds: string[] = []
 
@@ -319,23 +385,52 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
         const isFromSelf = email.from && email.from.toLowerCase().includes(account.email.toLowerCase())
         if (isFromSelf) {
           console.log(`⏭️  Skipping self-sent email: "${email.subject}" from ${email.from}`)
+          skippedSelfSent++
           continue
         }
 
         // Check if email already exists by message_id (excluding archived)
-        const { data: existing } = await supabase
-          .from('incoming_emails')
-          .select('id, archived_at')
-          .eq('message_id', email.messageId)
-          .single()
+        let existing: { id: string; archived_at: string | null } | null = null
+
+        if (email.gmailMessageId) {
+          const { data: existingByGmailId, error: existingByGmailError } = await supabase
+            .from('incoming_emails')
+            .select('id, archived_at, user_id')
+            .eq('gmail_message_id', email.gmailMessageId)
+            .eq('user_id', account.user_id) // CRITICAL: Only check for THIS user's emails
+            .maybeSingle()
+
+          if (existingByGmailError && existingByGmailError.code !== 'PGRST116') {
+            console.error(`⚠️ Failed to lookup incoming email by gmail_message_id ${email.gmailMessageId}:`, existingByGmailError)
+          }
+
+          existing = existingByGmailId
+        }
+
+        if (!existing && email.messageId) {
+          const { data: existingByMessageId, error: existingByMessageError } = await supabase
+            .from('incoming_emails')
+            .select('id, archived_at, user_id')
+            .eq('message_id', email.messageId)
+            .eq('user_id', account.user_id) // CRITICAL: Only check for THIS user's emails
+            .maybeSingle()
+
+          if (existingByMessageError && existingByMessageError.code !== 'PGRST116') {
+            console.error(`⚠️ Failed to lookup incoming email by message_id ${email.messageId}:`, existingByMessageError)
+          }
+
+          existing = existingByMessageId
+        }
 
         if (existing) {
           // If email was previously archived (deleted), skip re-importing it
           if (existing.archived_at) {
             console.log(`⏭️  Email ${email.messageId} was deleted, skipping re-import`)
+            skippedArchived++
             continue
           }
           console.log(`⏭️  Email ${email.messageId} already exists, skipping`)
+          skippedAlreadyExists++
           continue
         }
 
@@ -361,7 +456,14 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
           .single()
 
         if (insertError) {
-          console.error(`❌ Failed to insert email ${email.messageId}:`, insertError)
+          console.error(`❌ Failed to insert email "${email.subject}":`, {
+            messageId: email.messageId,
+            error: insertError,
+            errorCode: insertError.code,
+            errorMessage: insertError.message,
+            errorDetails: insertError.details,
+            errorHint: insertError.hint
+          })
           errors.push(`Insert failed: ${insertError.message}`)
         } else {
           newEmailsCount++
@@ -401,11 +503,34 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
     for (const email of sentEmails) {
       try {
         // Check if sent email already exists by message_id
-        const { data: existingSent } = await supabase
+        let existingSent: { id: string } | null = null
+
+        const { data: existingSentByUid, error: existingSentByUidError } = await supabase
           .from('outgoing_emails')
           .select('id')
-          .eq('message_id', email.messageId)
-          .single()
+          .eq('email_account_id', account.id)
+          .eq('imap_uid', email.uid)
+          .maybeSingle()
+
+        if (existingSentByUidError && existingSentByUidError.code !== 'PGRST116') {
+          console.error(`⚠️ Failed to lookup outgoing email by imap_uid ${email.uid}:`, existingSentByUidError)
+        }
+
+        existingSent = existingSentByUid
+
+        if (!existingSent && email.messageId) {
+          const { data: existingSentByMessageId, error: existingSentByMessageIdError } = await supabase
+            .from('outgoing_emails')
+            .select('id')
+            .eq('message_id', email.messageId)
+            .maybeSingle()
+
+          if (existingSentByMessageIdError && existingSentByMessageIdError.code !== 'PGRST116') {
+            console.error(`⚠️ Failed to lookup outgoing email by message_id ${email.messageId}:`, existingSentByMessageIdError)
+          }
+
+          existingSent = existingSentByMessageId
+        }
 
         if (existingSent) {
           console.log(`⏭️  Sent email ${email.messageId} already exists, skipping`)
@@ -442,6 +567,40 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
     }
 
     console.log(`📊 Sync complete: ${newEmailsCount} new inbox, ${newSentCount} new sent`)
+    console.log(`📊 Sync statistics:`)
+    console.log(`   - Total fetched from INBOX: ${inboxEmails.length}`)
+    console.log(`   - Skipped (self-sent): ${skippedSelfSent}`)
+    console.log(`   - Skipped (already exists): ${skippedAlreadyExists}`)
+    console.log(`   - Skipped (archived): ${skippedArchived}`)
+    console.log(`   - New emails inserted: ${newEmailsCount}`)
+    console.log(`   - Errors: ${errors.length}`)
+
+    if (errors.length > 0) {
+      console.log(`\n❌ INSERT ERRORS (first 5):`)
+      errors.slice(0, 5).forEach((err, idx) => {
+        console.log(`   ${idx + 1}. ${err}`)
+      })
+    }
+
+    // Verify database state after sync
+    const { data: dbEmails, count: dbCount } = await supabase
+      .from('incoming_emails')
+      .select('id, subject, archived_at', { count: 'exact' })
+      .eq('email_account_id', account.id)
+      .is('archived_at', null)
+      .order('date_received', { ascending: false })
+      .limit(50)
+
+    console.log(`🔍 Post-sync DB verification:`)
+    console.log(`   - Total non-archived emails in DB for this account: ${dbCount}`)
+    console.log(`   - Sample emails (first 5):`)
+    if (dbEmails && dbEmails.length > 0) {
+      dbEmails.slice(0, 5).forEach((email, idx) => {
+        console.log(`     ${idx + 1}. ${email.subject?.slice(0, 50) || '(no subject)'}`)
+      })
+    } else {
+      console.log(`     (No emails found in database)`)
+    }
 
     // Update connection status
     await supabase
