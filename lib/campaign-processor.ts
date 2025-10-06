@@ -892,12 +892,25 @@ export class CampaignProcessor {
       if (campaign.batch_schedule?.batches) {
         console.log(`📅 Updating batch schedule after processing`)
 
-        // Mark current batch as sent
+        // Get the batch that was just processed
+        const now = new Date()
+        const processedBatch = campaign.batch_schedule.batches.find((batch: any) =>
+          batch.status === 'pending' && new Date(batch.scheduled_time) <= now
+        )
+
+        if (!processedBatch) {
+          console.warn(`⚠️ No processed batch found to mark as sent`)
+          return
+        }
+
+        // Mark ONLY the specific batch that was just processed as sent
         const updatedBatches = campaign.batch_schedule.batches.map((batch: any) =>
-          batch.status === 'pending' && new Date(batch.scheduled_time) <= new Date()
+          batch.batch_number === processedBatch.batch_number
             ? { ...batch, status: 'sent', completed_at: new Date().toISOString() }
             : batch
         )
+
+        console.log(`✅ Marked batch ${processedBatch.batch_number} as sent`)
 
         // Find next pending batch
         const nextPendingBatch = updatedBatches.find((batch: any) => batch.status === 'pending')
