@@ -289,40 +289,42 @@ export class BulkContactEnrichmentService {
       }
 
       console.log(`📦 Processing batch: contacts ${startIndex + 1}-${endIndex} of ${job.contact_ids.length}`)
+      console.log(`📦 Batch details:`, {
+        jobId,
+        contactsToProcess: contactsToProcess.length,
+        contactIds: contactsToProcess,
+        startIndex,
+        endIndex,
+        totalContacts: job.contact_ids.length
+      })
 
       // Process this batch
       const batchResults = await this.processBatch(jobId, contactsToProcess, job.user_id, job.options)
 
-      // Update progress
-      const batchCompleted = batchResults.filter(r => r.success).length
-      const batchFailed = batchResults.filter(r => !r.success).length
+      console.log(`📦 Batch results:`, {
+        total: batchResults.length,
+        successful: batchResults.filter(r => r.success).length,
+        failed: batchResults.filter(r => !r.success).length
+      })
 
+      // Update batch number (progress already updated per-contact in processBatch)
       await this.updateJobProgress(jobId, {
-        completed: progress.completed + batchCompleted,
-        failed: progress.failed + batchFailed,
         current_batch: progress.current_batch + 1
       })
+      console.log(`📦 Batch ${progress.current_batch + 1} completed`)
 
       const hasMore = endIndex < job.contact_ids.length
 
-      // If there are more contacts to process, trigger the next batch
-      if (hasMore) {
-        console.log(`🔄 Triggering next batch for job ${jobId}`)
-        const processorUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://pitchdonkey.vercel.app'}/api/contacts/bulk-enrich/process`
-        fetch(processorUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: jobId })
-        }).catch(err => {
-          console.error('Failed to trigger next batch:', err)
-        })
-      } else {
+      if (!hasMore) {
         // No more contacts - mark job as completed
-        const finalProgress = {
-          ...(job.progress as any),
-          completed: progress.completed + batchCompleted,
-          failed: progress.failed + batchFailed
-        }
+        // Get final progress from database (updated by processBatch)
+        const { data: finalJob } = await supabase
+          .from('bulk_enrichment_jobs')
+          .select('progress')
+          .eq('id', jobId)
+          .single()
+
+        const finalProgress = finalJob?.progress as any || { completed: 0, failed: 0 }
 
         console.log(`🎉 Job ${jobId} completed: ${finalProgress.completed}/${job.contact_ids.length} successful, ${finalProgress.failed} failed`)
 
@@ -482,12 +484,24 @@ export class BulkContactEnrichmentService {
     options: any
   ): Promise<Array<{ contact_id: string; success: boolean; error?: string }>> {
     const results: Array<{ contact_id: string; success: boolean; error?: string }> = []
+    const CONTACT_TIMEOUT = 120000 // 2 minutes max per contact
+
+    // Get current cumulative progress at the start of the batch
+    const supabase = await createServerSupabaseClient()
+    const { data: jobData } = await supabase
+      .from('bulk_enrichment_jobs')
+      .select('progress')
+      .eq('id', jobId)
+      .single()
+
+    const cumulativeProgress = (jobData?.progress as any) || { completed: 0, failed: 0 }
+    console.log(`📊 Starting batch with cumulative progress: ${cumulativeProgress.completed} completed, ${cumulativeProgress.failed} failed`)
 
     // Process contacts sequentially within the batch for better progress visibility
     for (const contactId of contactIds) {
       try {
         console.log(`🔍 Enriching contact ${contactId}`)
-        
+
         // Update contact result to 'running'
         await this.updateContactResult(jobId, contactId, 'running')
 
@@ -520,17 +534,27 @@ export class BulkContactEnrichmentService {
           websiteEnriched: isWebsiteEnriched
         })
 
-        if (hasWebsite || hasBizEmail) {
-          // Has website or business email - use traditional enrichment
-          console.log(`🌐 Using website enrichment for contact ${contactId}`)
-          result = await this.enrichmentService.enrichContact(contactId, userId)
-        } else if (hasLinkedIn) {
-          // LinkedIn-only - use smart enrichment orchestrator
-          console.log(`🔗 Using LinkedIn-only enrichment for contact ${contactId}`)
-          result = await this.smartOrchestrator.enrichContact(contactId, userId)
-        } else {
-          throw new Error('Contact has no website, LinkedIn URL, or business email for enrichment')
-        }
+        // Wrap enrichment with timeout protection
+        const enrichmentPromise = (async () => {
+          if (hasWebsite || hasBizEmail) {
+            // Has website or business email - use traditional enrichment
+            console.log(`🌐 Using website enrichment for contact ${contactId}`)
+            return await this.enrichmentService.enrichContact(contactId, userId)
+          } else if (hasLinkedIn) {
+            // LinkedIn-only - use smart enrichment orchestrator
+            console.log(`🔗 Using LinkedIn-only enrichment for contact ${contactId}`)
+            return await this.smartOrchestrator.enrichContact(contactId, userId)
+          } else {
+            throw new Error('Contact has no website, LinkedIn URL, or business email for enrichment')
+          }
+        })()
+
+        // Apply timeout to enrichment
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Contact enrichment timeout after ${CONTACT_TIMEOUT}ms`)), CONTACT_TIMEOUT)
+        })
+
+        result = await Promise.race([enrichmentPromise, timeoutPromise])
 
         if (result.success) {
           console.log(`✅ Contact ${contactId} enriched successfully`)
@@ -553,15 +577,17 @@ export class BulkContactEnrichmentService {
           
           await this.updateContactResult(jobId, contactId, 'completed', enrichmentData)
           results.push({ contact_id: contactId, success: true })
-          
-          // Update job progress after each successful contact
-          const currentCompleted = results.filter(r => r.success).length
-          const currentFailed = results.filter(r => !r.success).length
+
+          // Update job progress after each successful contact (CUMULATIVE)
+          const batchCompleted = results.filter(r => r.success).length
+          const batchFailed = results.filter(r => !r.success).length
+          const totalCompleted = cumulativeProgress.completed + batchCompleted
+          const totalFailed = cumulativeProgress.failed + batchFailed
           await this.updateJobProgress(jobId, {
-            completed: currentCompleted,
-            failed: currentFailed
+            completed: totalCompleted,
+            failed: totalFailed
           })
-          console.log(`📊 Progress updated: ${currentCompleted} completed, ${currentFailed} failed`)
+          console.log(`📊 Progress updated: ${totalCompleted} completed, ${totalFailed} failed (batch: +${batchCompleted}/+${batchFailed})`)
           
         } else {
           console.log(`❌ Contact ${contactId} enrichment failed: ${result.error}`)
@@ -574,38 +600,52 @@ export class BulkContactEnrichmentService {
             website_url: result.website_url
           })
           results.push({ contact_id: contactId, success: false, error: result.error })
-          
-          // Update job progress after each failed contact
-          const currentCompleted = results.filter(r => r.success).length
-          const currentFailed = results.filter(r => !r.success).length
+
+          // Update job progress after each failed contact (CUMULATIVE)
+          const batchCompleted = results.filter(r => r.success).length
+          const batchFailed = results.filter(r => !r.success).length
+          const totalCompleted = cumulativeProgress.completed + batchCompleted
+          const totalFailed = cumulativeProgress.failed + batchFailed
           await this.updateJobProgress(jobId, {
-            completed: currentCompleted,
-            failed: currentFailed
+            completed: totalCompleted,
+            failed: totalFailed
           })
-          console.log(`📊 Progress updated: ${currentCompleted} completed, ${currentFailed} failed`)
+          console.log(`📊 Progress updated: ${totalCompleted} completed, ${totalFailed} failed (batch: +${batchCompleted}/+${batchFailed})`)
         }
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         console.error(`❌ Contact ${contactId} processing failed:`, errorMessage)
-        
-        await this.updateContactResult(jobId, contactId, 'failed', {
-          error: {
-            type: 'processing_error',
-            message: errorMessage,
-            retryable: true
-          }
-        })
+
+        try {
+          await this.updateContactResult(jobId, contactId, 'failed', {
+            error: {
+              type: 'processing_error',
+              message: errorMessage,
+              retryable: false // Don't retry - skip and continue
+            }
+          })
+        } catch (updateError) {
+          console.error(`Failed to update contact result for ${contactId}:`, updateError)
+        }
+
         results.push({ contact_id: contactId, success: false, error: errorMessage })
-        
-        // Update job progress after each failed contact
-        const currentCompleted = results.filter(r => r.success).length
-        const currentFailed = results.filter(r => !r.success).length
-        await this.updateJobProgress(jobId, {
-          completed: currentCompleted,
-          failed: currentFailed
-        })
-        console.log(`📊 Progress updated: ${currentCompleted} completed, ${currentFailed} failed`)
+
+        // CRITICAL: Always update progress even if contact failed (CUMULATIVE)
+        // This ensures the job doesn't get stuck
+        try {
+          const batchCompleted = results.filter(r => r.success).length
+          const batchFailed = results.filter(r => !r.success).length
+          const totalCompleted = cumulativeProgress.completed + batchCompleted
+          const totalFailed = cumulativeProgress.failed + batchFailed
+          await this.updateJobProgress(jobId, {
+            completed: totalCompleted,
+            failed: totalFailed
+          })
+          console.log(`📊 Progress updated after failure: ${totalCompleted} completed, ${totalFailed} failed (batch: +${batchCompleted}/+${batchFailed})`)
+        } catch (progressError) {
+          console.error('Failed to update progress after contact failure:', progressError)
+        }
       }
 
       // Small delay between contacts for better progress visibility (1 second)
@@ -613,6 +653,8 @@ export class BulkContactEnrichmentService {
         await this.delay(1000)
       }
     }
+
+    console.log(`✅ Batch completed: ${results.filter(r => r.success).length} successful, ${results.filter(r => !r.success).length} failed`)
     return results
   }
 
@@ -881,7 +923,47 @@ export class BulkContactEnrichmentService {
   }
 
   /**
+   * Mark job for retry by updating metadata
+   * This allows a cron job or manual trigger to resume processing
+   */
+  private async markJobForRetry(jobId: string): Promise<void> {
+    try {
+      const supabase = await createServerSupabaseClient()
+
+      // Get current job state
+      const { data: job } = await supabase
+        .from('bulk_enrichment_jobs')
+        .select('progress, options')
+        .eq('id', jobId)
+        .single()
+
+      if (job) {
+        const progress = job.progress as any
+        const options = job.options as any
+
+        // Update job with retry metadata
+        await supabase
+          .from('bulk_enrichment_jobs')
+          .update({
+            options: {
+              ...options,
+              needs_retry: true,
+              last_retry_attempt: new Date().toISOString()
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', jobId)
+
+        console.log(`🔄 Marked job ${jobId} for retry (progress: ${progress.completed}/${progress.total})`)
+      }
+    } catch (error) {
+      console.error('Failed to mark job for retry:', error)
+    }
+  }
+
+  /**
    * Create a notification for the user
+   * Non-blocking: notification failures should NOT block enrichment
    */
   private async createNotification(userId: string, notification: {
     type: string
@@ -892,23 +974,26 @@ export class BulkContactEnrichmentService {
     try {
       const supabase = await createServerSupabaseClient()
 
+      // @ts-ignore - notifications table exists but isn't in generated types yet
       const { error } = await supabase
         .from('notifications')
-        .insert({
+        .insert([{
           user_id: userId,
           type: notification.type,
           title: notification.title,
           message: notification.message,
           data: notification.data || {}
-        })
+        }])
 
       if (error) {
-        console.error('Failed to create notification:', error)
+        // Log but don't throw - notification failures should never block enrichment
+        console.warn('⚠️ Failed to create notification (non-blocking):', error.message)
       } else {
         console.log(`✅ Created notification for user ${userId}: ${notification.title}`)
       }
     } catch (error) {
-      console.error('Error creating notification:', error)
+      // Catch and log any notification errors to prevent them from bubbling up
+      console.warn('⚠️ Error creating notification (non-blocking):', error instanceof Error ? error.message : String(error))
     }
   }
 }
