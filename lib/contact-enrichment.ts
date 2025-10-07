@@ -95,7 +95,15 @@ export class ContactEnrichmentService {
         try {
           const normalized = PerplexityService.normalizeWebsiteUrl(contact.website)
           console.log(`🌐 Using existing website URL: ${normalized}`)
-          const access = await PerplexityService.verifyWebsiteAccessible(normalized)
+
+          // Add timeout wrapper for website verification (10 seconds)
+          const access = await Promise.race([
+            PerplexityService.verifyWebsiteAccessible(normalized),
+            new Promise<{ ok: false; error: string }>((resolve) =>
+              setTimeout(() => resolve({ ok: false, error: 'Timeout' }), 10000)
+            )
+          ])
+
           if (access.ok) {
             websiteUrl = access.finalUrl || normalized
             enrichmentSource = 'website'
@@ -119,8 +127,22 @@ export class ContactEnrichmentService {
         } else {
           const candidate1 = convertDomainToWebsiteUrl(domain)
           const candidate2 = `https://${domain}`
-          const access1 = await PerplexityService.verifyWebsiteAccessible(candidate1)
-          const access2 = access1.ok ? access1 : await PerplexityService.verifyWebsiteAccessible(candidate2)
+
+          // Add timeout wrapper for website verification (10 seconds total)
+          const access1 = await Promise.race([
+            PerplexityService.verifyWebsiteAccessible(candidate1),
+            new Promise<{ ok: false; error: string }>((resolve) =>
+              setTimeout(() => resolve({ ok: false, error: 'Timeout' }), 5000)
+            )
+          ])
+
+          const access2 = access1.ok ? access1 : await Promise.race([
+            PerplexityService.verifyWebsiteAccessible(candidate2),
+            new Promise<{ ok: false; error: string }>((resolve) =>
+              setTimeout(() => resolve({ ok: false, error: 'Timeout' }), 5000)
+            )
+          ])
+
           if (access1.ok || access2.ok) {
             websiteUrl = (access1.ok ? access1.finalUrl : access2.finalUrl) || (access1.ok ? candidate1 : candidate2)
             enrichmentSource = 'email'
@@ -131,9 +153,13 @@ export class ContactEnrichmentService {
         }
       }
 
-      // If still no usable website, return a business-rule failure
+      // If still no usable website, return a business-rule failure and mark as skipped
       if (!websiteUrl) {
-        console.error('❌ No usable website URL found (neither existing nor derived)')
+        console.log(`⏭️ Skipping contact ${contactId} - No usable website URL found`)
+
+        // Mark as failed so it doesn't retry indefinitely
+        await this.updateEnrichmentStatus(contactId, 'failed', 'No website URL or business email found')
+
         return {
           success: false,
           error: 'No website URL or business email found for this contact',
@@ -166,8 +192,13 @@ export class ContactEnrichmentService {
       // 4. Update status to processing
       await this.updateEnrichmentStatus(contactId, 'pending')
 
-      // 5. Analyze website with Perplexity
-      const enrichmentData = await this.perplexityService.analyzeWebsite(websiteUrl)
+      // 5. Analyze website with Perplexity (with 60 second timeout)
+      const enrichmentData = await Promise.race([
+        this.perplexityService.analyzeWebsite(websiteUrl),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Website analysis timeout after 60 seconds')), 60000)
+        )
+      ])
 
       // If nothing useful was extracted, mark as failed and do not label as enriched
       const hasMeaningful = !!(

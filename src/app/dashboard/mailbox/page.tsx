@@ -1443,6 +1443,12 @@ export default function MailboxPage() {
         }}
       >
         <DialogContent hideCloseButton className="w-full max-w-4xl rounded-3xl p-0">
+          <DialogTitle className="sr-only">
+            {selectedItem
+              ? selectedItem.email.subject ||
+                (selectedItem.type === 'inbox' ? 'Inbox email detail' : 'Sent email detail')
+              : 'Email detail'}
+          </DialogTitle>
           <div className="flex max-h-[90vh] flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto">
               {renderDetail()}

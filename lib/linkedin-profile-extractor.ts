@@ -206,7 +206,11 @@ export class LinkedInProfileExtractorService {
 
       // 2. Validate LinkedIn URL exists
       if (!contact.linkedin_url) {
-        console.error('❌ No LinkedIn URL found for contact')
+        console.log(`⏭️ Skipping contact ${contactId} - No LinkedIn URL found`)
+
+        // Mark as failed to skip in future processing
+        await this.updateLinkedInStatus(contactId, 'failed', 'No LinkedIn URL found')
+
         return {
           success: false,
           error: 'No LinkedIn URL found for this contact',
@@ -248,8 +252,16 @@ export class LinkedInProfileExtractorService {
       await this.updateLinkedInStatus(contactId, 'pending')
 
       try {
-        // 6. Extract profile with Bright Data (async)
-        const profileData = await this.brightDataClient.extractProfile(linkedinUrl)
+        // 6. Extract profile with Bright Data (async with 90 second timeout)
+        const profileData = await Promise.race([
+          this.brightDataClient.extractProfile(linkedinUrl),
+          new Promise<null>((resolve) =>
+            setTimeout(() => {
+              console.warn(`⏰ LinkedIn extraction timeout after 90 seconds for ${linkedinUrl}`)
+              resolve(null)
+            }, 90000)
+          )
+        ])
         
         if (!profileData) {
           await this.updateLinkedInStatus(contactId, 'failed', 'No profile data returned')

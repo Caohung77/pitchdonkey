@@ -5,22 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Target,
   Users,
   Mail,
   Calendar,
-  Activity,
   Plus,
   Search,
-  Filter,
   ExternalLink,
   Play,
   Pause,
   Settings,
-  TrendingUp,
   CheckCircle,
   XCircle,
   Clock
@@ -43,26 +39,30 @@ interface Contact {
 interface Campaign {
   id: string
   name: string
-  status: 'draft' | 'active' | 'paused' | 'completed'
-  type: 'sequence' | 'broadcast'
-  total_contacts: number
-  sent_count: number
-  open_rate: number
-  click_rate: number
-  reply_rate: number
-  created_at: string
-  last_activity: string
-  contact_status?: 'pending' | 'active' | 'completed' | 'bounced' | 'unsubscribed'
+  status?: string | null
+  total_contacts?: number | null
+  contact_status?: string | null
+  current_step?: number | null
+  joined_at?: string | null
+  campaign_created_at?: string | null
+  emails_sent: number
+  emails_opened: number
+  emails_clicked: number
+  emails_replied: number
+  open_rate?: number
+  click_rate?: number
+  reply_rate?: number
 }
 
 interface ContactList {
   id: string
   name: string
-  description?: string
+  description?: string | null
   contact_count: number
-  created_at: string
-  updated_at: string
+  created_at?: string | null
+  updated_at?: string | null
   is_member?: boolean
+  tags?: string[]
 }
 
 interface CampaignsListsTabProps {
@@ -73,118 +73,154 @@ interface CampaignsListsTabProps {
 export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTabProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [contactLists, setContactLists] = useState<ContactList[]>([])
-  const [loading, setLoading] = useState(true)
+  const [campaignsLoading, setCampaignsLoading] = useState(true)
+  const [listsLoading, setListsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'campaigns' | 'lists'>('campaigns')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [campaignPage, setCampaignPage] = useState(1)
+  const [listPage, setListPage] = useState(1)
+  const [campaignPagination, setCampaignPagination] = useState({ page: 1, limit: 10, hasNextPage: false, hasPrevPage: false })
+  const [listPagination, setListPagination] = useState({ page: 1, limit: 10, hasNextPage: false, hasPrevPage: false })
 
   const contactName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Contact'
 
   useEffect(() => {
-    fetchCampaignsAndLists()
+    setCampaignPage(1)
+  }, [contact.id, statusFilter])
+
+  useEffect(() => {
+    setListPage(1)
   }, [contact.id])
 
-  const fetchCampaignsAndLists = async () => {
-    setLoading(true)
+  useEffect(() => {
+    setCampaignPage(1)
+    setListPage(1)
+  }, [searchTerm])
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchCampaigns()
+    }, 250)
+
+    return () => clearTimeout(handler)
+  }, [contact.id, campaignPage, searchTerm, statusFilter])
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchLists()
+    }, 250)
+
+    return () => clearTimeout(handler)
+  }, [contact.id, listPage, searchTerm])
+
+  const fetchCampaigns = async () => {
+    setCampaignsLoading(true)
     try {
-      // TODO: Implement API calls to fetch actual data
+      const params = new URLSearchParams({
+        page: String(campaignPage),
+        limit: '10',
+      })
 
-      // Mock campaign data
-      const mockCampaigns: Campaign[] = [
-        {
-          id: '1',
-          name: 'Welcome Series - New Leads',
-          status: 'active',
-          type: 'sequence',
-          total_contacts: 245,
-          sent_count: 3,
-          open_rate: 45.2,
-          click_rate: 12.8,
-          reply_rate: 3.5,
-          created_at: '2024-01-10T10:00:00Z',
-          last_activity: '2024-01-15T14:30:00Z',
-          contact_status: 'active'
-        },
-        {
-          id: '2',
-          name: 'Product Demo Follow-up',
-          status: 'completed',
-          type: 'sequence',
-          total_contacts: 89,
-          sent_count: 5,
-          open_rate: 62.3,
-          click_rate: 24.1,
-          reply_rate: 8.9,
-          created_at: '2024-01-05T09:00:00Z',
-          last_activity: '2024-01-12T16:45:00Z',
-          contact_status: 'completed'
-        },
-        {
-          id: '3',
-          name: 'Q1 Product Updates',
-          status: 'paused',
-          type: 'broadcast',
-          total_contacts: 1250,
-          sent_count: 1,
-          open_rate: 38.7,
-          click_rate: 8.4,
-          reply_rate: 1.2,
-          created_at: '2024-01-01T12:00:00Z',
-          last_activity: '2024-01-08T10:15:00Z',
-          contact_status: 'pending'
-        }
-      ]
+      if (searchTerm) params.set('search', searchTerm)
+      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter)
 
-      // Mock contact lists data
-      const mockLists: ContactList[] = [
-        {
-          id: '1',
-          name: 'Marketing Directors',
-          description: 'Senior marketing professionals in B2B companies',
-          contact_count: 324,
-          created_at: '2024-01-01T10:00:00Z',
-          updated_at: '2024-01-15T16:30:00Z',
-          is_member: true
-        },
-        {
-          id: '2',
-          name: 'Demo Prospects',
-          description: 'Contacts who have requested product demos',
-          contact_count: 156,
-          created_at: '2024-01-05T14:00:00Z',
-          updated_at: '2024-01-14T11:20:00Z',
-          is_member: true
-        },
-        {
-          id: '3',
-          name: 'Enterprise Leads',
-          description: 'High-value enterprise prospects',
-          contact_count: 89,
-          created_at: '2024-01-10T09:00:00Z',
-          updated_at: '2024-01-13T15:45:00Z',
-          is_member: false
-        },
-        {
-          id: '4',
-          name: 'Re-engagement Campaign',
-          description: 'Inactive contacts for re-engagement efforts',
-          contact_count: 445,
-          created_at: '2023-12-15T10:00:00Z',
-          updated_at: '2024-01-10T12:30:00Z',
-          is_member: false
-        }
-      ]
+      const response = await fetch(`/api/contacts/${contact.id}/campaigns?${params.toString()}`)
 
-      setCampaigns(mockCampaigns)
-      setContactLists(mockLists)
+      if (!response.ok) {
+        console.error('Campaigns request failed with status', response.status)
+        setCampaigns([])
+        setCampaignPagination({ page: campaignPage, limit: 10, hasNextPage: false, hasPrevPage: campaignPage > 1 })
+        return
+      }
+
+      const payload = await response.json()
+      if (!payload.success) {
+        console.warn('Failed to load campaigns for contact:', payload.error)
+        setCampaigns([])
+        setCampaignPagination({ page: campaignPage, limit: 10, hasNextPage: false, hasPrevPage: campaignPage > 1 })
+        return
+      }
+
+      const normalized: Campaign[] = (payload.campaigns || []).map((campaign: any) => ({
+        id: campaign.id,
+        name: campaign.name || 'Untitled Campaign',
+        status: campaign.status,
+        total_contacts: campaign.total_contacts ?? null,
+        contact_status: campaign.contact_status,
+        current_step: campaign.current_step ?? null,
+        joined_at: campaign.joined_at ?? null,
+        campaign_created_at: campaign.campaign_created_at ?? null,
+        emails_sent: campaign.emails_sent ?? 0,
+        emails_opened: campaign.emails_opened ?? 0,
+        emails_clicked: campaign.emails_clicked ?? 0,
+        emails_replied: campaign.emails_replied ?? 0,
+        open_rate: typeof campaign.open_rate === 'number' ? campaign.open_rate : undefined,
+        click_rate: typeof campaign.click_rate === 'number' ? campaign.click_rate : undefined,
+        reply_rate: typeof campaign.reply_rate === 'number' ? campaign.reply_rate : undefined,
+      }))
+
+      setCampaigns(normalized)
+      setCampaignPagination(payload.pagination ?? { page: campaignPage, limit: 10, hasNextPage: false, hasPrevPage: campaignPage > 1 })
     } catch (error) {
-      console.error('Failed to fetch campaigns and lists:', error)
+      console.error('Failed to fetch campaigns:', error)
+      setCampaigns([])
+      setCampaignPagination({ page: campaignPage, limit: 10, hasNextPage: false, hasPrevPage: campaignPage > 1 })
     } finally {
-      setLoading(false)
+      setCampaignsLoading(false)
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const fetchLists = async () => {
+    setListsLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: String(listPage),
+        limit: '10',
+      })
+
+      if (searchTerm) params.set('search', searchTerm)
+
+      const response = await fetch(`/api/contacts/${contact.id}/lists?${params.toString()}`)
+
+      if (!response.ok) {
+        console.error('Lists request failed with status', response.status)
+        setContactLists([])
+        setListPagination({ page: listPage, limit: 10, hasNextPage: false, hasPrevPage: listPage > 1 })
+        return
+      }
+
+      const payload = await response.json()
+      if (!payload.success) {
+        console.warn('Failed to load contact lists for contact:', payload.error)
+        setContactLists([])
+        setListPagination({ page: listPage, limit: 10, hasNextPage: false, hasPrevPage: listPage > 1 })
+        return
+      }
+
+      const normalizedLists: ContactList[] = (payload.lists || []).map((list: any) => ({
+        id: list.id,
+        name: list.name,
+        description: list.description,
+        contact_count: typeof list.contact_count === 'number' ? list.contact_count : 0,
+        created_at: list.created_at,
+        updated_at: list.updated_at,
+        is_member: Boolean(list.is_member),
+        tags: Array.isArray(list.tags) ? list.tags : [],
+      }))
+
+      setContactLists(normalizedLists)
+      setListPagination(payload.pagination ?? { page: listPage, limit: 10, hasNextPage: false, hasPrevPage: listPage > 1 })
+    } catch (error) {
+      console.error('Failed to fetch contact lists:', error)
+      setContactLists([])
+      setListPagination({ page: listPage, limit: 10, hasNextPage: false, hasPrevPage: listPage > 1 })
+    } finally {
+      setListsLoading(false)
+    }
+  }
+
+  const getStatusColor = (status?: string | null) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800'
       case 'paused': return 'bg-yellow-100 text-yellow-800'
@@ -194,7 +230,7 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status?: string | null) => {
     switch (status) {
       case 'active': return <Play className="h-4 w-4" />
       case 'paused': return <Pause className="h-4 w-4" />
@@ -215,12 +251,22 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return '—'
+    const parsed = new Date(dateString)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return parsed.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     })
+  }
+
+  const formatPercentage = (value?: number) => {
+    if (value === undefined || value === null || Number.isNaN(value)) {
+      return '0.0%'
+    }
+    return `${value.toFixed(1)}%`
   }
 
   const handleAddToList = async (listId: string) => {
@@ -264,18 +310,7 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
     console.log('Adding contact to campaign:', campaignId)
   }
 
-  const filteredCampaigns = campaigns.filter(campaign => {
-    const matchesSearch = campaign.name.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || campaign.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
-
-  const filteredLists = contactLists.filter(list =>
-    list.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (list.description && list.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
-
-  if (loading) {
+  if (campaignsLoading && listsLoading) {
     return (
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -297,7 +332,7 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
           }`}
         >
           <Target className="h-4 w-4" />
-          <span>Campaigns ({campaigns.length})</span>
+          <span>Campaigns</span>
         </button>
 
         <button
@@ -309,7 +344,7 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
           }`}
         >
           <Users className="h-4 w-4" />
-          <span>Lists ({contactLists.filter(list => list.is_member).length}/{contactLists.length})</span>
+          <span>Lists</span>
         </button>
       </div>
 
@@ -329,11 +364,16 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
 
             {activeTab === 'campaigns' && (
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <option value="all">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="completed">Completed</option>
-                <option value="draft">Draft</option>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                </SelectContent>
               </Select>
             )}
           </div>
@@ -344,108 +384,116 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
       {activeTab === 'campaigns' ? (
         /* Campaigns Tab */
         <div className="space-y-4">
-          {filteredCampaigns.length > 0 ? (
-            filteredCampaigns.map((campaign) => (
-              <Card key={campaign.id}>
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {campaign.name}
-                        </h3>
-                        <Badge className={`${getStatusColor(campaign.status)} border-0 flex items-center space-x-1`}>
-                          {getStatusIcon(campaign.status)}
-                          <span className="capitalize">{campaign.status}</span>
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {campaign.type}
-                        </Badge>
+          {campaignsLoading ? (
+            <div className="text-center py-10 text-gray-500">Loading campaigns...</div>
+          ) : campaigns.length > 0 ? (
+            campaigns.map((campaign) => {
+              const sentEmails = campaign.emails_sent || 0
+              const openRate = campaign.open_rate ?? (sentEmails > 0 ? (campaign.emails_opened / sentEmails) * 100 : 0)
+              const clickRate = campaign.click_rate ?? (sentEmails > 0 ? (campaign.emails_clicked / sentEmails) * 100 : 0)
+              const replyRate = campaign.reply_rate ?? (sentEmails > 0 ? (campaign.emails_replied / sentEmails) * 100 : 0)
+              const joinedDate = campaign.joined_at || campaign.campaign_created_at
+
+              return (
+                <Card key={campaign.id}>
+                  <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {campaign.name}
+                          </h3>
+                          {campaign.status && (
+                            <Badge className={`${getStatusColor(campaign.status)} border-0 flex items-center space-x-1`}>
+                              {getStatusIcon(campaign.status)}
+                              <span className="capitalize">{campaign.status}</span>
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-4">
+                          {campaign.total_contacts !== null && campaign.total_contacts !== undefined && (
+                            <div className="flex items-center space-x-1">
+                              <Users className="h-4 w-4" />
+                              <span>{campaign.total_contacts} contacts</span>
+                            </div>
+                          )}
+                          <div className="flex items-center space-x-1">
+                            <Mail className="h-4 w-4" />
+                            <span>{sentEmails} emails sent</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-4 w-4" />
+                            <span>Joined {formatDate(joinedDate)}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                          <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <div className="text-lg font-semibold text-gray-900">
+                              {formatPercentage(openRate)}
+                            </div>
+                            <div className="text-xs text-gray-600">Open Rate</div>
+                          </div>
+                          <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <div className="text-lg font-semibold text-gray-900">
+                              {formatPercentage(clickRate)}
+                            </div>
+                            <div className="text-xs text-gray-600">Click Rate</div>
+                          </div>
+                          <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <div className="text-lg font-semibold text-gray-900">
+                              {formatPercentage(replyRate)}
+                            </div>
+                            <div className="text-xs text-gray-600">Reply Rate</div>
+                          </div>
+                        </div>
+
+                        {campaign.contact_status && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-gray-600">Contact Status:</span>
+                            <Badge className={`${getContactStatusColor(campaign.contact_status)} border-0 text-xs`}>
+                              {campaign.contact_status}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex items-center space-x-6 text-sm text-gray-600 mb-4">
-                        <div className="flex items-center space-x-1">
-                          <Users className="h-4 w-4" />
-                          <span>{campaign.total_contacts} contacts</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Mail className="h-4 w-4" />
-                          <span>{campaign.sent_count} emails sent</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="h-4 w-4" />
-                          <span>Created {formatDate(campaign.created_at)}</span>
-                        </div>
-                      </div>
+                      <div className="flex items-center space-x-2 mt-4 md:mt-0 md:ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center space-x-2"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          <span>View</span>
+                        </Button>
 
-                      {/* Campaign Performance */}
-                      <div className="grid grid-cols-3 gap-4 mb-4">
-                        <div className="text-center p-3 bg-gray-50 rounded-lg">
-                          <div className="text-lg font-semibold text-gray-900">
-                            {campaign.open_rate.toFixed(1)}%
-                          </div>
-                          <div className="text-xs text-gray-600">Open Rate</div>
-                        </div>
-                        <div className="text-center p-3 bg-gray-50 rounded-lg">
-                          <div className="text-lg font-semibold text-gray-900">
-                            {campaign.click_rate.toFixed(1)}%
-                          </div>
-                          <div className="text-xs text-gray-600">Click Rate</div>
-                        </div>
-                        <div className="text-center p-3 bg-gray-50 rounded-lg">
-                          <div className="text-lg font-semibold text-gray-900">
-                            {campaign.reply_rate.toFixed(1)}%
-                          </div>
-                          <div className="text-xs text-gray-600">Reply Rate</div>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleAddToCampaign(campaign.id)}>
+                              Add to Different Step
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem>
+                              View Contact Journey
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              Remove from Campaign
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-
-                      {/* Contact Status in Campaign */}
-                      {campaign.contact_status && (
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-600">Contact Status:</span>
-                          <Badge className={`${getContactStatusColor(campaign.contact_status)} border-0 text-xs`}>
-                            {campaign.contact_status}
-                          </Badge>
-                        </div>
-                      )}
                     </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center space-x-2 ml-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex items-center space-x-2"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        <span>View</span>
-                      </Button>
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleAddToCampaign(campaign.id)}>
-                            Add to Different Step
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem>
-                            View Contact Journey
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            Remove from Campaign
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              )
+            })
           ) : (
             <Card>
               <CardContent className="text-center py-12">
@@ -461,12 +509,34 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
               </CardContent>
             </Card>
           )}
+
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!campaignPagination.hasPrevPage || campaignsLoading}
+              onClick={() => setCampaignPage((prev) => Math.max(1, prev - 1))}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-gray-500">Page {campaignPagination.page}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!campaignPagination.hasNextPage || campaignsLoading}
+              onClick={() => setCampaignPage((prev) => prev + 1)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       ) : (
         /* Lists Tab */
         <div className="space-y-4">
-          {filteredLists.length > 0 ? (
-            filteredLists.map((list) => (
+          {listsLoading ? (
+            <div className="text-center py-10 text-gray-500">Loading lists...</div>
+          ) : contactLists.length > 0 ? (
+            contactLists.map((list) => (
               <Card key={list.id}>
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
@@ -550,6 +620,26 @@ export function CampaignsListsTab({ contact, onContactUpdate }: CampaignsListsTa
               </CardContent>
             </Card>
           )}
+
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!listPagination.hasPrevPage || listsLoading}
+              onClick={() => setListPage((prev) => Math.max(1, prev - 1))}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-gray-500">Page {listPagination.page}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!listPagination.hasNextPage || listsLoading}
+              onClick={() => setListPage((prev) => prev + 1)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       )}
     </div>

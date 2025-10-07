@@ -16,13 +16,15 @@ export const GET = withAuth(async (
 
     // Extract pagination parameters
     const url = new URL(request.url)
-    const page = parseInt(url.searchParams.get('page') || '1')
-    const limit = parseInt(url.searchParams.get('limit') || '5')
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'))
+    const limit = Math.max(1, Math.min(50, parseInt(url.searchParams.get('limit') || '10')))
+    const search = url.searchParams.get('search')?.trim()
+    const statusFilter = url.searchParams.get('status')?.trim()
     const offset = (page - 1) * limit
 
     // Fetch campaigns linked to the contact with pagination
     // We'll fetch limit + 1 to determine if there are more pages
-    const { data: cc, error: ccErr } = await supabase
+    let query = supabase
       .from('campaign_contacts')
       .select(`
         id,
@@ -35,12 +37,30 @@ export const GET = withAuth(async (
           id,
           name,
           status,
+          total_contacts,
+          emails_sent,
+          emails_opened,
+          emails_clicked,
+          emails_replied,
           created_at
         )
       `)
       .eq('contact_id', contactId)
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit)
+
+    if (statusFilter && statusFilter !== 'all') {
+      query = query.eq('campaigns.status', statusFilter)
+    }
+
+    if (search) {
+      const sanitized = search
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_')
+        .replace(/'/g, "''")
+      query = query.ilike('campaigns.name', `%${sanitized}%`)
+    }
+
+    const { data: cc, error: ccErr } = await query.range(offset, offset + limit)
 
     // Check if we have more items than limit (indicates more pages)
     const hasMoreItems = (cc?.length || 0) > limit
@@ -57,13 +77,19 @@ export const GET = withAuth(async (
       id: row.campaigns?.id,
       name: row.campaigns?.name,
       status: row.campaigns?.status,
+      total_contacts: row.campaigns?.total_contacts ?? null,
+      aggregate_emails_sent: row.campaigns?.emails_sent ?? 0,
+      aggregate_emails_opened: row.campaigns?.emails_opened ?? 0,
+      aggregate_emails_clicked: row.campaigns?.emails_clicked ?? 0,
+      aggregate_emails_replied: row.campaigns?.emails_replied ?? 0,
       contact_status: row.status,
       current_step: row.current_sequence || 0,
-      emails_sent: 0, // Will be calculated from email_sends
-      emails_opened: 0, // Will be calculated from email_sends
-      emails_clicked: 0, // Will be calculated from email_sends
-      emails_replied: 0, // Will be calculated from email_sends
-      joined_at: row.created_at
+      emails_sent: 0,
+      emails_opened: 0,
+      emails_clicked: 0,
+      emails_replied: 0,
+      joined_at: row.created_at,
+      campaign_created_at: row.campaigns?.created_at
     }))
 
     // Collect activity and statistics from email_sends for this contact across these campaigns
@@ -144,6 +170,9 @@ export const GET = withAuth(async (
         last_open_at: activity.last_open_at,
         last_click_at: activity.last_click_at,
         last_reply_at: activity.last_reply_at,
+        open_rate: activity.emails_sent > 0 ? Math.round((activity.emails_opened / activity.emails_sent) * 1000) / 10 : 0,
+        click_rate: activity.emails_sent > 0 ? Math.round((activity.emails_clicked / activity.emails_sent) * 1000) / 10 : 0,
+        reply_rate: activity.emails_sent > 0 ? Math.round((activity.emails_replied / activity.emails_sent) * 1000) / 10 : 0,
       }
     })
 
@@ -168,4 +197,3 @@ export const GET = withAuth(async (
     return NextResponse.json({ success: false, error: e?.message || 'Internal error' }, { status: 500 })
   }
 })
-

@@ -172,6 +172,20 @@ export class SmartEnrichmentOrchestrator {
         return await this.executeLinkedInOnlyEnrichment(contactId, userId, contact)
       
       default:
+        console.log(`⏭️ Skipping contact ${contactId} - No enrichment sources available`)
+
+        // Mark both statuses as failed to prevent retries
+        const supabase = await createServerSupabaseClient()
+        await supabase
+          .from('contacts')
+          .update({
+            enrichment_status: 'failed',
+            linkedin_extraction_status: 'failed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', contactId)
+          .eq('user_id', userId)
+
         return {
           success: false,
           sources_used: [],
@@ -195,18 +209,27 @@ export class SmartEnrichmentOrchestrator {
     linkedin: EnrichmentSource
   ): Promise<SmartEnrichmentResult> {
     console.log('🔄 Executing dual enrichment: Company first, LinkedIn fills gaps')
-    
+
     const errors: string[] = []
     const warnings: string[] = []
     const sourcesUsed: string[] = []
-    
+
     let websiteData: any = null
     let linkedinData: LinkedInEnrichmentData | null = null
 
-    // PHASE 1: Company website enrichment (PRIMARY)
+    // PHASE 1: Company website enrichment (PRIMARY with 90s timeout)
     console.log('🌐 Phase 1: Company website enrichment')
     try {
-      const websiteResult = await this.contactEnrichmentService.enrichContact(contactId, userId)
+      const websiteResult = await Promise.race([
+        this.contactEnrichmentService.enrichContact(contactId, userId),
+        new Promise<{ success: false; error: string; contact_id: string; website_url: string }>((resolve) =>
+          setTimeout(() => {
+            console.warn(`⏰ Website enrichment timeout after 90 seconds`)
+            resolve({ success: false, error: 'Timeout after 90 seconds', contact_id: contactId, website_url: '' })
+          }, 90000)
+        )
+      ])
+
       if (websiteResult.success && websiteResult.data) {
         websiteData = websiteResult.data
         sourcesUsed.push('website')
@@ -221,10 +244,19 @@ export class SmartEnrichmentOrchestrator {
       console.warn('⚠️ Website enrichment failed:', errorMsg)
     }
 
-    // PHASE 2: LinkedIn enrichment (SECONDARY - fills gaps)
+    // PHASE 2: LinkedIn enrichment (SECONDARY - fills gaps with 90s timeout)
     console.log('🔗 Phase 2: LinkedIn profile enrichment (gap filling)')
     try {
-      const linkedinResult = await this.linkedinExtractorService.extractContactLinkedIn(contactId, userId)
+      const linkedinResult = await Promise.race([
+        this.linkedinExtractorService.extractContactLinkedIn(contactId, userId),
+        new Promise<{ success: false; error: string; contact_id: string; linkedin_url: string; status: 'failed' }>((resolve) =>
+          setTimeout(() => {
+            console.warn(`⏰ LinkedIn enrichment timeout after 90 seconds`)
+            resolve({ success: false, error: 'Timeout after 90 seconds', contact_id: contactId, linkedin_url: '', status: 'failed' })
+          }, 90000)
+        )
+      ])
+
       if (linkedinResult.success && linkedinResult.data) {
         linkedinData = linkedinResult.data
         sourcesUsed.push('linkedin')
@@ -270,9 +302,18 @@ export class SmartEnrichmentOrchestrator {
     contact: any
   ): Promise<SmartEnrichmentResult> {
     console.log('🌐 Executing website-only enrichment')
-    
+
     try {
-      const result = await this.contactEnrichmentService.enrichContact(contactId, userId)
+      // Add 90 second timeout
+      const result = await Promise.race([
+        this.contactEnrichmentService.enrichContact(contactId, userId),
+        new Promise<{ success: false; error: string; contact_id: string; website_url: string }>((resolve) =>
+          setTimeout(() => {
+            console.warn(`⏰ Website enrichment timeout after 90 seconds`)
+            resolve({ success: false, error: 'Timeout after 90 seconds', contact_id: contactId, website_url: '' })
+          }, 90000)
+        )
+      ])
       
       return {
         success: result.success,
@@ -306,9 +347,18 @@ export class SmartEnrichmentOrchestrator {
     contact: any
   ): Promise<SmartEnrichmentResult> {
     console.log('🔗 Executing LinkedIn-only enrichment')
-    
+
     try {
-      const result = await this.linkedinExtractorService.extractContactLinkedIn(contactId, userId)
+      // Add 90 second timeout
+      const result = await Promise.race([
+        this.linkedinExtractorService.extractContactLinkedIn(contactId, userId),
+        new Promise<{ success: false; error: string; contact_id: string; linkedin_url: string; status: 'failed' }>((resolve) =>
+          setTimeout(() => {
+            console.warn(`⏰ LinkedIn enrichment timeout after 90 seconds`)
+            resolve({ success: false, error: 'Timeout after 90 seconds', contact_id: contactId, linkedin_url: '', status: 'failed' })
+          }, 90000)
+        )
+      ])
       
       if (result.success && result.data) {
         // Perform smart merge even for LinkedIn-only to save enrichment metadata
