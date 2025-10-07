@@ -8,19 +8,20 @@ export const dynamic = 'force-dynamic'
  * Cron job to process stuck enrichment jobs
  * Runs every 5 minutes to resume jobs that failed to chain to next batch
  *
- * Vercel Cron Configuration (vercel.json):
- * {
- *   "crons": [{
- *     "path": "/api/cron/process-enrichment-jobs",
- *     "schedule": "*\/5 * * * *"
- *   }]
- * }
+ * Ubuntu Server Cron Configuration:
+ * Add to crontab: crontab -e
+ *
+ * *\/5 * * * * curl -X GET https://pitchdonkey.vercel.app/api/cron/process-enrichment-jobs \
+ *   -H "Authorization: Bearer YOUR_CRON_SECRET" \
+ *   >> /var/log/enrichment-cron.log 2>&1
+ *
+ * Set CRON_SECRET in Vercel environment variables
  */
 export async function GET(request: NextRequest) {
   try {
     console.log('🔄 Cron: Starting stuck enrichment job recovery')
 
-    // Verify this is a valid cron request (Vercel adds special headers)
+    // Verify this is a valid cron request from Ubuntu server
     const authHeader = request.headers.get('authorization')
     if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       console.warn('⚠️ Unauthorized cron request')
