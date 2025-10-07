@@ -50,7 +50,7 @@ export function BulkEnrichmentModal({
   const [timeout, setTimeout] = useState(30)
   const [isStarting, setIsStarting] = useState(false)
 
-  const { showEnrichmentStarted } = useEnrichmentToast()
+  const { showEnrichmentStarted, showEnrichmentInProgress } = useEnrichmentToast()
 
   // Analyze eligibility when modal opens
   useEffect(() => {
@@ -227,7 +227,19 @@ export function BulkEnrichmentModal({
 
     } catch (error) {
       console.error('Failed to start bulk enrichment:', error)
-      alert(`Failed to start bulk enrichment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+      // Check if it's an "already running" error and show appropriate toast
+      if (errorMessage.includes('already running') || errorMessage.includes('already in progress')) {
+        // Extract progress text from error message (e.g., "2/6 contacts enriched")
+        const progressMatch = errorMessage.match(/\(([^)]+)\)/)
+        const progressText = progressMatch ? progressMatch[1] : 'processing'
+        showEnrichmentInProgress(progressText)
+      } else {
+        // For other errors, use alert as before
+        alert(`Failed to start bulk enrichment: ${errorMessage}`)
+      }
+
       // Close progress modal on error
       onEnrichmentStarted(null)
     } finally {

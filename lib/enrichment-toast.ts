@@ -58,9 +58,19 @@ export function useEnrichmentToast() {
     })
   }
 
+  const showEnrichmentInProgress = (progressText: string) => {
+    addToast({
+      type: 'warning',
+      title: 'Enrichment Already in Progress',
+      message: `An enrichment job is already running (${progressText}). Please wait for it to complete before starting a new one.`,
+      duration: 5000
+    })
+  }
+
   return {
     showEnrichmentStarted,
     showEnrichmentCompleted,
-    showEnrichmentFailed
+    showEnrichmentFailed,
+    showEnrichmentInProgress
   }
 }
