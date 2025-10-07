@@ -56,13 +56,37 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Immediately trigger the processor endpoint to start processing the first batch
     const processorUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/contacts/bulk-enrich/process`
-    fetch(processorUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: result.job_id })
-    }).catch(err => {
-      console.error('Failed to trigger processor:', err)
-    })
+    console.log(`🔄 Triggering processor at: ${processorUrl}`)
+
+    // Use await with proper error handling instead of fire-and-forget
+    try {
+      console.log(`🔄 Making POST request to: ${processorUrl}`)
+      console.log(`📦 Request payload:`, { job_id: result.job_id })
+
+      const triggerResponse = await fetch(processorUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: result.job_id })
+      })
+
+      console.log(`📡 Processor response status: ${triggerResponse.status} ${triggerResponse.statusText}`)
+
+      if (triggerResponse.ok) {
+        const responseData = await triggerResponse.json()
+        console.log(`✅ Successfully triggered processor for job ${result.job_id}`)
+        console.log(`📊 Processor response:`, responseData)
+      } else {
+        console.error(`❌ Processor trigger failed: HTTP ${triggerResponse.status}`)
+        const errorText = await triggerResponse.text()
+        console.error(`❌ Error response body:`, errorText)
+      }
+    } catch (err) {
+      console.error('❌ Failed to trigger processor - EXCEPTION:', err)
+      console.error('❌ Error type:', err instanceof Error ? err.constructor.name : typeof err)
+      console.error('❌ Error message:', err instanceof Error ? err.message : String(err))
+      console.error('❌ Error stack:', err instanceof Error ? err.stack : 'No stack trace')
+      console.error('⚠️  Job created but not started. Manual trigger required or wait for cron.')
+    }
 
     return createSuccessResponse({
       success: true,
