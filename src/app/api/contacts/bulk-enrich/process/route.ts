@@ -79,29 +79,62 @@ export async function POST(request: NextRequest) {
     // Process one batch
     const result = await enrichmentService.processNextBatch(jobToProcess.id)
 
-    // If there are more batches, trigger the next one immediately
+    // If there are more batches, trigger the next one immediately with retry logic
     if (result.hasMore) {
       console.log(`🔄 Triggering next batch for job ${jobToProcess.id}`)
       const processorUrl = `${process.env.NEXT_PUBLIC_APP_URL || request.url.split('/api')[0]}/api/contacts/bulk-enrich/process`
       console.log(`🔄 Next batch URL: ${processorUrl}`)
 
-      // Fire-and-forget fetch to trigger next batch
-      fetch(processorUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: jobToProcess.id })
-      })
-      .then(async (res) => {
-        console.log(`✅ Next batch trigger response: ${res.status} ${res.statusText}`)
-        if (!res.ok) {
-          const errorText = await res.text()
-          console.error(`❌ Next batch trigger failed with body:`, errorText)
+      // CRITICAL FIX: AWAIT the fetch with retry logic to ensure chain continues on Vercel
+      const maxRetries = 3
+      let lastError: Error | null = null
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`🔄 Attempt ${attempt}/${maxRetries} to trigger next batch`)
+
+          const nextBatchResponse = await fetch(processorUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: jobToProcess.id })
+          })
+
+          if (nextBatchResponse.ok) {
+            const responseData = await nextBatchResponse.json()
+            console.log(`✅ Next batch triggered successfully on attempt ${attempt}:`, responseData)
+            break // Success - exit retry loop
+          } else {
+            const errorText = await nextBatchResponse.text()
+            console.error(`⚠️ Next batch trigger failed (attempt ${attempt}/${maxRetries}): HTTP ${nextBatchResponse.status}`, errorText)
+            lastError = new Error(`HTTP ${nextBatchResponse.status}: ${errorText}`)
+
+            // Exponential backoff before retry (1s, 2s, 4s)
+            if (attempt < maxRetries) {
+              const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+              console.log(`⏳ Waiting ${backoffMs}ms before retry...`)
+              await new Promise(resolve => setTimeout(resolve, backoffMs))
+            }
+          }
+        } catch (err) {
+          console.error(`❌ Next batch trigger exception (attempt ${attempt}/${maxRetries}):`, err)
+          lastError = err instanceof Error ? err : new Error(String(err))
+
+          // Exponential backoff before retry
+          if (attempt < maxRetries) {
+            const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+            console.log(`⏳ Waiting ${backoffMs}ms before retry...`)
+            await new Promise(resolve => setTimeout(resolve, backoffMs))
+          }
         }
-      })
-      .catch(err => {
-        console.error('❌ Failed to trigger next batch - EXCEPTION:', err)
-        console.error('❌ Error message:', err instanceof Error ? err.message : String(err))
-      })
+      }
+
+      // If all retries failed, log critical error
+      if (lastError) {
+        console.error(`🚨 CRITICAL: Failed to trigger next batch after ${maxRetries} attempts:`, lastError)
+        console.error(`🚨 Job ${jobToProcess.id} may be stuck. Cron job will attempt recovery.`)
+        // Note: We don't throw here to avoid marking the current batch as failed
+        // The cron job will pick up stuck jobs for recovery
+      }
     } else {
       console.log(`✅ No more batches to process for job ${jobToProcess.id}`)
     }
