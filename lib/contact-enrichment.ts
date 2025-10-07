@@ -96,20 +96,30 @@ export class ContactEnrichmentService {
           const normalized = PerplexityService.normalizeWebsiteUrl(contact.website)
           console.log(`🌐 Using existing website URL: ${normalized}`)
 
-          // Add timeout wrapper for website verification (10 seconds)
+          // Add timeout wrapper for website verification (15 seconds)
           const access = await Promise.race([
             PerplexityService.verifyWebsiteAccessible(normalized),
             new Promise<{ ok: false; error: string }>((resolve) =>
-              setTimeout(() => resolve({ ok: false, error: 'Timeout' }), 10000)
+              setTimeout(() => {
+                console.warn(`⏰ Timeout verifying existing website ${normalized} after 15 seconds`)
+                resolve({ ok: false, error: 'Timeout after 15 seconds' })
+              }, 15000)
             )
           ])
+
+          console.log(`📊 Existing website verification result:`, {
+            url: normalized,
+            ok: access.ok,
+            finalUrl: access.ok ? access.finalUrl : 'N/A',
+            error: access.error || 'N/A'
+          })
 
           if (access.ok) {
             websiteUrl = access.finalUrl || normalized
             enrichmentSource = 'website'
             console.log('✅ Website is accessible')
           } else {
-            console.warn('⚠️ Provided website appears inaccessible, will attempt email-derived domain if available')
+            console.warn(`⚠️ Provided website appears inaccessible (${access.error}), will attempt email-derived domain if available`)
           }
         } catch (error) {
           console.error('❌ Invalid website URL format:', contact.website)
@@ -128,27 +138,65 @@ export class ContactEnrichmentService {
           const candidate1 = convertDomainToWebsiteUrl(domain)
           const candidate2 = `https://${domain}`
 
-          // Add timeout wrapper for website verification (10 seconds total)
+          console.log(`🔍 Attempting URL verification for email-derived domain: ${domain}`)
+          console.log(`🔍 Candidate 1: ${candidate1}`)
+          console.log(`🔍 Candidate 2: ${candidate2}`)
+
+          // Strategy: Try verification with extended timeout (15 seconds per URL)
+          // German business websites can be slow to respond
           const access1 = await Promise.race([
             PerplexityService.verifyWebsiteAccessible(candidate1),
             new Promise<{ ok: false; error: string }>((resolve) =>
-              setTimeout(() => resolve({ ok: false, error: 'Timeout' }), 5000)
+              setTimeout(() => {
+                console.warn(`⏰ Timeout verifying ${candidate1} after 15 seconds`)
+                resolve({ ok: false, error: 'Timeout after 15 seconds' })
+              }, 15000)
             )
           ])
 
-          const access2 = access1.ok ? access1 : await Promise.race([
-            PerplexityService.verifyWebsiteAccessible(candidate2),
-            new Promise<{ ok: false; error: string }>((resolve) =>
-              setTimeout(() => resolve({ ok: false, error: 'Timeout' }), 5000)
-            )
-          ])
+          console.log(`📊 Candidate 1 verification result:`, {
+            url: candidate1,
+            ok: access1.ok,
+            finalUrl: access1.ok ? access1.finalUrl : 'N/A',
+            error: !access1.ok ? (access1 as any).error : 'N/A'
+          })
+
+          let access2: { ok: boolean; finalUrl?: string; error?: string } = { ok: false }
+          if (!access1.ok) {
+            access2 = await Promise.race([
+              PerplexityService.verifyWebsiteAccessible(candidate2),
+              new Promise<{ ok: false; error: string }>((resolve) =>
+                setTimeout(() => {
+                  console.warn(`⏰ Timeout verifying ${candidate2} after 15 seconds`)
+                  resolve({ ok: false, error: 'Timeout after 15 seconds' })
+                }, 15000)
+              )
+            ])
+
+            console.log(`📊 Candidate 2 verification result:`, {
+              url: candidate2,
+              ok: access2.ok,
+              finalUrl: access2.ok ? access2.finalUrl : 'N/A',
+              error: !access2.ok ? (access2 as any).error : 'N/A'
+            })
+          }
 
           if (access1.ok || access2.ok) {
             websiteUrl = (access1.ok ? access1.finalUrl : access2.finalUrl) || (access1.ok ? candidate1 : candidate2)
             enrichmentSource = 'email'
-            console.log(`📧 Derived and verified website URL from email ${contact.email}: ${websiteUrl}`)
+            console.log(`✅ Derived and verified website URL from email ${contact.email}: ${websiteUrl}`)
           } else {
-            console.warn('⚠️ Derived website from email appears inaccessible')
+            // FALLBACK: If verification fails, but URL looks valid, try enrichment anyway
+            // Some German business sites have strict security that blocks verification but work for scraping
+            console.warn(`⚠️ Both URL verification attempts failed for domain ${domain}`)
+            console.log(`🔄 Attempting graceful fallback - will try enrichment with unverified URL`)
+
+            // Prefer www variant for German business domains (more common)
+            websiteUrl = candidate1
+            enrichmentSource = 'email'
+
+            console.log(`📧 Using unverified email-derived URL: ${websiteUrl}`)
+            console.log(`⚠️ Note: URL verification failed but proceeding with enrichment attempt`)
           }
         }
       }

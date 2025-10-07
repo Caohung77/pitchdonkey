@@ -18,7 +18,11 @@ import {
   Edit3,
   Save,
   X,
-  Plus
+  Plus,
+  Sparkles,
+  Briefcase,
+  Target,
+  Lightbulb
 } from 'lucide-react'
 
 interface Contact {
@@ -34,7 +38,14 @@ interface Contact {
   engagement_status?: string
   engagement_score?: number
   custom_fields?: Record<string, any>
-  enriched_data?: Record<string, any>
+  enrichment_data?: {
+    company_name?: string
+    industry?: string
+    products_services?: string[]
+    target_audience?: string[]
+    unique_points?: string[]
+    tone_style?: string
+  }
   created_at: string
   updated_at: string
 }
@@ -329,6 +340,108 @@ export function ContactDetailsTab({ contact, onContactUpdate }: ContactDetailsTa
           </div>
         </CardContent>
       </Card>
+
+      {/* Enrichment Data Card */}
+      {contact.enrichment_data && Object.keys(contact.enrichment_data).some(key => {
+        const value = contact.enrichment_data![key as keyof typeof contact.enrichment_data]
+        return value && (Array.isArray(value) ? value.length > 0 : value.toString().trim().length > 0)
+      }) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Sparkles className="h-5 w-5 text-purple-600" />
+              <span>AI-Enriched Company Data</span>
+              <Badge variant="secondary" className="ml-2 text-xs">Auto-scraped</Badge>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            {contact.enrichment_data.industry && contact.enrichment_data.industry.trim().length > 0 && (
+              <div>
+                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Briefcase className="h-4 w-4" />
+                  <span>Industry</span>
+                </Label>
+                <div className="text-sm text-gray-900 bg-gradient-to-r from-purple-50 to-blue-50 rounded-md px-4 py-3 border border-purple-200">
+                  {contact.enrichment_data.industry}
+                </div>
+              </div>
+            )}
+
+            {contact.enrichment_data.products_services && contact.enrichment_data.products_services.length > 0 && (
+              <div>
+                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Target className="h-4 w-4" />
+                  <span>Products & Services</span>
+                </Label>
+                <div className="space-y-2">
+                  {contact.enrichment_data.products_services.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start space-x-2 text-sm text-gray-900 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-md px-4 py-2 border border-blue-200"
+                    >
+                      <span className="text-blue-600 font-medium">•</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {contact.enrichment_data.target_audience && contact.enrichment_data.target_audience.length > 0 && (
+              <div>
+                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <User className="h-4 w-4" />
+                  <span>Target Audience</span>
+                </Label>
+                <div className="space-y-2">
+                  {contact.enrichment_data.target_audience.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start space-x-2 text-sm text-gray-900 bg-gradient-to-r from-green-50 to-emerald-50 rounded-md px-4 py-2 border border-green-200"
+                    >
+                      <span className="text-green-600 font-medium">•</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {contact.enrichment_data.unique_points && contact.enrichment_data.unique_points.length > 0 && (
+              <div>
+                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Lightbulb className="h-4 w-4" />
+                  <span>Unique Value Propositions</span>
+                </Label>
+                <div className="space-y-2">
+                  {contact.enrichment_data.unique_points.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start space-x-2 text-sm text-gray-900 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-md px-4 py-2 border border-yellow-200"
+                    >
+                      <span className="text-yellow-600 font-medium">•</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {contact.enrichment_data.tone_style && contact.enrichment_data.tone_style.trim().length > 0 && (
+              <div>
+                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Sparkles className="h-4 w-4" />
+                  <span>Brand Tone & Style</span>
+                </Label>
+                <div className="text-sm text-gray-900 bg-gradient-to-r from-pink-50 to-rose-50 rounded-md px-4 py-3 border border-pink-200">
+                  {contact.enrichment_data.tone_style}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Custom Fields Card */}
       <Card>

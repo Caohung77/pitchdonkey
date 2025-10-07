@@ -45,40 +45,89 @@ export class PerplexityService {
   /**
    * Verify that a website is reachable and likely valid.
    * Tries the provided URL; if it fails and the host has/hasn't "www.", tries the alternate.
+   * Enhanced with HEAD request fallback for faster verification and better error handling.
    */
-  static async verifyWebsiteAccessible(url: string): Promise<{ ok: boolean; finalUrl?: string }> {
-    const tryFetch = async (u: string) => {
+  static async verifyWebsiteAccessible(url: string): Promise<{ ok: boolean; finalUrl?: string; error?: string }> {
+    const tryFetch = async (u: string, method: 'GET' | 'HEAD' = 'GET') => {
       try {
-        const resp = await fetch(u, { method: 'GET', redirect: 'follow' })
+        console.log(`🔍 Verifying URL: ${u} (method: ${method})`)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout per fetch
+
+        const resp = await fetch(u, {
+          method,
+          redirect: 'follow',
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ContactEnrichmentBot/1.0)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+          }
+        })
+        clearTimeout(timeoutId)
+
+        console.log(`📊 Response from ${u}:`, {
+          status: resp.status,
+          statusText: resp.statusText,
+          contentType: resp.headers.get('content-type') || 'unknown',
+          finalUrl: resp.url
+        })
+
         if (resp.ok) {
           const ct = resp.headers.get('content-type') || ''
-          // Consider it accessible if it's HTML or unknown but 200
-          if (ct.includes('text/html') || ct === '') {
+          // Consider it accessible if it's HTML, XML, or unknown but 200
+          if (ct.includes('text/html') || ct.includes('application/xhtml') || ct.includes('text/xml') || ct === '') {
+            console.log(`✅ URL verified successfully: ${u} → ${resp.url || u}`)
             return { ok: true as const, finalUrl: resp.url || u }
+          } else {
+            console.warn(`⚠️ URL returned non-HTML content type: ${ct}`)
           }
+        } else {
+          console.warn(`⚠️ URL returned non-OK status: ${resp.status} ${resp.statusText}`)
         }
-        return { ok: false as const }
-      } catch {
-        return { ok: false as const }
+        return { ok: false as const, error: `HTTP ${resp.status}` }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        console.warn(`⚠️ Fetch failed for ${u}: ${errorMsg}`)
+        return { ok: false as const, error: errorMsg }
       }
     }
 
-    // Try original
-    const first = await tryFetch(url)
+    // Strategy 1: Try HEAD request first (faster)
+    console.log(`🔍 Attempting HEAD request for ${url}`)
+    let first = await tryFetch(url, 'HEAD')
+
+    // Strategy 2: If HEAD fails, try GET (more reliable but slower)
+    if (!first.ok) {
+      console.log(`🔍 HEAD failed, attempting GET request for ${url}`)
+      first = await tryFetch(url, 'GET')
+    }
+
     if (first.ok) return first
 
-    // Toggle www variant
+    // Strategy 3: Toggle www variant
     try {
       const u = new URL(url)
       const host = u.host
       const hasWww = host.startsWith('www.')
       const altHost = hasWww ? host.replace(/^www\./, '') : `www.${host}`
       u.host = altHost
-      const second = await tryFetch(u.toString())
-      if (second.ok) return second
-    } catch {}
+      const altUrl = u.toString()
 
-    return { ok: false }
+      console.log(`🔍 Original URL failed, trying alternate: ${altUrl}`)
+
+      // Try HEAD first, then GET for alternate URL
+      let second = await tryFetch(altUrl, 'HEAD')
+      if (!second.ok) {
+        second = await tryFetch(altUrl, 'GET')
+      }
+
+      if (second.ok) return second
+    } catch (error) {
+      console.error(`❌ Error trying alternate URL: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
+    console.warn(`❌ All verification attempts failed for ${url}`)
+    return { ok: false, error: 'All verification attempts failed' }
   }
 
   /**
