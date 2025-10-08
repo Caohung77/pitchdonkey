@@ -1,7 +1,104 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { createEmailFetchService } from '@/lib/email-fetch-service'
 import { addSecurityHeaders } from '@/lib/auth-middleware'
+
+// Import the working sync function from manual sync endpoint
+async function syncEmailAccount(supabase: any, accountId: string) {
+  const syncModule = await import('@/app/api/inbox/sync/route')
+  // The sync function is not exported, so we need to call the endpoint logic directly
+  // For now, we'll import the IMAPProcessor which has the working logic
+  const { IMAPProcessor } = await import('@/lib/imap-processor')
+  const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
+
+  // Get account details
+  const { data: account, error: accountError } = await supabase
+    .from('email_accounts')
+    .select('*')
+    .eq('id', accountId)
+    .single()
+
+  if (accountError || !account) {
+    throw new Error('Account not found')
+  }
+
+  // Use Gmail OAuth sync for Gmail accounts (WORKING CODE from manual sync)
+  if (account.provider === 'gmail' && account.access_token) {
+    const gmailService = new GmailIMAPSMTPServerService()
+
+    // Fetch emails using working Gmail sync logic
+    const [inboxEmails] = await Promise.all([
+      gmailService.fetchGmailEmails(account.id, 'INBOX', { unseen: false })
+    ])
+
+    let newEmailsCount = 0
+    const errors: string[] = []
+    const newEmailIds: string[] = []
+
+    for (const email of inboxEmails) {
+      try {
+        // Skip self-sent emails
+        const isFromSelf = email.from && email.from.toLowerCase().includes(account.email.toLowerCase())
+        if (isFromSelf) continue
+
+        // Check if exists
+        const { data: existing } = await supabase
+          .from('incoming_emails')
+          .select('id')
+          .eq('gmail_message_id', email.gmailMessageId)
+          .eq('user_id', account.user_id)
+          .maybeSingle()
+
+        if (existing) continue
+
+        // Insert with null-safety (CRITICAL FIX)
+        const { data: inserted, error: insertError } = await supabase
+          .from('incoming_emails')
+          .insert({
+            user_id: account.user_id,
+            email_account_id: account.id,
+            message_id: email.messageId || `missing-${Date.now()}`,
+            gmail_message_id: email.gmailMessageId || null,
+            from_address: email.from || 'unknown@unknown.com',
+            to_address: email.to || account.email,
+            subject: email.subject || '(No Subject)',
+            date_received: email.date || new Date().toISOString(),
+            text_content: email.textBody || null,
+            html_content: email.htmlBody || null,
+            processing_status: 'pending',
+            classification_status: 'unclassified',
+            imap_uid: email.uid || null
+          })
+          .select('id')
+          .single()
+
+        if (insertError) {
+          errors.push(`Failed to save: ${insertError.message}`)
+        } else {
+          newEmailsCount++
+          newEmailIds.push(inserted.id)
+        }
+      } catch (error: any) {
+        errors.push(error.message)
+      }
+    }
+
+    // Classify new emails
+    if (newEmailIds.length > 0) {
+      const { ReplyProcessor } = await import('@/lib/reply-processor')
+      const replyProcessor = new ReplyProcessor()
+      await replyProcessor.processUnclassifiedEmails(account.user_id, newEmailIds.length)
+    }
+
+    return {
+      success: errors.length === 0,
+      newEmails: newEmailsCount,
+      errors,
+      account: account.email
+    }
+  }
+
+  throw new Error(`Provider ${account.provider} not supported in cron`)
+}
 
 /**
  * POST /api/cron/fetch-emails
@@ -31,17 +128,42 @@ export async function POST(request: NextRequest) {
     // Create Supabase client with service role for cron operations
     const supabase = createServerSupabaseClient()
 
-    // Create email fetch service
-    const emailFetchService = createEmailFetchService(supabase)
+    // Get all Gmail accounts (use working manual sync logic)
+    const { data: accounts, error: accountsError } = await supabase
+      .from('email_accounts')
+      .select('*')
+      .eq('provider', 'gmail')
 
-    // Fetch emails from all accounts
-    const result = await emailFetchService.fetchAllAccounts()
+    if (accountsError) {
+      throw new Error(`Failed to fetch accounts: ${accountsError.message}`)
+    }
+
+    const results = []
+    let totalNewEmails = 0
+
+    for (const account of accounts || []) {
+      try {
+        const result = await syncEmailAccount(supabase, account.id)
+        results.push(result)
+        totalNewEmails += result.newEmails
+      } catch (error: any) {
+        results.push({
+          success: false,
+          account: account.email,
+          error: error.message
+        })
+      }
+    }
+
+    const result = {
+      totalAccounts: accounts?.length || 0,
+      successfulAccounts: results.filter(r => r.success).length,
+      failedAccounts: results.filter(r => !r.success).length,
+      totalNewEmails,
+      results
+    }
 
     console.log(`✅ Cron: Fetched ${result.totalNewEmails} new emails from ${result.successfulAccounts}/${result.totalAccounts} accounts`)
-
-    if (result.errors.length > 0) {
-      console.error('⚠️ Cron: Errors occurred during email fetch:', result.errors)
-    }
 
     const response = NextResponse.json({
       success: true,

@@ -435,36 +435,41 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
         }
 
         // Insert new email (only received emails, not sent)
-        const { data: inserted, error: insertError } = await supabase
+        // Add null-safety for all fields to handle missing data
+        const { data: inserted, error: insertError} = await supabase
           .from('incoming_emails')
           .insert({
             user_id: account.user_id,
             email_account_id: account.id,
-            message_id: email.messageId,
-            gmail_message_id: email.gmailMessageId, // Store Gmail API message ID for trash/delete
-            from_address: email.from,
-            to_address: email.to,
-            subject: email.subject,
-            date_received: email.date,
-            text_content: email.textBody,
-            html_content: email.htmlBody,
+            message_id: email.messageId || `missing-${Date.now()}`,
+            gmail_message_id: email.gmailMessageId || null, // Store Gmail API message ID for trash/delete
+            from_address: email.from || 'unknown@unknown.com',
+            to_address: email.to || account.email,
+            subject: email.subject || '(No Subject)',
+            date_received: email.date || new Date().toISOString(),
+            text_content: email.textBody || null,
+            html_content: email.htmlBody || null,
             processing_status: 'pending',
             classification_status: 'unclassified',
-            imap_uid: email.uid
+            imap_uid: email.uid || null
           })
           .select('id')
           .single()
 
         if (insertError) {
-          console.error(`❌ Failed to insert email "${email.subject}":`, {
+          console.error(`❌ Failed to insert email "${email.subject || '(No Subject)'}":`, {
             messageId: email.messageId,
+            from: email.from,
+            to: email.to,
+            subject: email.subject,
+            date: email.date,
             error: insertError,
             errorCode: insertError.code,
             errorMessage: insertError.message,
             errorDetails: insertError.details,
             errorHint: insertError.hint
           })
-          errors.push(`Insert failed: ${insertError.message}`)
+          errors.push(`Failed to save email ${email.subject || email.messageId || 'undefined'}`)
         } else {
           newEmailsCount++
           newEmailIds.push(inserted.id)
