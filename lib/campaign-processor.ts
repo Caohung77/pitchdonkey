@@ -268,6 +268,7 @@ export class CampaignProcessor {
       // Use batch schedule if available (new proactive approach)
       let contacts = []
       let batchContactIds: string[] = []
+      let currentBatchNumber: number | null = null // TRACK WHICH BATCH WE'RE PROCESSING
 
       if (campaign.batch_schedule?.batches) {
         console.log(`📅 Using batch schedule for campaign ${campaign.id}`)
@@ -288,6 +289,7 @@ export class CampaignProcessor {
         console.log(`   Contacts: ${pendingBatch.contact_count}`)
 
         batchContactIds = pendingBatch.contact_ids
+        currentBatchNumber = pendingBatch.batch_number // STORE THE BATCH NUMBER
 
         // Get contacts for this specific batch
         // If contact_ids is empty (backfilled campaigns), fetch from contact lists instead
@@ -926,41 +928,23 @@ export class CampaignProcessor {
       if (campaign.batch_schedule?.batches) {
         console.log(`📅 Updating batch schedule after processing`)
 
-        // Get the batch that was just processed
-        const now = new Date()
-        let processedBatch = campaign.batch_schedule.batches.find((batch: any) =>
-          batch.status === 'pending' && new Date(batch.scheduled_time) <= now
-        )
-
-        if (!processedBatch) {
-          console.warn(`⚠️ No pending batch found with scheduled time <= now`)
-          console.log(`📊 Attempting fallback: finding first pending batch regardless of time`)
-
-          // Fallback: Find the first pending batch (regardless of scheduled time)
-          processedBatch = campaign.batch_schedule.batches.find((batch: any) =>
-            batch.status === 'pending'
-          )
-
-          if (!processedBatch) {
-            console.error(`❌ CRITICAL: No pending batches found at all! This shouldn't happen.`)
-            console.log(`📊 Batch status breakdown:`, campaign.batch_schedule.batches.map((b: any) =>
-              `Batch ${b.batch_number}: ${b.status}`
-            ).join(', '))
-            // Don't return early - still update the campaign stats below
-          } else {
-            console.log(`✅ Found pending batch ${processedBatch.batch_number} via fallback`)
-          }
+        // Use the stored batch number instead of searching again
+        if (!currentBatchNumber) {
+          console.error(`❌ CRITICAL: currentBatchNumber is null! This shouldn't happen.`)
+          console.log(`📊 Batch status breakdown:`, campaign.batch_schedule.batches.map((b: any) =>
+            `Batch ${b.batch_number}: ${b.status}`
+          ).join(', '))
         }
 
-        // Mark the processed batch as sent (if we found one)
+        // Mark the processed batch as sent using the stored batch number
         let updatedBatches = campaign.batch_schedule.batches
-        if (processedBatch) {
+        if (currentBatchNumber) {
           updatedBatches = campaign.batch_schedule.batches.map((batch: any) =>
-            batch.batch_number === processedBatch.batch_number
+            batch.batch_number === currentBatchNumber
               ? { ...batch, status: 'sent', completed_at: new Date().toISOString() }
               : batch
           )
-          console.log(`✅ Marked batch ${processedBatch.batch_number} as sent`)
+          console.log(`✅ Marked batch ${currentBatchNumber} as sent`)
         }
 
         // Find next pending batch
