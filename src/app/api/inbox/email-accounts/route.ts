@@ -9,7 +9,8 @@ export const GET = withAuth(async (
   try {
     await withRateLimit(user, 100, 60000) // 100 requests per minute
 
-    // Get user's email accounts
+    // Get user's email accounts with outreach agent info
+    // Try both outreach_agent_id and assigned_agent_id
     const { data: emailAccounts, error } = await supabase
       .from('email_accounts')
       .select(`
@@ -17,7 +18,19 @@ export const GET = withAuth(async (
         email,
         provider,
         status,
-        deleted_at
+        deleted_at,
+        outreach_agent_id,
+        assigned_agent_id,
+        outreach_agents_via_outreach:outreach_agents!email_accounts_outreach_agent_id_fkey (
+          id,
+          name,
+          sender_name
+        ),
+        outreach_agents_via_assigned:outreach_agents!email_accounts_assigned_agent_id_fkey (
+          id,
+          name,
+          sender_name
+        )
       `)
       .eq('user_id', user.id)
       .eq('status', 'active')
@@ -32,6 +45,8 @@ export const GET = withAuth(async (
         code: 'FETCH_ERROR'
       }, { status: 500 })
     }
+
+    console.log('📧 Email accounts from DB:', JSON.stringify(emailAccounts, null, 2))
 
     const response = NextResponse.json({
       success: true,

@@ -123,7 +123,20 @@ export class CampaignProcessor {
             if (nextBatch) {
               console.log(`⏰ Skipping ${campaign.name} - next batch at ${nextBatch.scheduled_time}`)
             } else {
-              console.log(`✅ Skipping ${campaign.name} - all batches completed`)
+              // All batches are completed, mark campaign as completed
+              console.log(`✅ All batches completed for ${campaign.name}, marking as completed`)
+
+              if (campaign.status !== 'completed') {
+                await supabase
+                  .from('campaigns')
+                  .update({
+                    status: 'completed',
+                    end_date: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', campaign.id)
+                console.log(`🎉 Marked ${campaign.name} as completed in database`)
+              }
             }
           }
         } else {

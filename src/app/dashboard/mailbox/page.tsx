@@ -37,6 +37,18 @@ interface EmailAccount {
   id: string
   email: string
   provider: string
+  outreach_agent_id?: string | null
+  assigned_agent_id?: string | null
+  outreach_agents_via_outreach?: {
+    id: string
+    name: string
+    sender_name: string | null
+  } | null
+  outreach_agents_via_assigned?: {
+    id: string
+    name: string
+    sender_name: string | null
+  } | null
 }
 
 interface Campaign {
@@ -298,6 +310,7 @@ export default function MailboxPage() {
       const response = await fetch('/api/inbox/email-accounts')
       if (!response.ok) return
       const data = await response.json()
+      console.log('📧 Email accounts fetched:', JSON.stringify(data.emailAccounts, null, 2))
       setEmailAccounts(data.emailAccounts || [])
     } catch (error) {
       console.error('Error fetching email accounts:', error)
@@ -793,7 +806,9 @@ export default function MailboxPage() {
               className={clsx(
                 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all shrink-0 z-10',
                 isGenerating && 'cursor-not-allowed opacity-60',
-                hasInsight
+                isSummaryShowing
+                  ? 'bg-gradient-to-r from-slate-500 to-slate-600 text-white hover:from-slate-600 hover:to-slate-700'
+                  : hasInsight
                   ? 'bg-gradient-to-r from-blue-500 to-sky-500 text-white hover:from-blue-600 hover:to-sky-600'
                   : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
               )}
@@ -805,8 +820,14 @@ export default function MailboxPage() {
                 </>
               ) : (
                 <>
-                  <span>✨</span>
-                  <span>{hasInsight ? 'Smart Summary' : 'Smart Summarize'}</span>
+                  <span>{isSummaryShowing ? '📄' : '✨'}</span>
+                  <span>
+                    {isSummaryShowing
+                      ? 'Preview'
+                      : hasInsight
+                      ? 'Smart Summary'
+                      : 'Smart Summarize'}
+                  </span>
                 </>
               )}
             </button>
@@ -825,13 +846,31 @@ export default function MailboxPage() {
             </p>
 
             {/* Content area with 3-line max truncation */}
-            <p className={clsx(
-              'text-xs leading-relaxed line-clamp-3',
-              isActive ? 'text-white/80' : 'text-slate-600',
-              isSummaryShowing && hasInsight && 'italic'
-            )}>
-              {displayContent}
-            </p>
+            {isSummaryShowing && hasInsight ? (
+              <div className={clsx(
+                'rounded-lg border p-3 space-y-1',
+                isActive
+                  ? 'border-white/20 bg-white/10'
+                  : 'border-blue-200/50 bg-gradient-to-br from-blue-50/50 to-purple-50/50'
+              )}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">AI Summary</span>
+                </div>
+                <p className={clsx(
+                  'text-xs leading-relaxed line-clamp-3',
+                  isActive ? 'text-white' : 'text-slate-700'
+                )}>
+                  {displayContent}
+                </p>
+              </div>
+            ) : (
+              <p className={clsx(
+                'text-xs leading-relaxed line-clamp-3',
+                isActive ? 'text-white/80' : 'text-slate-600'
+              )}>
+                {displayContent}
+              </p>
+            )}
           </div>
 
           {/* Footer with metadata */}
@@ -1202,11 +1241,35 @@ export default function MailboxPage() {
             {emailAccounts.map((account) => {
               const isActiveInbox = selectedMailboxKey === `${account.id}:inbox`
               const isActiveSent = selectedMailboxKey === `${account.id}:outbox`
+
+              // Check both possible agent relationships
+              const agent = account.outreach_agents_via_outreach || account.outreach_agents_via_assigned
+              const agentName = agent?.name || agent?.sender_name
+
+              console.log(`🔍 Account: ${account.email}`, {
+                hasAgent: !!agent,
+                agentViaOutreach: account.outreach_agents_via_outreach,
+                agentViaAssigned: account.outreach_agents_via_assigned,
+                agentName,
+                outreach_agent_id: account.outreach_agent_id,
+                assigned_agent_id: account.assigned_agent_id
+              })
+
               return (
                 <div key={account.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                    <CircleDot className="h-3.5 w-3.5 text-blue-500" />
-                    <span className="truncate" title={account.email}>{account.email}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <CircleDot className="h-3.5 w-3.5 text-blue-500" />
+                      <span className="truncate" title={account.email}>{account.email}</span>
+                    </div>
+                    {agentName && (
+                      <div className="flex items-center gap-1.5 pl-5">
+                        <span className="text-[10px] font-medium text-slate-500">🤖</span>
+                        <span className="truncate text-[11px] font-medium text-slate-600" title={agentName}>
+                          {agentName}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
