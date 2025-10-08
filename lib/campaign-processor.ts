@@ -755,6 +755,27 @@ export class CampaignProcessor {
 
               console.log(`📊 Updated email account counters for ${emailAccount.email}`)
 
+              // ============================================================================
+              // CONTACT ENGAGEMENT: Update status immediately after sending
+              // ============================================================================
+              try {
+                // Update contact engagement status to 'pending' since we just sent an email
+                // Also increment sent_count
+                await supabase
+                  .from('contacts')
+                  .update({
+                    engagement_status: 'pending',
+                    engagement_sent_count: supabase.raw('COALESCE(engagement_sent_count, 0) + 1'),
+                    updated_at: nowIso
+                  })
+                  .eq('id', contact.id)
+
+                console.log(`✅ Updated contact ${contact.email} engagement status to 'pending'`)
+              } catch (contactUpdateError) {
+                console.error('⚠️ Failed to update contact engagement status:', contactUpdateError)
+                // Don't fail the entire send if contact update fails
+              }
+
               // If warmup is active, update warmup plan counters
               if (warmupPlan) {
                 await supabase
