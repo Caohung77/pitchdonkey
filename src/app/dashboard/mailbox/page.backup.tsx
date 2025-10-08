@@ -62,25 +62,10 @@ interface IncomingEmail {
   text_content: string | null
   html_content: string | null
   ai_summary?: EmailInsight | null
-  email_accounts: EmailAccount & {
-    assigned_agent?: {
-      id: string
-      name: string
-    } | null
-  }
+  email_accounts: EmailAccount
   email_replies?: Array<{
     campaigns: Campaign | null
     contacts: Contact | null
-  }>
-  reply_jobs?: Array<{
-    id: string
-    status: string
-    draft_subject: string
-    scheduled_at: string
-    agent?: {
-      id: string
-      name: string
-    } | null
   }>
 }
 
@@ -844,12 +829,6 @@ export default function MailboxPage() {
                 <span className={clsx('inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium', intentMeta.color)}>
                   <span>{intentMeta.icon}</span>
                   <span>{intentMeta.label}</span>
-                </span>
-              )}
-              {email.reply_jobs && email.reply_jobs.length > 0 && email.reply_jobs[0].agent && (
-                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium bg-green-100 text-green-700 border border-green-300">
-                  <span>🤖</span>
-                  <span>{email.reply_jobs[0].agent.name}: replied</span>
                 </span>
               )}
             </div>

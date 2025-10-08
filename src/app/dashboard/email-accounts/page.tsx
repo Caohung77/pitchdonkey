@@ -3,13 +3,24 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Mail, Plus, AlertCircle, Settings, CheckCircle, XCircle } from 'lucide-react'
+import { Mail, Plus, AlertCircle, Settings, CheckCircle, XCircle, Bot } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { ApiClient } from '@/lib/api-client'
+import { Badge } from '@/components/ui/badge'
 import AddEmailAccountDialog from '@/components/email-accounts/AddEmailAccountDialog'
 import EditEmailAccountDialog from '@/components/email-accounts/EditEmailAccountDialog'
 import DomainAuthDialog from '@/components/email-accounts/DomainAuthDialog'
 import DeleteEmailAccountDialog from '@/components/email-accounts/DeleteEmailAccountDialog'
+import AssignAgentDialog from '@/components/email-accounts/AssignAgentDialog'
+
+interface AssignedAgent {
+  id: string
+  name: string
+  status: string
+  language: string
+  tone?: string
+  purpose?: string
+}
 
 interface EmailAccount {
   id: string
@@ -32,6 +43,8 @@ interface EmailAccount {
   smtp_username?: string
   smtp_secure?: boolean
   created_at: string
+  assigned_agent_id?: string | null
+  assigned_agent?: AssignedAgent
 }
 
 export default function EmailAccountsPage() {
@@ -40,6 +53,7 @@ export default function EmailAccountsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [assignAgentDialogAccount, setAssignAgentDialogAccount] = useState<EmailAccount | null>(null)
 
   const fetchAccounts = async () => {
     try {
@@ -153,6 +167,12 @@ export default function EmailAccountsPage() {
       console.error('Error activating account:', error)
       setError('Failed to activate email account')
     }
+  }
+
+  const handleAgentAssigned = () => {
+    setSuccessMessage('Agent assignment updated successfully!')
+    fetchAccounts()
+    setTimeout(() => setSuccessMessage(''), 5000)
   }
 
   // Show loading state while authentication is loading
@@ -280,8 +300,8 @@ export default function EmailAccountsPage() {
                     <span>Domain Auth:</span>
                     <div className="flex items-center gap-1">
                       <span className="text-xs">
-                        {account.dkim_verified && account.spf_verified && account.dmarc_verified 
-                          ? '✓ Verified' 
+                        {account.dkim_verified && account.spf_verified && account.dmarc_verified
+                          ? '✓ Verified'
                           : account.spf_verified || account.dkim_verified || account.dmarc_verified
                             ? '⚠ Partial'
                             : '❌ Not Setup'
@@ -306,8 +326,20 @@ export default function EmailAccountsPage() {
                       </div>
                     </div>
                   </div>
+                  {account.assigned_agent && (
+                    <div className="pt-2 border-t">
+                      <div className="flex items-center gap-2 text-xs bg-green-50 text-green-700 px-2 py-1.5 rounded border border-green-200">
+                        <Bot className="h-3.5 w-3.5" />
+                        <span className="font-medium">{account.assigned_agent.name}: activated</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
+                  <Button size="sm" variant="outline" onClick={() => setAssignAgentDialogAccount(account)}>
+                    <Bot className="h-3 w-3 mr-1" />
+                    {account.assigned_agent ? 'Change Agent' : 'Assign Agent'}
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => handleTest(account.id)}>
                     Test Connection
                   </Button>
@@ -319,8 +351,8 @@ export default function EmailAccountsPage() {
                       Activate
                     </Button>
                   )}
-                  <EditEmailAccountDialog 
-                    account={account} 
+                  <EditEmailAccountDialog
+                    account={account}
                     onAccountUpdated={fetchAccounts}
                   />
                   <DomainAuthDialog domain={account.domain} />
@@ -339,6 +371,14 @@ export default function EmailAccountsPage() {
           ))}
         </div>
       )}
+
+      {/* Assign Agent Dialog */}
+      <AssignAgentDialog
+        emailAccount={assignAgentDialogAccount}
+        open={assignAgentDialogAccount !== null}
+        onOpenChange={(open) => !open && setAssignAgentDialogAccount(null)}
+        onAgentAssigned={handleAgentAssigned}
+      />
     </div>
   )
 }

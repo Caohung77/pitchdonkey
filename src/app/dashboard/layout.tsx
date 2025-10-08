@@ -7,25 +7,26 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  BarChart3, 
-  Bell, 
-  ChevronDown, 
-  CreditCard, 
-  HelpCircle, 
-  Home, 
-  LogOut, 
-  Mail, 
-  Menu, 
-  Settings, 
-  Users, 
+import {
+  BarChart3,
+  Bell,
+  ChevronDown,
+  CreditCard,
+  HelpCircle,
+  Home,
+  LogOut,
+  Mail,
+  Menu,
+  Settings,
+  Users,
   Zap,
   Target,
   Shield,
   Palette,
   X,
   AlertCircle,
-  Inbox
+  Inbox,
+  Bot
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ interface Notification {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Mailbox', href: '/dashboard/mailbox', icon: Inbox },
+  { name: 'Scheduled Replies', href: '/dashboard/scheduled-replies', icon: Bot },
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },

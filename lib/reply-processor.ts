@@ -1,11 +1,13 @@
 import { createServerSupabaseClient } from './supabase-server'
 import { emailClassifier, EmailClassificationResult } from './email-classifier'
+import { createDraftService } from './outreach-agent-draft'
 
 export interface ReplyProcessingResult {
   processed: number
   successful: number
   failed: number
   errors: string[]
+  autonomousDraftsCreated?: number
 }
 
 export interface ReplyAction {
@@ -32,7 +34,8 @@ export class ReplyProcessor {
       processed: 0,
       successful: 0,
       failed: 0,
-      errors: []
+      errors: [],
+      autonomousDraftsCreated: 0
     }
 
     try {
@@ -62,8 +65,13 @@ export class ReplyProcessor {
       for (const email of emails) {
         result.processed++
         try {
-          await this.processIncomingEmail(email)
+          const actions = await this.processIncomingEmail(email)
           result.successful++
+
+          // Check if autonomous draft was created
+          if (actions.some(action => action.action === 'autonomous_draft_created')) {
+            result.autonomousDraftsCreated!++
+          }
         } catch (error) {
           result.failed++
           result.errors.push(`Email ${email.id}: ${error.message}`)
@@ -71,7 +79,7 @@ export class ReplyProcessor {
         }
       }
 
-      console.log(`✅ Processed ${result.successful}/${result.processed} emails successfully`)
+      console.log(`✅ Processed ${result.successful}/${result.processed} emails successfully (${result.autonomousDraftsCreated} autonomous drafts)`)
       return result
 
     } catch (error) {
@@ -84,7 +92,7 @@ export class ReplyProcessor {
   /**
    * Process a single incoming email
    */
-  async processIncomingEmail(email: any): Promise<void> {
+  async processIncomingEmail(email: any): Promise<ReplyAction[]> {
     console.log(`🔄 Processing email: ${email.subject} from ${email.from_address}`)
 
     // Classify the email
@@ -118,6 +126,8 @@ export class ReplyProcessor {
     await this.updateReplyActions(replyId, actions)
 
     console.log(`✅ Email processed: ${classification.type} - ${actions.length} actions taken`)
+
+    return actions
   }
 
   /**
@@ -409,7 +419,7 @@ export class ReplyProcessor {
       actions.push({
         action: 'contact_engagement_updated',
         timestamp: new Date().toISOString(),
-        details: { 
+        details: {
           sentiment: classification.sentiment,
           intent: classification.intent
         }
@@ -435,7 +445,88 @@ export class ReplyProcessor {
       }
     }
 
+    // 🤖 AUTONOMOUS REPLY DRAFTING
+    // Check if this email account has an assigned outreach agent
+    try {
+      const autonomousDraftAction = await this.checkAndDraftAutonomousReply(email, classification, context)
+      if (autonomousDraftAction) {
+        actions.push(autonomousDraftAction)
+      }
+    } catch (error) {
+      console.error('❌ Error drafting autonomous reply:', error)
+      // Don't fail the entire processing if autonomous drafting fails
+      actions.push({
+        action: 'autonomous_draft_failed',
+        timestamp: new Date().toISOString(),
+        details: { error: error.message }
+      })
+    }
+
     return actions
+  }
+
+  /**
+   * Check if mailbox has assigned agent and draft autonomous reply
+   */
+  private async checkAndDraftAutonomousReply(
+    email: any,
+    classification: EmailClassificationResult,
+    context: any
+  ): Promise<ReplyAction | null> {
+    // Find the email account that received this email
+    const { data: emailAccount, error: emailAccountError } = await this.supabase
+      .from('email_accounts')
+      .select('id, email, assigned_agent_id, user_id')
+      .eq('email', email.to_address)
+      .eq('user_id', email.user_id)
+      .single()
+
+    if (emailAccountError || !emailAccount) {
+      console.log('⏭️ No email account found for', email.to_address)
+      return null
+    }
+
+    // Check if agent is assigned
+    if (!emailAccount.assigned_agent_id) {
+      console.log('⏭️ No agent assigned to mailbox', emailAccount.email)
+      return null
+    }
+
+    console.log(`🤖 Agent ${emailAccount.assigned_agent_id} assigned to ${emailAccount.email} - drafting autonomous reply`)
+
+    // Create draft service
+    const draftService = createDraftService(this.supabase)
+
+    // Draft the reply
+    try {
+      const draftResult = await draftService.draftReply(email.user_id, {
+        agentId: emailAccount.assigned_agent_id,
+        emailAccountId: emailAccount.id,
+        incomingEmailId: email.id,
+        threadId: email.thread_id || email.message_id, // Use thread_id if available, fallback to message_id
+        contactId: context.contactId,
+        incomingSubject: email.subject,
+        incomingBody: email.text_content || email.html_content,
+        incomingFrom: email.from_address,
+        messageRef: email.message_id,
+      })
+
+      console.log(`✅ Autonomous draft created: ${draftResult.replyJobId} (status: ${draftResult.status})`)
+
+      return {
+        action: 'autonomous_draft_created',
+        timestamp: new Date().toISOString(),
+        details: {
+          replyJobId: draftResult.replyJobId,
+          status: draftResult.status,
+          riskScore: draftResult.riskScore,
+          scheduledAt: draftResult.scheduledAt,
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to draft autonomous reply:', error)
+      throw error
+    }
   }
 
   /**
@@ -585,3 +676,10 @@ export class ReplyProcessor {
 
 // Export singleton instance
 export const replyProcessor = new ReplyProcessor()
+
+// Export factory function for dependency injection
+export function createReplyProcessor(supabase: any): ReplyProcessor {
+  const processor = new ReplyProcessor()
+  processor['supabase'] = supabase // Override the default supabase client
+  return processor
+}

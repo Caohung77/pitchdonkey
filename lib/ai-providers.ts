@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 // Conditional import for Anthropic SDK
 let Anthropic: any
@@ -118,6 +119,39 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
     },
     features: ['chat', 'analysis', 'safety', 'long-context'],
     status: 'inactive'
+  },
+  gemini: {
+    id: 'gemini',
+    name: 'Google Gemini',
+    description: 'Google advanced AI model with multimodal capabilities',
+    models: [
+      {
+        id: 'gemini-1.5-pro',
+        name: 'Gemini 1.5 Pro',
+        description: 'Most capable Gemini model for complex tasks',
+        maxTokens: 8192,
+        contextWindow: 2097152,
+        bestFor: ['complex reasoning', 'long context', 'multimodal tasks']
+      },
+      {
+        id: 'gemini-1.5-flash',
+        name: 'Gemini 1.5 Flash',
+        description: 'Fast and efficient for most personalization tasks',
+        maxTokens: 8192,
+        contextWindow: 1048576,
+        bestFor: ['general personalization', 'quick responses', 'cost efficiency']
+      }
+    ],
+    pricing: {
+      inputTokens: 0.00035,
+      outputTokens: 0.00105
+    },
+    limits: {
+      maxTokens: 8192,
+      rateLimit: 60
+    },
+    features: ['chat', 'long-context', 'multimodal', 'code-generation'],
+    status: 'inactive'
   }
 }
 
@@ -134,7 +168,7 @@ export interface PersonalizationRequest {
   templateContent: string
   customPrompt?: string
   variables?: Record<string, string>
-  provider: 'openai' | 'anthropic'
+  provider: 'openai' | 'anthropic' | 'gemini'
 }
 
 export interface PersonalizationResult {
@@ -173,6 +207,13 @@ export class AIPersonalizationService {
         })
         this.clients.set('anthropic', anthropic)
         AI_PROVIDERS.anthropic.status = 'active'
+      }
+
+      // Initialize Gemini
+      if (process.env.GOOGLE_GEMINI_API_KEY) {
+        const gemini = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY)
+        this.clients.set('gemini', gemini)
+        AI_PROVIDERS.gemini.status = 'active'
       }
 
       this.initialized = true
@@ -226,13 +267,15 @@ export class AIPersonalizationService {
 
   async personalizeContent(request: PersonalizationRequest): Promise<PersonalizationResult> {
     const startTime = Date.now()
-    
+
     try {
       switch (request.provider) {
         case 'openai':
           return await this.personalizeWithOpenAI(request, startTime)
         case 'anthropic':
           return await this.personalizeWithAnthropic(request, startTime)
+        case 'gemini':
+          return await this.personalizeWithGemini(request, startTime)
         default:
           throw new Error(`Unsupported AI provider: ${request.provider}`)
       }
@@ -313,6 +356,32 @@ export class AIPersonalizationService {
       tokensUsed,
       confidence: this.calculateConfidence(personalizedContent, request.templateContent),
       provider: 'anthropic',
+      processingTime: Date.now() - startTime,
+    }
+  }
+
+  private async personalizeWithGemini(request: PersonalizationRequest, startTime: number): Promise<PersonalizationResult> {
+    const client = AIPersonalizationService.clients.get('gemini') as GoogleGenerativeAI
+    if (!client) {
+      throw new Error('Gemini client not initialized')
+    }
+
+    await AIPersonalizationService.checkRateLimit('gemini')
+    const prompt = this.buildPersonalizationPrompt(request)
+
+    const model = client.getGenerativeModel({ model: 'gemini-2.5-flash-lite' })
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const personalizedContent = response.text() || request.templateContent
+
+    // Gemini doesn't provide exact token counts, estimate based on characters
+    const tokensUsed = Math.ceil((prompt.length + personalizedContent.length) / 4)
+
+    return {
+      personalizedContent,
+      tokensUsed,
+      confidence: this.calculateConfidence(personalizedContent, request.templateContent),
+      provider: 'gemini',
       processingTime: Date.now() - startTime,
     }
   }

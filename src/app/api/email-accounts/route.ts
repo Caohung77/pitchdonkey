@@ -15,7 +15,16 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     // Get user's email accounts from database (exclude soft-deleted accounts)
     const { data: accounts, error } = await supabase
       .from('email_accounts')
-      .select('*')
+      .select(`
+        *,
+        assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(
+          id,
+          name,
+          status,
+          language,
+          tone
+        )
+      `)
       .eq('user_id', user.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })

@@ -39,7 +39,11 @@ export const GET = withAuth(async (
         email_accounts (
           id,
           email,
-          provider
+          provider,
+          assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(
+            id,
+            name
+          )
         ),
         email_replies (
           campaign_id,
@@ -53,6 +57,16 @@ export const GET = withAuth(async (
             first_name,
             last_name,
             email
+          )
+        ),
+        reply_jobs!reply_jobs_incoming_email_id_fkey (
+          id,
+          status,
+          draft_subject,
+          scheduled_at,
+          agent:outreach_agents!reply_jobs_agent_id_fkey(
+            id,
+            name
           )
         )
       `)
