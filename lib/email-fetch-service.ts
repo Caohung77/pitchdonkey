@@ -53,10 +53,10 @@ export class EmailFetchService {
       console.log('📧 Starting email fetch for all accounts...')
 
       // Get all active email accounts
+      // Note: Removed is_verified check as column doesn't exist in production DB yet
       let query = this.supabase
         .from('email_accounts')
         .select('*')
-        .eq('is_verified', true)
 
       // Optional: Filter by specific user (for testing)
       if (userId) {

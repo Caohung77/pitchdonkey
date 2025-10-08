@@ -91,10 +91,10 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabaseClient()
 
     // Count active email accounts by provider
+    // Note: Removed is_verified check as column doesn't exist in production DB yet
     const { data: accounts, error } = await supabase
       .from('email_accounts')
-      .select('provider, is_verified')
-      .eq('is_verified', true)
+      .select('provider')
 
     if (error) {
       console.error('Error fetching email account stats:', error)
