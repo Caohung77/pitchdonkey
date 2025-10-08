@@ -894,23 +894,40 @@ export class CampaignProcessor {
 
         // Get the batch that was just processed
         const now = new Date()
-        const processedBatch = campaign.batch_schedule.batches.find((batch: any) =>
+        let processedBatch = campaign.batch_schedule.batches.find((batch: any) =>
           batch.status === 'pending' && new Date(batch.scheduled_time) <= now
         )
 
         if (!processedBatch) {
-          console.warn(`⚠️ No processed batch found to mark as sent`)
-          return
+          console.warn(`⚠️ No pending batch found with scheduled time <= now`)
+          console.log(`📊 Attempting fallback: finding first pending batch regardless of time`)
+
+          // Fallback: Find the first pending batch (regardless of scheduled time)
+          processedBatch = campaign.batch_schedule.batches.find((batch: any) =>
+            batch.status === 'pending'
+          )
+
+          if (!processedBatch) {
+            console.error(`❌ CRITICAL: No pending batches found at all! This shouldn't happen.`)
+            console.log(`📊 Batch status breakdown:`, campaign.batch_schedule.batches.map((b: any) =>
+              `Batch ${b.batch_number}: ${b.status}`
+            ).join(', '))
+            // Don't return early - still update the campaign stats below
+          } else {
+            console.log(`✅ Found pending batch ${processedBatch.batch_number} via fallback`)
+          }
         }
 
-        // Mark ONLY the specific batch that was just processed as sent
-        const updatedBatches = campaign.batch_schedule.batches.map((batch: any) =>
-          batch.batch_number === processedBatch.batch_number
-            ? { ...batch, status: 'sent', completed_at: new Date().toISOString() }
-            : batch
-        )
-
-        console.log(`✅ Marked batch ${processedBatch.batch_number} as sent`)
+        // Mark the processed batch as sent (if we found one)
+        let updatedBatches = campaign.batch_schedule.batches
+        if (processedBatch) {
+          updatedBatches = campaign.batch_schedule.batches.map((batch: any) =>
+            batch.batch_number === processedBatch.batch_number
+              ? { ...batch, status: 'sent', completed_at: new Date().toISOString() }
+              : batch
+          )
+          console.log(`✅ Marked batch ${processedBatch.batch_number} as sent`)
+        }
 
         // Find next pending batch
         const nextPendingBatch = updatedBatches.find((batch: any) => batch.status === 'pending')
