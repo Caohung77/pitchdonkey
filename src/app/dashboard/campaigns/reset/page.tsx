@@ -179,9 +179,9 @@ export default function CampaignResetPage() {
           <p>3. Copy the ID from the URL: <code className="bg-muted px-1 py-0.5 rounded">/campaigns/[campaign-id]</code></p>
           <p className="pt-2">Or use the browser console:</p>
           <code className="block bg-muted p-2 rounded text-xs">
-            // On campaigns page, run this in console:
+            {/* On campaigns page, run this in console: */}
             <br />
-            document.querySelector('[data-campaign-id]')?.getAttribute('data-campaign-id')
+            document.querySelector(&apos;[data-campaign-id]&apos;)?.getAttribute(&apos;data-campaign-id&apos;)
           </code>
         </CardContent>
       </Card>
