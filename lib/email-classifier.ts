@@ -170,13 +170,44 @@ export class EmailClassifier {
   }
 
   /**
-   * Classify auto-reply emails (out of office, vacation, automated responses)
+   * Classify auto-reply emails (out of office, vacation, automated responses, transactional emails)
    */
   private classifyAutoReply(email: IncomingEmail): EmailClassificationResult {
     const subject = (email.subject || '').toLowerCase()
     const content = ((email.textContent || '') + (email.htmlContent || '')).toLowerCase()
+    const fromAddress = email.fromAddress.toLowerCase()
 
-    // Auto-reply patterns
+    // Transactional/no-reply sender patterns (HIGH CONFIDENCE)
+    const noReplySenderPatterns = [
+      /no-reply/i,
+      /noreply/i,
+      /no_reply/i,
+      /donotreply/i,
+      /do-not-reply/i,
+      /notifications?@/i,
+      /auto-confirm/i,
+      /mailer@/i,
+      /automated@/i
+    ]
+
+    // Transactional content patterns (login links, verifications, receipts)
+    const transactionalPatterns = [
+      /verify.*email/i,
+      /confirm.*email/i,
+      /reset.*password/i,
+      /login.*link/i,
+      /sign.*in.*link/i,
+      /verification.*code/i,
+      /authentication.*code/i,
+      /one.*time.*password/i,
+      /security.*code/i,
+      /receipt.*order/i,
+      /order.*confirmation/i,
+      /payment.*received/i,
+      /subscription.*confirmation/i
+    ]
+
+    // Auto-reply patterns (out of office, etc.)
     const autoReplyPatterns = [
       /out of office/i,
       /vacation/i,
@@ -203,6 +234,21 @@ export class EmailClassifier {
     ]
 
     let confidence = 0
+    let subtype = 'out_of_office'
+
+    // CRITICAL: Check for no-reply/transactional senders first (HIGH CONFIDENCE)
+    if (noReplySenderPatterns.some(pattern => pattern.test(fromAddress))) {
+      confidence += 0.9
+      subtype = 'transactional'
+      console.log(`🚫 Detected no-reply sender: ${fromAddress}`)
+    }
+
+    // Check for transactional content patterns
+    if (transactionalPatterns.some(pattern => pattern.test(content) || pattern.test(subject))) {
+      confidence += 0.8
+      subtype = 'transactional'
+      console.log(`🔐 Detected transactional content in email`)
+    }
     let autoReplyUntil: Date | undefined
     let forwardedTo: string | undefined
 
@@ -241,15 +287,15 @@ export class EmailClassifier {
 
     return {
       type: 'auto_reply',
-      subtype: this.determineAutoReplySubtype(content),
+      subtype,
       confidence: Math.min(confidence, 1.0),
       sentiment: 'neutral',
-      keywords: this.extractKeywords(content, ['office', 'vacation', 'away', 'return']),
+      keywords: this.extractKeywords(content, ['office', 'vacation', 'away', 'return', 'transactional', 'no-reply']),
       autoReplyInfo: {
         autoReplyUntil,
         forwardedTo
       },
-      requiresHumanReview: confidence < 0.7
+      requiresHumanReview: confidence < 0.7 && subtype !== 'transactional' // Transactional emails don't need review
     }
   }
 
