@@ -26,7 +26,8 @@ import {
   X,
   AlertCircle,
   Inbox,
-  Bot
+  Bot,
+  ShieldCheck
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -49,19 +50,28 @@ interface Notification {
   createdAt: string
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Mailbox', href: '/dashboard/mailbox', icon: Inbox },
-  { name: 'Scheduled Replies', href: '/dashboard/scheduled-replies', icon: Bot },
-  { name: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
-  { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
-  { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },
-  { name: 'AI Outreach Agents', href: '/dashboard/outreach-agents', icon: Zap },
-  { name: 'AI Templates', href: '/dashboard/ai-templates', icon: Palette },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-  { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-]
+const getNavigation = (userEmail?: string) => {
+  const baseNav = [
+    { name: 'Dashboard', href: '/dashboard', icon: Home },
+    { name: 'Mailbox', href: '/dashboard/mailbox', icon: Inbox },
+    { name: 'Scheduled Replies', href: '/dashboard/scheduled-replies', icon: Bot },
+    { name: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
+    { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
+    { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },
+    { name: 'AI Outreach Agents', href: '/dashboard/outreach-agents', icon: Zap },
+    { name: 'AI Templates', href: '/dashboard/ai-templates', icon: Palette },
+    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+    { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
+    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  ]
+
+  // Add Admin menu item for admin user
+  if (userEmail === 'banbau@gmx.net') {
+    baseNav.push({ name: 'Admin', href: '/dashboard/admin/fix-bounces', icon: ShieldCheck })
+  }
+
+  return baseNav
+}
 
 export default function DashboardLayout({
   children,
@@ -300,7 +310,7 @@ export default function DashboardLayout({
             </Button>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigation.map((item) => {
+            {getNavigation(user?.email).map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               return (
                 <Link
@@ -329,7 +339,7 @@ export default function DashboardLayout({
             <img src="/images/eisbrief-name-logo.png" alt="Eisbrief" className="h-8 w-auto max-w-[140px]" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none'}} />
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigation.map((item) => {
+            {getNavigation(user?.email).map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               return (
                 <Link

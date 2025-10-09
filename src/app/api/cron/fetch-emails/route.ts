@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { addSecurityHeaders } from '@/lib/auth-middleware'
+import { IMAPProcessor } from '@/lib/imap-processor'
 
 async function syncGmailAccount(supabase: any, account: any) {
   const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
@@ -30,16 +31,78 @@ async function syncGmailAccount(supabase: any, account: any) {
 }
 
 async function syncImapAccount(supabase: any, account: any) {
-  const syncModule = await import('@/app/api/inbox/sync/route')
-  const syncFunction: any = syncModule?.syncIMAPAccount || syncModule?.default
-  if (typeof syncFunction !== 'function') {
-    throw new Error('IMAP sync function unavailable')
+  const imapProcessor = new IMAPProcessor()
+
+  let password = null
+  let passwordSource = 'none'
+
+  if (account.imap_password) {
+    password = account.imap_password
+    passwordSource = 'imap_password (raw)'
+  } else if (account.smtp_password) {
+    password = account.smtp_password
+    passwordSource = 'smtp_password (raw)'
   }
-  const result = await syncFunction(supabase, account)
+
+  if (!account.imap_host) {
+    throw new Error(`IMAP host not configured for account ${account.email}`)
+  }
+
+  if (!password) {
+    throw new Error(`IMAP password missing for account ${account.email}`)
+  }
+
+  const imapConfig = {
+    host: account.imap_host,
+    port: account.imap_port || 993,
+    tls: account.imap_secure !== false,
+    user: account.imap_username || account.email,
+    password
+  }
+
+  const { data: connection } = await supabase
+    .from('imap_connections')
+    .select('last_processed_uid')
+    .eq('email_account_id', account.id)
+    .single()
+
+  const lastProcessedUID = connection?.last_processed_uid || 0
+
+  const syncResult = await imapProcessor.syncEmails(
+    account.user_id,
+    account.id,
+    imapConfig,
+    lastProcessedUID
+  )
+
+  if (syncResult.errors.length === 0) {
+    await supabase
+      .from('imap_connections')
+      .upsert({
+        email_account_id: account.id,
+        status: 'active',
+        last_sync_at: new Date().toISOString(),
+        next_sync_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        last_processed_uid: syncResult.lastProcessedUID,
+        consecutive_failures: 0,
+        last_successful_connection: new Date().toISOString(),
+        last_error: null
+      }, { onConflict: 'email_account_id' })
+  } else {
+    await supabase
+      .from('imap_connections')
+      .upsert({
+        email_account_id: account.id,
+        status: 'error',
+        last_sync_at: new Date().toISOString(),
+        last_error: syncResult.errors.join('; ')
+      }, { onConflict: 'email_account_id' })
+  }
+
   return {
-    success: result?.errors?.length === 0,
-    newEmails: result?.newEmails || 0,
-    errors: result?.errors || [],
+    success: syncResult.errors.length === 0,
+    newEmails: syncResult.newEmails,
+    errors: syncResult.errors,
     account: account.email
   }
 }
@@ -172,7 +235,7 @@ export async function POST(request: NextRequest) {
     const { data: accounts, error: accountsError } = await supabase
       .from('email_accounts')
       .select('*')
-      .in('provider', ['gmail', 'smtp'])
+      .in('provider', ['gmail', 'smtp', 'gmail-imap-smtp'])
 
     if (accountsError) {
       throw new Error(`Failed to fetch accounts: ${accountsError.message}`)
@@ -186,7 +249,9 @@ export async function POST(request: NextRequest) {
         let result
         if (account.provider === 'gmail' && account.access_token) {
           result = await syncGmailAccount(supabase, account)
-        } else if (account.provider === 'smtp') {
+        } else if (account.provider === 'gmail' && !account.access_token) {
+          result = await syncImapAccount(supabase, account)
+        } else if (account.provider === 'smtp' || account.provider === 'gmail-imap-smtp') {
           result = await syncImapAccount(supabase, account)
         } else {
           results.push({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { withAuth, type AuthContext } from '@/lib/auth-middleware'
 
 /**
  * POST /api/contacts/fix-bounced-status
@@ -12,20 +12,22 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
  *
  * Use this to fix historical data after implementing the new bounce tracking system.
  */
-export async function POST(request: NextRequest) {
+async function handleFixBouncedStatus(
+  request: NextRequest,
+  { user, supabase }: AuthContext
+) {
   try {
-    const supabase = createServerSupabaseClient()
-
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
+    // Check if user is admin (banbau@gmx.net)
+    const ADMIN_EMAIL = 'banbau@gmx.net'
+    if (user.email !== ADMIN_EMAIL) {
+      console.error(`❌ Access denied: ${user.email} is not admin`)
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: 'Forbidden - Admin access only' },
+        { status: 403 }
       )
     }
 
-    console.log(`🔧 Starting retroactive bounce status fix for user ${user.id}`)
+    console.log(`🔧 Starting retroactive bounce status fix for admin user ${user.email}`)
 
     // Find all contacts with bounced emails but not marked as 'bad' engagement status
     const { data: bouncedContacts, error: fetchError } = await supabase
@@ -125,3 +127,6 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+// Export the wrapped handler
+export const POST = withAuth(handleFixBouncedStatus)

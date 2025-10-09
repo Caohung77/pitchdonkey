@@ -307,21 +307,21 @@ export class ReplyProcessor {
         // Hard bounce - mark email as invalid and heavily penalize engagement
         const { data: contact } = await this.supabase
           .from('contacts')
-          .select('engagement_score')
+          .select('engagement_score, engagement_bounce_count')
           .eq('id', context.contactId)
           .single()
 
         const currentScore = contact?.engagement_score || 0
         const penaltyScore = Math.max(-100, currentScore - 50) // Reduce by 50 points, minimum -100
+        const bounceCount = (contact?.engagement_bounce_count || 0) + 1
 
         await this.supabase
           .from('contacts')
           .update({
-            email_status: 'bounced',
             engagement_status: 'bad', // Mark as bad status for visual indicators
-            bounced_at: new Date().toISOString(),
-            bounce_reason: classification.bounceInfo?.bounceReason,
-            engagement_score: penaltyScore
+            engagement_score: penaltyScore,
+            engagement_bounce_count: bounceCount,
+            engagement_updated_at: new Date().toISOString()
           })
           .eq('id', context.contactId)
 
