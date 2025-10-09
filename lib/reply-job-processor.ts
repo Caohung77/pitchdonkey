@@ -298,9 +298,50 @@ export class ReplyJobProcessor {
    * Send email via SMTP
    */
   private async sendViaSMTP(emailAccount: any, options: any): Promise<string> {
-    // TODO: Implement SMTP sending
-    // For now, throw not implemented
-    throw new Error('SMTP sending not yet implemented for autonomous replies')
+    const nodemailer = require('nodemailer')
+
+    console.log(`📧 Sending SMTP email to ${options.to} via ${emailAccount.smtp_host}`)
+
+    // Create SMTP transporter
+    const transporter = nodemailer.createTransport({
+      host: emailAccount.smtp_host,
+      port: emailAccount.smtp_port,
+      secure: emailAccount.smtp_secure,
+      auth: {
+        user: emailAccount.smtp_username,
+        pass: emailAccount.smtp_password,
+      },
+    })
+
+    // Build email headers for threading
+    const headers: Record<string, string> = {}
+    if (options.inReplyTo) {
+      headers['In-Reply-To'] = options.inReplyTo
+    }
+    if (options.references) {
+      headers['References'] = options.references
+    }
+
+    // Build sender name
+    const from = options.senderName
+      ? `"${options.senderName}" <${emailAccount.email}>`
+      : emailAccount.email
+
+    // Send email
+    const info = await transporter.sendMail({
+      from,
+      to: options.to,
+      subject: options.subject,
+      text: options.text,
+      html: options.html,
+      headers, // Add threading headers
+      encoding: 'utf8',
+    })
+
+    console.log(`✅ SMTP email sent successfully: ${info.messageId}`)
+    console.log(`✅ Email sent with threading headers - In-Reply-To: ${options.inReplyTo}`)
+
+    return info.messageId
   }
 
   /**

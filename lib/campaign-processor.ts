@@ -288,15 +288,34 @@ export class CampaignProcessor {
 
       if (campaign.batch_schedule?.batches) {
         console.log(`📅 Using batch schedule for campaign ${campaign.id}`)
+        console.log(`📊 Total batches: ${campaign.batch_schedule.batches.length}`)
+        console.log(`📊 Batch status summary:`)
+        campaign.batch_schedule.batches.forEach((b: any) => {
+          console.log(`   Batch ${b.batch_number}: ${b.status} - scheduled for ${b.scheduled_time}`)
+        })
 
         // Find the next pending batch
         const now = new Date()
+        console.log(`🕐 Current time: ${now.toISOString()}`)
+
         const pendingBatch = campaign.batch_schedule.batches.find((batch: any) =>
           batch.status === 'pending' && new Date(batch.scheduled_time) <= now
         )
 
         if (!pendingBatch) {
+          const futurePendingBatches = campaign.batch_schedule.batches.filter((b: any) =>
+            b.status === 'pending' && new Date(b.scheduled_time) > now
+          )
+          const anyPendingBatches = campaign.batch_schedule.batches.filter((b: any) => b.status === 'pending')
+
           console.log(`⏰ No pending batches ready to send yet`)
+          console.log(`📊 Future pending batches: ${futurePendingBatches.length}`)
+          console.log(`📊 Total pending batches (any time): ${anyPendingBatches.length}`)
+
+          if (futurePendingBatches.length > 0) {
+            console.log(`⏳ Next batch scheduled for: ${futurePendingBatches[0].scheduled_time}`)
+          }
+
           return
         }
 
@@ -966,6 +985,11 @@ export class CampaignProcessor {
         // Find next pending batch
         const nextPendingBatch = updatedBatches.find((batch: any) => batch.status === 'pending')
 
+        // Check if ALL batches are actually sent (not just no pending batches)
+        const allBatchesSent = updatedBatches.every((batch: any) => batch.status === 'sent')
+        const sentBatchCount = updatedBatches.filter((batch: any) => batch.status === 'sent').length
+        const totalBatchCount = updatedBatches.length
+
         // Update batch schedule
         updateData.batch_schedule = {
           ...campaign.batch_schedule,
@@ -977,12 +1001,17 @@ export class CampaignProcessor {
           updateData.status = 'sending'
           console.log(`📅 Next batch scheduled for: ${nextPendingBatch.scheduled_time}`)
           console.log(`📊 Batch ${nextPendingBatch.batch_number}/${campaign.batch_schedule.total_batches}`)
-        } else {
-          // All batches completed
+        } else if (allBatchesSent) {
+          // All batches are truly completed (status = 'sent')
           updateData.next_batch_send_time = null
           updateData.status = 'completed'
           updateData.end_date = new Date().toISOString()
-          console.log(`🎉 All batches completed! Campaign finished.`)
+          console.log(`🎉 All batches completed! Campaign finished (${sentBatchCount}/${totalBatchCount} batches sent).`)
+        } else {
+          // No pending batches but not all are sent - keep as sending
+          updateData.status = 'sending'
+          updateData.next_batch_send_time = null
+          console.log(`⚠️ No pending batches but only ${sentBatchCount}/${totalBatchCount} sent - keeping status as 'sending'`)
         }
       } else {
         // Fallback to old logic if no batch schedule
@@ -1019,12 +1048,33 @@ export class CampaignProcessor {
         updateData.start_date = new Date().toISOString()
       }
 
-      await supabase
+      console.log(`💾 Saving campaign update:`, {
+        campaignId: campaign.id,
+        status: updateData.status,
+        hasBatchSchedule: !!updateData.batch_schedule,
+        batchCount: updateData.batch_schedule?.batches?.length,
+        nextBatchTime: updateData.next_batch_send_time,
+        emailsSent: updateData.emails_sent
+      })
+
+      const { error: updateError } = await supabase
         .from('campaigns')
         .update(updateData)
         .eq('id', campaign.id)
 
-      console.log(`🎉 Campaign ${campaign.name} completed! Sent: ${emailsSent}, Failed: ${emailsFailed}`)
+      if (updateError) {
+        console.error(`❌ Error updating campaign:`, updateError)
+        throw updateError
+      }
+
+      console.log(`✅ Campaign ${campaign.name} batch processing complete! Sent: ${emailsSent}, Failed: ${emailsFailed}`)
+
+      if (updateData.batch_schedule) {
+        const sentBatches = updateData.batch_schedule.batches.filter((b: any) => b.status === 'sent').length
+        const totalBatches = updateData.batch_schedule.batches.length
+        console.log(`📊 Batch progress: ${sentBatches}/${totalBatches} batches sent`)
+        console.log(`📅 Campaign status: ${updateData.status}`)
+      }
 
     } catch (error) {
       console.error(`❌ Error in simple campaign processing:`, error)
