@@ -119,23 +119,39 @@ export class CampaignProcessor {
             console.log(`🔄 Will process ${campaign.name} - has pending batch ready`)
             campaignsToProcess.push(campaign)
           } else {
-            const nextBatch = campaign.batch_schedule.batches.find((b: any) => b.status === 'pending')
-            if (nextBatch) {
-              console.log(`⏰ Skipping ${campaign.name} - next batch at ${nextBatch.scheduled_time}`)
+            // Check if there are any pending batches scheduled for the future
+            const nextPendingBatch = campaign.batch_schedule.batches.find((b: any) => b.status === 'pending')
+            if (nextPendingBatch) {
+              console.log(`⏰ Skipping ${campaign.name} - next batch at ${nextPendingBatch.scheduled_time}`)
             } else {
-              // All batches are completed, mark campaign as completed
-              console.log(`✅ All batches completed for ${campaign.name}, marking as completed`)
+              // Verify ALL batches are actually completed (status = 'sent')
+              const allBatchesSent = campaign.batch_schedule.batches.every((b: any) => b.status === 'sent')
+              const totalBatches = campaign.batch_schedule.batches.length
+              const sentBatches = campaign.batch_schedule.batches.filter((b: any) => b.status === 'sent').length
 
-              if (campaign.status !== 'completed') {
-                await supabase
-                  .from('campaigns')
-                  .update({
-                    status: 'completed',
-                    end_date: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('id', campaign.id)
-                console.log(`🎉 Marked ${campaign.name} as completed in database`)
+              console.log(`📊 Batch status for ${campaign.name}: ${sentBatches}/${totalBatches} sent`)
+
+              if (allBatchesSent) {
+                // All batches are truly completed, mark campaign as completed
+                console.log(`✅ All batches completed for ${campaign.name}, marking as completed`)
+
+                if (campaign.status !== 'completed') {
+                  await supabase
+                    .from('campaigns')
+                    .update({
+                      status: 'completed',
+                      end_date: new Date().toISOString(),
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', campaign.id)
+                  console.log(`🎉 Marked ${campaign.name} as completed in database`)
+                }
+              } else {
+                // Some batches are not sent yet - don't mark as completed
+                console.log(`⚠️  Campaign ${campaign.name} has incomplete batches but no pending ones`)
+                console.log(`📋 Batch status breakdown:`, campaign.batch_schedule.batches.map((b: any) =>
+                  `Batch ${b.batch_number}: ${b.status}`
+                ).join(', '))
               }
             }
           }

@@ -4,12 +4,14 @@ import { campaignProcessor } from '@/lib/campaign-processor'
 
 export const GET = withAuth(async (request: NextRequest, { user, supabase }) => {
   try {
-    // Opportunistically process any due scheduled campaigns so UI loads reflect real send state
-    try {
-      await campaignProcessor.processReadyCampaigns()
-    } catch (processorError) {
-      console.warn('⚠️ Auto campaign processing skipped (non-fatal):', processorError)
-    }
+    // Skip auto-processing on page load to prevent status changes
+    // Campaigns will be processed by the scheduled cron job instead
+    // Uncomment below to re-enable auto-processing:
+    // try {
+    //   await campaignProcessor.processReadyCampaigns()
+    // } catch (processorError) {
+    //   console.warn('⚠️ Auto campaign processing skipped (non-fatal):', processorError)
+    // }
 
     // Get campaigns with basic stats
     const { data: campaigns, error: campaignsError } = await supabase

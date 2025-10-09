@@ -240,18 +240,16 @@ export class ReplyJobProcessor {
     // Determine sender name
     const senderName = agent?.sender_name || agent?.name || undefined
 
-    // Prepare email options
+    // Prepare email options with threading headers
     const emailOptions = {
       to: contact?.email || job.incoming_email?.from_address,
       subject: job.draft_subject,
       text: job.draft_body,
       html: this.convertTextToHTML(job.draft_body),
       senderName,
-      // Add In-Reply-To and References headers for threading
-      headers: {
-        'In-Reply-To': job.message_ref,
-        'References': job.message_ref,
-      },
+      // Add In-Reply-To and References headers for proper email threading
+      inReplyTo: job.message_ref || undefined,
+      references: job.message_ref || undefined,
     }
 
     // Send based on provider
@@ -281,15 +279,18 @@ export class ReplyJobProcessor {
     // Create Gmail service
     const gmailService = new GmailIMAPSMTPService(tokens, emailAccount.email)
 
-    // Send email
+    // Send email with threading headers
     const { messageId } = await gmailService.sendEmail({
       to: options.to,
       subject: options.subject,
       text: options.text,
       html: options.html,
       senderName: options.senderName,
+      inReplyTo: options.inReplyTo,
+      references: options.references,
     })
 
+    console.log(`✅ Email sent with threading headers - In-Reply-To: ${options.inReplyTo}`)
     return messageId
   }
 

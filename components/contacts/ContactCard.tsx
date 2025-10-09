@@ -79,17 +79,23 @@ export function ContactCard({
     }
   }
 
+  const handleSingleClick = (e: React.MouseEvent) => {
+    // Single click toggles selection
+    if (onSelect) {
+      e.preventDefault()
+      e.stopPropagation()
+      onSelect(contact.id, !isSelected)
+    } else if (onClick) {
+      // If no selection mode, single click opens detail (fallback for non-selection mode)
+      onClick(contact)
+    }
+  }
+
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
-    // In selection mode, double-click should also toggle selection, not navigate
-    if (onSelect) {
-      onSelect(contact.id, !isSelected)
-      return
-    }
-
-    // Normal mode: double-click opens detail view
+    // Double-click always opens detail view
     if (onClick) {
       onClick(contact)
     }
@@ -100,28 +106,23 @@ export function ContactCard({
 
   return (
     <Card
-      className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'} ${onClick ? 'cursor-pointer' : ''}`}
-      onClick={onClick && !onSelect ? () => onClick(contact) : undefined}
+      className={`hover:shadow-md transition-all duration-200 border-0 shadow-sm hover:shadow-lg transform hover:scale-[1.02] ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 shadow-blue-100' : 'bg-white hover:bg-gray-50/50'} cursor-pointer`}
+      onClick={handleSingleClick}
       onDoubleClick={handleDoubleClick}
     >
       <CardContent className="p-4">
         {/* Header Row */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            {/* Expanded Selection Area */}
+            {/* Checkbox for selection mode */}
             {onSelect && (
-              <div
-                className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer hover:bg-blue-50/50 rounded-md p-1 -m-1 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSelect(contact.id, !isSelected)
-                }}
-              >
+              <div className="flex items-start gap-3 flex-1 min-w-0">
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={handleSelectChange}
-                  className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded pointer-events-none"
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                 />
 
                 {/* Contact Info */}
@@ -204,7 +205,7 @@ export function ContactCard({
               </div>
             )}
           </div>
-          
+
           {/* Detail View Button - Only show when selection is active */}
           {onSelect && onClick && (
             <Button

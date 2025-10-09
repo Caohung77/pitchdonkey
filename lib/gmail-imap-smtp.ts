@@ -61,6 +61,8 @@ export interface SendEmailOptions {
   text?: string
   html?: string
   senderName?: string // Add sender name option
+  inReplyTo?: string // Message-ID being replied to (for threading)
+  references?: string // Space-separated list of Message-IDs (for threading)
   attachments?: Array<{
     filename: string
     path?: string
@@ -486,6 +488,8 @@ export class GmailIMAPSMTPService {
         bcc ? `Bcc: ${bcc}` : null,
         `Subject: =?UTF-8?B?${Buffer.from(options.subject, 'utf8').toString('base64')}?=`,
         `Message-ID: ${messageId}`,
+        options.inReplyTo ? `In-Reply-To: ${options.inReplyTo}` : null,
+        options.references ? `References: ${options.references}` : null,
         `Date: ${new Date().toUTCString()}`,
         'MIME-Version: 1.0'
       ].filter(Boolean)
