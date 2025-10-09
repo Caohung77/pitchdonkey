@@ -82,7 +82,10 @@ export async function POST(request: NextRequest) {
     // If there are more batches, trigger the next one immediately with retry logic
     if (result.hasMore) {
       console.log(`🔄 Triggering next batch for job ${jobToProcess.id}`)
-      const processorUrl = `${process.env.NEXT_PUBLIC_APP_URL || request.url.split('/api')[0]}/api/contacts/bulk-enrich/process`
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+        || request.headers.get('origin')
+        || `${request.nextUrl.protocol}//${request.nextUrl.host}`
+      const processorUrl = `${baseUrl}/api/contacts/bulk-enrich/process`
       console.log(`🔄 Next batch URL: ${processorUrl}`)
 
       // CRITICAL FIX: AWAIT the fetch with retry logic to ensure chain continues on Vercel
@@ -131,9 +134,8 @@ export async function POST(request: NextRequest) {
       // If all retries failed, log critical error
       if (lastError) {
         console.error(`🚨 CRITICAL: Failed to trigger next batch after ${maxRetries} attempts:`, lastError)
-        console.error(`🚨 Job ${jobToProcess.id} may be stuck. Cron job will attempt recovery.`)
-        // Note: We don't throw here to avoid marking the current batch as failed
-        // The cron job will pick up stuck jobs for recovery
+        console.error(`🚨 Job ${jobToProcess.id} marked pending for cron recovery.`)
+        await enrichmentService.resetJobToPending(jobToProcess.id, lastError.message)
       }
     } else {
       console.log(`✅ No more batches to process for job ${jobToProcess.id}`)

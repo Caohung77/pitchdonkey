@@ -7,12 +7,12 @@ import { z } from 'zod'
 const draftReplySchema = z.object({
   email_account_id: z.string().uuid(),
   incoming_email_id: z.string().uuid(),
-  thread_id: z.string(),
-  contact_id: z.string().uuid().optional(),
-  incoming_subject: z.string(),
-  incoming_body: z.string(),
+  thread_id: z.string().min(1),
+  contact_id: z.string().uuid().nullish(),
+  incoming_subject: z.string().min(1),
+  incoming_body: z.string().min(1),
   incoming_from: z.string().email(),
-  message_ref: z.string().optional(),
+  message_ref: z.string().nullish(),
 })
 
 /**
@@ -39,23 +39,24 @@ export const POST = withAuth(async (
     // Validate input
     const validationResult = draftReplySchema.safeParse(body)
     if (!validationResult.success) {
+      console.error('Draft reply validation error:', validationResult.error.flatten())
       return NextResponse.json({
         error: 'Invalid request data',
-        details: validationResult.error.errors,
+        details: validationResult.error.flatten(),
         code: 'VALIDATION_ERROR'
       }, { status: 400 })
     }
 
-    const {
-      email_account_id,
-      incoming_email_id,
-      thread_id,
-      contact_id,
-      incoming_subject,
-      incoming_body,
-      incoming_from,
-      message_ref,
-    } = validationResult.data
+  const {
+    email_account_id,
+    incoming_email_id,
+    thread_id,
+    contact_id,
+    incoming_subject,
+    incoming_body,
+    incoming_from,
+    message_ref,
+  } = validationResult.data
 
     console.log(`Drafting reply for agent ${agentId} to email from ${incoming_from}`)
 
@@ -145,11 +146,11 @@ export const POST = withAuth(async (
       emailAccountId: email_account_id,
       incomingEmailId: incoming_email_id,
       threadId: thread_id,
-      contactId: contact_id,
+      contactId: contact_id || undefined,
       incomingSubject: incoming_subject,
       incomingBody: incoming_body,
       incomingFrom: incoming_from,
-      messageRef: message_ref,
+      messageRef: message_ref || undefined,
     })
 
     console.log(`✅ Draft reply created: ${draftResult.replyJobId} (status: ${draftResult.status})`)

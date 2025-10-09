@@ -21,12 +21,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 interface MailboxToolbarProps {
-  onReply: () => void
+  onReply?: () => void
   onForward: () => void
   onNewEmail: () => void
   onDelete: () => void
   isInboxEmail?: boolean
   className?: string
+  showReply?: boolean
+  showForward?: boolean
+  showNew?: boolean
+  showDelete?: boolean
 }
 
 export function MailboxToolbar({
@@ -35,100 +39,114 @@ export function MailboxToolbar({
   onNewEmail,
   onDelete,
   isInboxEmail = true,
-  className = ''
+  className = '',
+  showReply = true,
+  showForward = true,
+  showNew = true,
+  showDelete = true,
 }: MailboxToolbarProps) {
   return (
     <TooltipProvider delayDuration={300}>
       <div className={`flex items-center bg-white rounded-lg shadow-sm border border-gray-200 p-1 ${className}`}>
         {/* Primary Communication Actions */}
         <div className="flex items-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onReply}
-                className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 rounded-md transition-all duration-200 text-gray-600"
-              >
-                <Reply className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              <p>Reply</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onForward}
-                className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 rounded-md transition-all duration-200 text-gray-600"
-              >
-                <CornerUpRight className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              <p>Forward</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-
-        {/* Subtle Separator */}
-        <div className="w-px h-4 bg-gray-200 mx-2" />
-
-        {/* Creation & Management Actions */}
-        <div className="flex items-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onNewEmail}
-                className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-600 rounded-md transition-all duration-200 text-gray-600"
-              >
-                <PenSquare className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              <p>New Email</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {isInboxEmail && (
+          {showReply && onReply && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all duration-200 text-gray-600"
+                  onClick={onReply}
+                  className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 rounded-md transition-all duration-200 text-gray-600"
                 >
-                  <Archive className="h-3.5 w-3.5" />
+                  <Reply className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                <p>Archive</p>
+                <p>Reply</p>
               </TooltipContent>
             </Tooltip>
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onDelete}
-                className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600 rounded-md transition-all duration-200 text-gray-600"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              <p>Delete</p>
-            </TooltipContent>
-          </Tooltip>
+          {showForward && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onForward}
+                  className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 rounded-md transition-all duration-200 text-gray-600"
+                >
+                  <CornerUpRight className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                <p>Forward</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
+
+        {/* Subtle Separator */}
+        {(showReply || showForward) && (showNew || showDelete) && <div className="w-px h-4 bg-gray-200 mx-2" />}
+
+        {/* Creation & Management Actions */}
+        {(showNew || showDelete) && (
+          <div className="flex items-center">
+            {showNew && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onNewEmail}
+                    className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-600 rounded-md transition-all duration-200 text-gray-600"
+                  >
+                    <PenSquare className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <p>New Email</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {isInboxEmail && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all duration-200 text-gray-600"
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <p>Archive</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {showDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onDelete}
+                    className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600 rounded-md transition-all duration-200 text-gray-600"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <p>Delete</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
 
         {/* Hidden on small screens - Additional Actions */}
         <div className="hidden sm:flex items-center">

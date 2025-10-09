@@ -10,6 +10,7 @@ import { z } from 'zod'
 const updateContentSchema = z.object({
   draft_subject: z.string().min(1, 'Subject is required'),
   draft_body: z.string().min(1, 'Body is required'),
+  scheduled_at: z.string().datetime().optional(),
 })
 
 const actionSchema = z.object({
@@ -40,14 +41,15 @@ export const PUT = withAuth(async (
       }, { status: 400 })
     }
 
-    const { draft_subject, draft_body } = validationResult.data
+    const { draft_subject, draft_body, scheduled_at } = validationResult.data
 
     await updateReplyJobContent(
       supabase,
       user.id,
       replyJobId,
       draft_subject,
-      draft_body
+      draft_body,
+      scheduled_at
     )
 
     const response = NextResponse.json({

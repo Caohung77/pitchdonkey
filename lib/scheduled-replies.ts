@@ -297,14 +297,15 @@ export async function updateReplyJobContent(
   userId: string,
   replyJobId: string,
   draftSubject: string,
-  draftBody: string
+  draftBody: string,
+  scheduledAt?: string
 ): Promise<void> {
   const now = new Date()
 
   // Check if job is still editable
   const { data: job, error: fetchError } = await supabase
     .from('reply_jobs')
-    .select('editable_until, status')
+    .select('editable_until, status, audit_log')
     .eq('id', replyJobId)
     .eq('user_id', userId)
     .single()
@@ -323,20 +324,29 @@ export async function updateReplyJobContent(
     throw new Error(`Cannot edit reply in status: ${job.status}`)
   }
 
+  const existingAudit = Array.isArray(job.audit_log) ? job.audit_log : []
+  const newAudit = [
+    ...existingAudit,
+    {
+      action: 'content_edited',
+      timestamp: new Date().toISOString(),
+    },
+  ]
+
+  const updatePayload: any = {
+    draft_subject: draftSubject,
+    draft_body: draftBody,
+    updated_at: new Date().toISOString(),
+    audit_log: newAudit,
+  }
+
+  if (scheduledAt) {
+    updatePayload.scheduled_at = new Date(scheduledAt).toISOString()
+  }
+
   const { error } = await supabase
     .from('reply_jobs')
-    .update({
-      draft_subject: draftSubject,
-      draft_body: draftBody,
-      updated_at: new Date().toISOString(),
-      audit_log: supabase.rpc('jsonb_array_append', {
-        arr: supabase.raw('audit_log'),
-        elem: JSON.stringify({
-          action: 'content_edited',
-          timestamp: new Date().toISOString(),
-        }),
-      }),
-    })
+    .update(updatePayload)
     .eq('id', replyJobId)
     .eq('user_id', userId)
 

@@ -28,10 +28,12 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { EmailRichTextEditor } from '@/components/ui/EmailRichTextEditor'
 import { MailboxToolbar } from '../../../components/mailbox/MailboxToolbar'
 import { AISummaryButton } from '@/components/mailbox/AISummaryButton'
 import { AISummaryCard } from '@/components/mailbox/AISummaryCard'
+import { toast } from 'sonner'
 
 interface EmailAccount {
   id: string
@@ -65,10 +67,14 @@ interface Contact {
 
 interface IncomingEmail {
   id: string
+  email_account_id: string
   from_address: string
   to_address?: string | null
   subject: string | null
   date_received: string
+  message_id?: string | null
+  thread_id?: string | null
+  gmail_message_id?: string | null
   classification_status: 'unclassified' | 'bounce' | 'auto_reply' | 'human_reply' | 'unsubscribe' | 'spam'
   processing_status: 'pending' | 'processing' | 'completed' | 'failed'
   text_content: string | null
@@ -116,6 +122,22 @@ type MailboxTarget = {
   key: string
   accountId: string | null
   folder: 'inbox' | 'outbox'
+}
+
+interface AutoReplyDraft {
+  jobId: string
+  subject: string
+  body: string
+  scheduledAt: string
+  status: string
+  riskScore: number
+  agentName?: string
+  contactEmail?: string
+  emailAccountId?: string
+  incomingSubject: string
+  incomingFrom: string
+  incomingDate: string
+  incomingPreviewHtml: string
 }
 
 interface EmailInsight {
@@ -223,6 +245,35 @@ const getInitialFromText = (value?: string | null) => {
   return trimmed.charAt(0).toUpperCase()
 }
 
+const formatDateTimeLocal = (isoString: string) => {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const toIsoIfNeeded = (value: string) => {
+  if (!value) return new Date().toISOString()
+  if (value.endsWith('Z')) return value
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString()
+  }
+  return parsed.toISOString()
+}
+
+const htmlToPlainText = (html?: string | null) => {
+  if (!html) return ''
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export default function MailboxPage() {
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([])
   const [selectedMailboxKey, setSelectedMailboxKey] = useState<string>('all:inbox')
@@ -246,6 +297,10 @@ export default function MailboxPage() {
   const [composeAccountId, setComposeAccountId] = useState<string | null>(null)
   const [composeSending, setComposeSending] = useState(false)
   const [composeError, setComposeError] = useState('')
+  const [autoReplyDraft, setAutoReplyDraft] = useState<AutoReplyDraft | null>(null)
+  const [autoReplyModalOpen, setAutoReplyModalOpen] = useState(false)
+  const [autoReplyLoading, setAutoReplyLoading] = useState(false)
+  const [autoReplyActionLoading, setAutoReplyActionLoading] = useState(false)
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -534,6 +589,144 @@ export default function MailboxPage() {
       setComposeError(error.message || 'Failed to send email')
     } finally {
       setComposeSending(false)
+    }
+  }
+
+  const handleAutoReplyDraft = async () => {
+    if (!selectedItem || selectedItem.type !== 'inbox') {
+      toast.error('Select an incoming email first')
+      return
+    }
+
+    const email = selectedItem.email as IncomingEmail
+    const agentId = email.email_accounts?.assigned_agent?.id
+    if (!agentId) {
+      toast.error('No outreach agent assigned to this mailbox')
+      return
+    }
+
+    if (!email.email_account_id) {
+      toast.error('Missing email account information')
+      return
+    }
+
+    setAutoReplyLoading(true)
+    try {
+      const contactId = email.email_replies?.[0]?.contacts?.id || null
+      const plainBody = email.text_content?.trim() || htmlToPlainText(email.html_content) || ''
+      if (!plainBody) {
+        throw new Error('Email body is empty; unable to generate auto reply')
+      }
+      const threadId = email.thread_id || email.message_id || email.gmail_message_id || email.id
+      const incomingFrom = extractEmailAddress(email.from_address) || 'unknown@example.com'
+      const previewHtml = email.html_content || textToHtml(email.text_content || plainBody)
+
+      const payload = {
+        email_account_id: email.email_account_id,
+        incoming_email_id: email.id,
+        thread_id: threadId,
+        contact_id: contactId,
+        incoming_subject: email.subject || '(No subject)',
+        incoming_body: plainBody,
+        incoming_from: incomingFrom,
+        message_ref: email.message_id || email.gmail_message_id || undefined,
+      }
+
+      const response = await fetch(`/api/outreach-agents/${agentId}/draft-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to generate autonomous reply')
+      }
+
+      const { data } = await response.json()
+
+      const draft: AutoReplyDraft = {
+        jobId: data.reply_job_id,
+        subject: data.draft_subject,
+        body: data.draft_body,
+        scheduledAt: data.scheduled_at,
+        status: data.status,
+        riskScore: data.risk_score,
+        agentName: email.email_accounts?.assigned_agent?.name,
+        contactEmail: extractEmailAddress(email.from_address) || email.from_address,
+        emailAccountId: email.email_account_id,
+        incomingSubject: email.subject || '(No subject)',
+        incomingFrom: email.from_address,
+        incomingDate: email.date_received,
+        incomingPreviewHtml: previewHtml,
+      }
+
+      setAutoReplyDraft(draft)
+      setAutoReplyModalOpen(true)
+      toast.success('Autonomous reply draft created')
+    } catch (error: any) {
+      console.error('Failed to draft autonomous reply:', error)
+      toast.error(error.message || 'Failed to draft autonomous reply')
+    } finally {
+      setAutoReplyLoading(false)
+    }
+  }
+
+  const handleAutoReplySchedule = async () => {
+    if (!autoReplyDraft) return
+    setAutoReplyActionLoading(true)
+    try {
+      const response = await fetch(`/api/scheduled-replies/${autoReplyDraft.jobId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draft_subject: autoReplyDraft.subject,
+          draft_body: autoReplyDraft.body,
+          scheduled_at: toIsoIfNeeded(autoReplyDraft.scheduledAt),
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to update scheduled reply')
+      }
+
+      toast.success('Reply scheduled successfully')
+      setAutoReplyDraft((prev) => prev ? { ...prev, status: 'scheduled' } : prev)
+      setAutoReplyModalOpen(false)
+    } catch (error: any) {
+      console.error('Failed to schedule reply job:', error)
+      toast.error(error.message || 'Failed to schedule reply')
+    } finally {
+      setAutoReplyActionLoading(false)
+    }
+  }
+
+  const handleAutoReplySendNow = async () => {
+    if (!autoReplyDraft) return
+    setAutoReplyActionLoading(true)
+    try {
+      const response = await fetch(`/api/scheduled-replies/${autoReplyDraft.jobId}/send-now`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to send reply immediately')
+      }
+
+      toast.success('Reply sent successfully')
+      setAutoReplyModalOpen(false)
+      const accountId = autoReplyDraft.emailAccountId || null
+      setAutoReplyDraft(null)
+      if (accountId) {
+        fetchSentEmails(accountId)
+      }
+    } catch (error: any) {
+      console.error('Failed to send reply job now:', error)
+      toast.error(error.message || 'Failed to send reply now')
+    } finally {
+      setAutoReplyActionLoading(false)
     }
   }
 
@@ -999,6 +1192,7 @@ export default function MailboxPage() {
       const campaign = email.email_replies?.[0]?.campaigns || null
       const fromName = email.from_address || 'Unknown sender'
       const receivedAt = new Date(email.date_received).toLocaleString()
+      const assignedAgentId = email.email_accounts?.assigned_agent?.id
 
       return (
         <div className="flex h-full flex-col bg-slate-50">
@@ -1018,13 +1212,25 @@ export default function MailboxPage() {
                 </div>
                 <div className="flex items-center gap-3 sm:self-start">
                   <MailboxToolbar
-                    onReply={() => beginCompose('reply')}
+                    showReply={false}
+                    showForward={false}
                     onForward={() => beginCompose('forward')}
                     onNewEmail={() => beginCompose('new')}
                     onDelete={() => deleteInboxEmail(email.id)}
                     isInboxEmail={true}
                     className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
                   />
+                  <Button
+                    size="sm"
+                    onClick={handleAutoReplyDraft}
+                    disabled={autoReplyLoading || !assignedAgentId}
+                    className={clsx(
+                      'rounded-full px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-500 shadow-sm hover:from-purple-600 hover:to-pink-600',
+                      (autoReplyLoading || !assignedAgentId) && 'opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    {autoReplyLoading ? 'Drafting...' : 'Auto Reply'}
+                  </Button>
                   <DialogClose asChild>
                     <Button
                       variant="ghost"
@@ -1514,8 +1720,114 @@ export default function MailboxPage() {
               Send
             </Button>
           </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      {autoReplyDraft && (
+        <Dialog
+          open={autoReplyModalOpen}
+          onOpenChange={(open) => {
+            setAutoReplyModalOpen(open)
+            if (!open) {
+              setAutoReplyDraft(null)
+            }
+          }}
+        >
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl">
+            <DialogHeader>
+              <DialogTitle>Autonomous Reply</DialogTitle>
+              <p className="text-xs text-slate-500">
+                Prepared by {autoReplyDraft.agentName || 'Assigned agent'} • Risk {(autoReplyDraft.riskScore * 100).toFixed(0)}%
+              </p>
+            </DialogHeader>
+            <div className="space-y-5">
+              <div className="grid gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">To</label>
+                  <Input
+                    value={autoReplyDraft.contactEmail || ''}
+                    readOnly
+                    className="bg-slate-100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</label>
+                  <Input
+                    value={autoReplyDraft.subject}
+                    onChange={(e) =>
+                      setAutoReplyDraft(prev => prev ? { ...prev, subject: e.target.value } : prev)
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Message</label>
+                  <Textarea
+                    rows={12}
+                    value={autoReplyDraft.body}
+                    onChange={(e) =>
+                      setAutoReplyDraft(prev => prev ? { ...prev, body: e.target.value } : prev)
+                    }
+                    className="font-mono text-sm"
+                  />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule send</label>
+                    <Input
+                      type="datetime-local"
+                      value={formatDateTimeLocal(autoReplyDraft.scheduledAt)}
+                      onChange={(e) =>
+                        setAutoReplyDraft(prev => prev ? { ...prev, scheduledAt: toIsoIfNeeded(e.target.value) } : prev)
+                      }
+                    />
+                  </div>
+                  <div className="rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <div>Status: {autoReplyDraft.status}</div>
+                    <div>Risk: {(autoReplyDraft.riskScore * 100).toFixed(0)}%</div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Original Message</span>
+                  <span className="text-xs text-slate-400">
+                    {autoReplyDraft.incomingFrom} • {new Date(autoReplyDraft.incomingDate).toLocaleString()}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 max-h-64 overflow-y-auto text-sm text-slate-700">
+                  <div dangerouslySetInnerHTML={{ __html: autoReplyDraft.incomingPreviewHtml }} />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAutoReplyModalOpen(false)
+                  setAutoReplyDraft(null)
+                }}
+              >
+                Cancel
+              </Button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleAutoReplySchedule}
+                  disabled={autoReplyActionLoading}
+                >
+                  {autoReplyActionLoading ? 'Scheduling…' : 'Save & Schedule'}
+                </Button>
+                <Button
+                  onClick={handleAutoReplySendNow}
+                  disabled={autoReplyActionLoading}
+                >
+                  {autoReplyActionLoading ? 'Sending…' : 'Send Now'}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Dialog
         open={detailOpen && !!selectedItem}

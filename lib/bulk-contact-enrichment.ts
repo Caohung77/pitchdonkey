@@ -838,6 +838,18 @@ export class BulkContactEnrichmentService {
       .eq('id', jobId)
   }
 
+  async resetJobToPending(jobId: string, reason?: string): Promise<void> {
+    const supabase = await createServerSupabaseClient()
+    await supabase
+      .from('bulk_enrichment_jobs')
+      .update({
+        status: 'pending',
+        error: reason || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', jobId)
+  }
+
   private async updateJobProgress(jobId: string, progressUpdate: Partial<{ completed: number; failed: number; current_batch: number }>): Promise<void> {
     const supabase = await createServerSupabaseClient()
 

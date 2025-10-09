@@ -24,10 +24,14 @@ export const GET = withAuth(async (
       .from('incoming_emails')
       .select(`
         id,
+        email_account_id,
         from_address,
         to_address,
         subject,
         date_received,
+        message_id,
+        thread_id,
+        gmail_message_id,
         classification_status,
         processing_status,
         classification_confidence,

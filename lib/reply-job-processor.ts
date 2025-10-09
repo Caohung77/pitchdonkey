@@ -111,6 +111,56 @@ export class ReplyJobProcessor {
   }
 
   /**
+   * Process a specific reply job immediately
+   */
+  async processReplyJobById(jobId: string, userId: string): Promise<boolean> {
+    const { data: job, error } = await this.supabase
+      .from('reply_jobs')
+      .select(`
+        *,
+        email_account:email_accounts!reply_jobs_email_account_id_fkey(
+          id,
+          email,
+          provider,
+          access_token,
+          refresh_token,
+          token_expires_at,
+          smtp_host,
+          smtp_port,
+          smtp_username,
+          smtp_password,
+          smtp_secure
+        ),
+        agent:outreach_agents!reply_jobs_agent_id_fkey(
+          id,
+          name,
+          sender_name,
+          sender_role
+        ),
+        contact:contacts(
+          id,
+          email,
+          first_name,
+          last_name
+        )
+      `)
+      .eq('id', jobId)
+      .eq('user_id', userId)
+      .single()
+
+    if (error || !job) {
+      console.error('❌ Reply job not found for immediate processing:', error)
+      throw new Error('Reply job not found')
+    }
+
+    // Override editable window so manual send is allowed immediately
+    job.editable_until = new Date(Date.now() - 60 * 1000).toISOString()
+
+    await this.processReplyJob(job)
+    return true
+  }
+
+  /**
    * Process a single reply job
    */
   private async processReplyJob(job: any): Promise<void> {

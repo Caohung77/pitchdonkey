@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const { data: stuckJobs, error: fetchError } = await supabase
       .from('bulk_enrichment_jobs')
       .select('*')
-      .eq('status', 'processing')
+      .in('status', ['processing', 'running'])
       .lt('updated_at', fiveMinutesAgo)
       .order('created_at', { ascending: true })
       .limit(10) // Process max 10 stuck jobs per run
@@ -99,9 +99,17 @@ export async function GET(request: NextRequest) {
         } else {
           const errorText = await response.text()
           console.error(`❌ Failed to resume job ${job.id}: HTTP ${response.status}`, errorText)
+          await supabase
+            .from('bulk_enrichment_jobs')
+            .update({
+              status: 'pending',
+              error: `Retry scheduled: ${errorText}`,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', job.id)
           results.push({
             job_id: job.id,
-            action: 'resume_failed',
+            action: 'reset_pending',
             success: false,
             error: `HTTP ${response.status}: ${errorText}`
           })
