@@ -66,7 +66,7 @@ export class EmailClassifier {
     const content = ((email.textContent || '') + (email.htmlContent || '')).toLowerCase()
     const fromAddress = email.fromAddress.toLowerCase()
 
-    // Hard bounce patterns
+    // Hard bounce patterns (English and German)
     const hardBouncePatterns = [
       /user unknown/i,
       /mailbox unavailable/i,
@@ -78,7 +78,14 @@ export class EmailClassifier {
       /550.*5\.1\.1/,
       /550.*5\.7\.1/,
       /permanent failure/i,
-      /address rejected/i
+      /address rejected/i,
+      // German bounce patterns
+      /adresse wurde nicht gefunden/i,  // Address not found
+      /empfänger.*nicht gefunden/i,      // Recipient not found
+      /unbekannter empfänger/i,          // Unknown recipient
+      /ungültige adresse/i,              // Invalid address
+      /nicht zustellbar/i,               // Undeliverable
+      /zustellung fehlgeschlagen/i       // Delivery failed
     ]
 
     // Soft bounce patterns

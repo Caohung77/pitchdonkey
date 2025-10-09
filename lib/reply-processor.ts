@@ -304,20 +304,35 @@ export class ReplyProcessor {
       const bounceType = classification.bounceInfo?.bounceType
       
       if (bounceType === 'hard') {
-        // Hard bounce - mark email as invalid
+        // Hard bounce - mark email as invalid and heavily penalize engagement
+        const { data: contact } = await this.supabase
+          .from('contacts')
+          .select('engagement_score')
+          .eq('id', context.contactId)
+          .single()
+
+        const currentScore = contact?.engagement_score || 0
+        const penaltyScore = Math.max(-100, currentScore - 50) // Reduce by 50 points, minimum -100
+
         await this.supabase
           .from('contacts')
           .update({
             email_status: 'bounced',
+            engagement_status: 'bad', // Mark as bad status for visual indicators
             bounced_at: new Date().toISOString(),
-            bounce_reason: classification.bounceInfo?.bounceReason
+            bounce_reason: classification.bounceInfo?.bounceReason,
+            engagement_score: penaltyScore
           })
           .eq('id', context.contactId)
 
         actions.push({
           action: 'contact_marked_bounced',
           timestamp: new Date().toISOString(),
-          details: { bounceType: 'hard', reason: classification.bounceInfo?.bounceReason }
+          details: {
+            bounceType: 'hard',
+            reason: classification.bounceInfo?.bounceReason,
+            scorePenalty: currentScore - penaltyScore
+          }
         })
 
         // Pause active campaigns for this contact
@@ -330,11 +345,30 @@ export class ReplyProcessor {
           })
         }
       } else {
-        // Soft bounce - just log it, don't take action yet
+        // Soft bounce - apply smaller penalty, don't mark as bad yet
+        const { data: contact } = await this.supabase
+          .from('contacts')
+          .select('engagement_score')
+          .eq('id', context.contactId)
+          .single()
+
+        const currentScore = contact?.engagement_score || 0
+        const penaltyScore = Math.max(-50, currentScore - 10) // Reduce by 10 points, minimum -50
+
+        await this.supabase
+          .from('contacts')
+          .update({
+            engagement_score: penaltyScore
+          })
+          .eq('id', context.contactId)
+
         actions.push({
           action: 'soft_bounce_logged',
           timestamp: new Date().toISOString(),
-          details: { reason: classification.bounceInfo?.bounceReason }
+          details: {
+            reason: classification.bounceInfo?.bounceReason,
+            scorePenalty: currentScore - penaltyScore
+          }
         })
       }
     }

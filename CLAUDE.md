@@ -52,13 +52,15 @@ npm test -- --watch --verbose
 - **Plan-based Permissions**: Starter, Professional, Agency tiers with resource limits
 - **Usage Tracking**: Real-time monitoring of email accounts, contacts, and campaigns
 
-#### Email Campaign System (`lib/campaigns.ts`, `lib/campaign-execution.ts`)
+#### Email Campaign System (`lib/campaigns.ts`, `lib/campaign-execution.ts`, `lib/campaign-processor.ts`)
 - **Multi-step Sequences**: Up to 7 email steps with conditional logic
 - **AI Personalization**: Template-based and custom prompt personalization
 - **A/B Testing**: Subject line, content, and send time variants
 - **Scheduling Engine**: Business hours, timezone detection, rate limiting
+- **Batch Scheduling**: Intelligent batch creation with 20-minute intervals between batches
 - **Execution Engine**: Job queue system with retry logic and batch processing
-- **Campaign States**: draft → active → paused/completed/stopped
+- **Campaign States**: draft → scheduled → sending → completed/paused/stopped
+- **Status Tracking**: Real-time progress monitoring with batch-aware completion detection
 
 #### Email Provider Integration (`lib/email-providers.ts`, `lib/oauth-providers.ts`)
 - **Multi-provider Support**: Gmail (OAuth2), Outlook (OAuth2), Custom SMTP
@@ -465,10 +467,137 @@ const showConfirmation = (title: string, description: string, action: () => void
 ### Campaign Execution Flow
 1. **Campaign Creation**: Validate sequence and settings
 2. **Contact Selection**: Apply segmentation and filters
-3. **Job Scheduling**: Create email jobs based on timing rules
-4. **Email Processing**: Apply personalization and send emails
-5. **Engagement Tracking**: Monitor opens, clicks, and replies
-6. **Sequence Logic**: Progress contacts based on conditions
+3. **Batch Schedule Creation**: Generate time-distributed batch schedule with all batches upfront
+4. **Job Scheduling**: Create email jobs based on batch timing rules
+5. **Email Processing**: Apply personalization and send emails per batch
+6. **Batch Status Tracking**: Mark batches as 'sent' and monitor completion
+7. **Engagement Tracking**: Monitor opens, clicks, and replies
+8. **Sequence Logic**: Progress contacts based on conditions
+
+### Batch Scheduling System
+The campaign system uses intelligent batch scheduling to distribute emails over time and avoid triggering spam filters.
+
+#### Batch Schedule Creation (`src/app/api/campaigns/simple/route.ts:218-273`)
+When a campaign is created, the system immediately generates a complete batch schedule:
+
+```typescript
+// Example: 20 contacts with batch size 5 = 4 batches
+const batchSize = 5 // From daily_send_limit
+const totalContacts = 20
+const totalBatches = Math.ceil(totalContacts / batchSize) // = 4
+const BATCH_INTERVAL_MINUTES = 20
+
+const batches = [
+  {
+    batch_number: 1,
+    scheduled_time: "2025-10-09T10:00:00Z",
+    contact_ids: ["id1", "id2", "id3", "id4", "id5"],
+    contact_count: 5,
+    status: 'pending'
+  },
+  {
+    batch_number: 2,
+    scheduled_time: "2025-10-09T10:20:00Z", // +20 minutes
+    contact_ids: ["id6", "id7", "id8", "id9", "id10"],
+    contact_count: 5,
+    status: 'pending'
+  },
+  // ... batches 3 and 4
+]
+```
+
+**Key Features:**
+- **Upfront Scheduling**: All batches created at campaign start, not dynamically
+- **Fixed Intervals**: 20-minute spacing between batches
+- **Contact Assignment**: Each batch has specific contact IDs assigned
+- **Persistent Storage**: Batch schedule saved to `campaigns.batch_schedule` (JSONB)
+
+#### Batch Processing (`lib/campaign-processor.ts:289-320`)
+The campaign processor runs every 30 seconds and processes batches when ready:
+
+```typescript
+// Find next pending batch that's ready to send
+const now = new Date()
+const pendingBatch = campaign.batch_schedule.batches.find(batch =>
+  batch.status === 'pending' &&
+  new Date(batch.scheduled_time) <= now
+)
+
+if (pendingBatch) {
+  // Process this batch's contacts
+  const contacts = await getContacts(pendingBatch.contact_ids)
+  await sendEmailsForBatch(contacts)
+
+  // Mark batch as sent
+  batch.status = 'sent'
+  batch.completed_at = new Date().toISOString()
+}
+```
+
+#### Campaign Status Determination (`lib/campaign-processor.ts:966-996`)
+Campaign status is determined by batch completion state:
+
+```typescript
+const allBatchesSent = batches.every(b => b.status === 'sent')
+const nextPendingBatch = batches.find(b => b.status === 'pending')
+
+if (nextPendingBatch) {
+  // More batches to process
+  status = 'sending'
+  next_batch_send_time = nextPendingBatch.scheduled_time
+} else if (allBatchesSent) {
+  // ALL batches completed
+  status = 'completed'
+  end_date = new Date().toISOString()
+} else {
+  // No pending batches but not all sent (error state)
+  status = 'sending'
+  next_batch_send_time = null
+}
+```
+
+**Status Logic:**
+- `'sending'`: Has pending batches OR processing current batch
+- `'completed'`: ALL batches have `status === 'sent'`
+- `'paused'`: User manually paused
+- `'stopped'`: User manually stopped
+
+**Important**: Campaign is NOT marked complete just because no batches are ready now. It must verify ALL batches are actually sent.
+
+#### Diagnostic Logging
+Enhanced logging helps debug batch scheduling issues:
+
+```typescript
+// Example log output:
+📅 Using batch schedule for campaign xxx
+📊 Total batches: 4
+📊 Batch status summary:
+   Batch 1: sent - scheduled for 2025-10-09T10:00:00Z
+   Batch 2: sent - scheduled for 2025-10-09T10:20:00Z
+   Batch 3: pending - scheduled for 2025-10-09T10:40:00Z
+   Batch 4: pending - scheduled for 2025-10-09T11:00:00Z
+🕐 Current time: 2025-10-09T10:35:00Z
+📧 Processing batch 3/4
+```
+
+#### Troubleshooting Batch Campaigns
+Common issues and solutions:
+
+**Campaign shows "Completed" but only partial emails sent:**
+- **Cause**: Old bug where campaigns marked complete when no pending batches found
+- **Fix**: v0.20.2 - Now verifies ALL batches are 'sent' before completion
+- **Check**: Look for batches with `status: 'pending'` in `campaigns.batch_schedule`
+
+**Batches not processing:**
+- **Check 1**: Verify `scheduled_time` is in the past for pending batches
+- **Check 2**: Ensure campaign processor cron is running (`/api/cron/process-campaigns`)
+- **Check 3**: Review logs for errors during batch processing
+- **Debug**: Check `campaigns.next_batch_send_time` - should match next pending batch
+
+**Wrong batch count:**
+- **Check**: `batch_schedule.total_batches` should equal `Math.ceil(total_contacts / batch_size)`
+- **Verify**: All contact IDs in batches match campaign's contact lists
+- **Fix**: May need to recreate batch schedule if corrupted
 
 ### Email Provider Integration
 1. **OAuth Setup**: Redirect to provider authorization

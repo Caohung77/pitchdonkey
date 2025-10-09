@@ -18,7 +18,8 @@ import {
   Sparkles,
   List,
   MoreVertical,
-  UserX
+  UserX,
+  AlertCircle
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -134,8 +135,14 @@ export function ContactCard({
               </div>
               
               <div className="flex items-center text-sm text-gray-600 mb-2">
-                <Mail className="h-3.5 w-3.5 text-gray-400 mr-1.5 flex-shrink-0" />
+                <Mail className={`h-3.5 w-3.5 mr-1.5 flex-shrink-0 ${contact.email_status === 'bounced' ? 'text-red-500' : 'text-gray-400'}`} />
                 <span className="truncate">{contact.email}</span>
+                {contact.email_status === 'bounced' && (
+                  <Badge variant="destructive" className="ml-2 text-xs">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    Bounced
+                  </Badge>
+                )}
               </div>
               
               {/* Company/Position */}
@@ -175,8 +182,14 @@ export function ContactCard({
                 </div>
 
                 <div className="flex items-center text-sm text-gray-600 mb-2">
-                  <Mail className="h-3.5 w-3.5 text-gray-400 mr-1.5 flex-shrink-0" />
+                  <Mail className={`h-3.5 w-3.5 mr-1.5 flex-shrink-0 ${contact.email_status === 'bounced' ? 'text-red-500' : 'text-gray-400'}`} />
                   <span className="truncate">{contact.email}</span>
+                  {contact.email_status === 'bounced' && (
+                    <Badge variant="destructive" className="ml-2 text-xs">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Bounced
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Company/Position */}
