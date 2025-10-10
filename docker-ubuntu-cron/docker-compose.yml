@@ -17,7 +17,7 @@ services:
           echo '*/5 * * * * echo \"[campaigns] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 25 -X GET \"$${VERCEL_APP_URL}/api/cron/process-campaigns\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[campaigns] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"' &&
           echo '' &&
           echo '# Fetch emails every 5 minutes (triggers autonomous reply drafts)' &&
-          echo '*/5 * * * * echo \"[fetch-emails] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 25 -X POST \"$${VERCEL_APP_URL}/api/cron/fetch-emails\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[fetch-emails] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"' &&
+          echo '*/5 * * * * echo \"[fetch-emails] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 70 -X POST \"$${VERCEL_APP_URL}/api/cron/fetch-emails\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[fetch-emails] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"' &&
           echo '' &&
           echo '# Send scheduled autonomous replies every 5 minutes' &&
           echo '*/5 * * * * echo \"[send-replies] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 25 -X POST \"$${VERCEL_APP_URL}/api/cron/process-reply-jobs\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[send-replies] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"'

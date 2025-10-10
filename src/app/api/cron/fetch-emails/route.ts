@@ -3,23 +3,31 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { addSecurityHeaders } from '@/lib/auth-middleware'
 import { IMAPProcessor } from '@/lib/imap-processor'
 
-async function syncGmailAccount(supabase: any, account: any) {
+// Configure function to run up to 60 seconds (Vercel limit)
+export const maxDuration = 60 // seconds
+export const dynamic = 'force-dynamic'
+
+async function syncGmailAccount(supabase: any, account: any, syncSent: boolean = false) {
   const { GmailIMAPSMTPServerService } = await import('@/lib/server/gmail-imap-smtp-server')
   const gmailService = new GmailIMAPSMTPServerService()
 
-  const [inboxEmails, sentEmails] = await Promise.all([
-    gmailService.fetchGmailEmails(account.id, 'INBOX', {
-      since: await getGmailSinceDate(supabase, account.id, 'incoming_emails', 'date_received'),
-      unseen: false
-    }),
-    gmailService.fetchGmailEmails(account.id, 'SENT', {
+  // Always sync inbox (important, time-sensitive)
+  const inboxEmails = await gmailService.fetchGmailEmails(account.id, 'INBOX', {
+    since: await getGmailSinceDate(supabase, account.id, 'incoming_emails', 'date_received'),
+    unseen: false
+  })
+
+  const inboxResult = await persistGmailEmails(supabase, account, inboxEmails, 'incoming')
+
+  // Only sync sent emails if syncSent=true (every 30 minutes)
+  let sentResult = { success: true, newEmails: 0, errors: [] }
+  if (syncSent) {
+    const sentEmails = await gmailService.fetchGmailEmails(account.id, 'SENT', {
       since: await getGmailSinceDate(supabase, account.id, 'outgoing_emails', 'date_sent'),
       unseen: false
     })
-  ])
-
-  const inboxResult = await persistGmailEmails(supabase, account, inboxEmails, 'incoming')
-  const sentResult = await persistGmailEmails(supabase, account, sentEmails, 'sent')
+    sentResult = await persistGmailEmails(supabase, account, sentEmails, 'sent')
+  }
 
   return {
     success: inboxResult.errors.length === 0 && sentResult.errors.length === 0,
@@ -30,7 +38,7 @@ async function syncGmailAccount(supabase: any, account: any) {
   }
 }
 
-async function syncImapAccount(supabase: any, account: any) {
+async function syncImapAccount(supabase: any, account: any, syncSent: boolean = false) {
   const imapProcessor = new IMAPProcessor()
 
   let password = null
@@ -62,12 +70,13 @@ async function syncImapAccount(supabase: any, account: any) {
 
   const { data: connection } = await supabase
     .from('imap_connections')
-    .select('last_processed_uid')
+    .select('last_processed_uid, consecutive_failures')
     .eq('email_account_id', account.id)
     .single()
 
   const lastProcessedUID = connection?.last_processed_uid || 0
 
+  // Always sync inbox (important, time-sensitive)
   const syncResult = await imapProcessor.syncEmails(
     account.user_id,
     account.id,
@@ -75,34 +84,38 @@ async function syncImapAccount(supabase: any, account: any) {
     lastProcessedUID
   )
 
-  if (syncResult.errors.length === 0) {
-    await supabase
-      .from('imap_connections')
-      .upsert({
-        email_account_id: account.id,
-        status: 'active',
-        last_sync_at: new Date().toISOString(),
-        next_sync_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        last_processed_uid: syncResult.lastProcessedUID,
-        consecutive_failures: 0,
-        last_successful_connection: new Date().toISOString(),
-        last_error: null
-      }, { onConflict: 'email_account_id' })
-  } else {
-    await supabase
-      .from('imap_connections')
-      .upsert({
-        email_account_id: account.id,
-        status: 'error',
-        last_sync_at: new Date().toISOString(),
-        last_error: syncResult.errors.join('; ')
-      }, { onConflict: 'email_account_id' })
+  // Only sync sent emails if syncSent=true (every 30 minutes)
+  let sentResult = { success: true, newEmails: 0, errors: [] }
+  if (syncSent) {
+    sentResult = await imapProcessor.syncSentEmails(
+      account.user_id,
+      account.id,
+      imapConfig
+    )
   }
 
+  const combinedErrors = [...syncResult.errors, ...sentResult.errors]
+  const success = combinedErrors.length === 0
+  const failureCount = success ? 0 : (connection?.consecutive_failures || 0) + 1
+
+  await supabase
+    .from('imap_connections')
+    .upsert({
+      email_account_id: account.id,
+      status: success ? 'active' : 'error',
+      last_sync_at: new Date().toISOString(),
+      next_sync_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      last_processed_uid: syncResult.lastProcessedUID,
+      consecutive_failures: failureCount,
+      last_successful_connection: success ? new Date().toISOString() : connection?.last_successful_connection,
+      last_error: success ? null : combinedErrors.join('; ')
+    }, { onConflict: 'email_account_id' })
+
   return {
-    success: syncResult.errors.length === 0,
+    success,
     newEmails: syncResult.newEmails,
-    errors: syncResult.errors,
+    newSentEmails: sentResult.newEmails,
+    errors: combinedErrors,
     account: account.email
   }
 }
@@ -208,13 +221,21 @@ async function persistGmailEmails(supabase: any, account: any, emails: any[], ty
  * Cron job to fetch emails from all connected email accounts
  *
  * This endpoint should be called by a cron service (e.g., Ubuntu cron or GitHub Actions)
- * Recommended schedule: Every 5 minutes
+ * Recommended schedule:
+ * - Every 5 minutes for inbox emails (time-sensitive)
+ * - Every 30 minutes for sent emails (less critical)
+ *
+ * Query param: ?sync_sent=true to include sent emails sync
  *
  * Security: Uses CRON_SECRET for authentication
  */
 export async function POST(request: NextRequest) {
   try {
-    console.log('🕐 Cron: Fetch emails triggered')
+    // Check if this is a sent email sync (every 30 minutes)
+    const { searchParams } = new URL(request.url)
+    const syncSent = searchParams.get('sync_sent') === 'true'
+
+    console.log(`🕐 Cron: Fetch emails triggered (sync_sent=${syncSent})`)
 
     // Verify cron secret for security
     const authHeader = request.headers.get('authorization')
@@ -248,11 +269,11 @@ export async function POST(request: NextRequest) {
       try {
         let result
         if (account.provider === 'gmail' && account.access_token) {
-          result = await syncGmailAccount(supabase, account)
+          result = await syncGmailAccount(supabase, account, syncSent)
         } else if (account.provider === 'gmail' && !account.access_token) {
-          result = await syncImapAccount(supabase, account)
+          result = await syncImapAccount(supabase, account, syncSent)
         } else if (account.provider === 'smtp' || account.provider === 'gmail-imap-smtp') {
-          result = await syncImapAccount(supabase, account)
+          result = await syncImapAccount(supabase, account, syncSent)
         } else {
           results.push({
             success: false,
@@ -263,7 +284,7 @@ export async function POST(request: NextRequest) {
         }
 
         results.push(result)
-        totalNewEmails += result.newEmails || 0
+        totalNewEmails += (result.newEmails || 0) + (result.newSentEmails || 0)
       } catch (error: any) {
         results.push({
           success: false,
