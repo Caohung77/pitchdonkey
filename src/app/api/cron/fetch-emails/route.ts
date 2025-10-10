@@ -98,6 +98,27 @@ async function syncImapAccount(supabase: any, account: any, syncSent: boolean = 
   const success = combinedErrors.length === 0
   const failureCount = success ? 0 : (connection?.consecutive_failures || 0) + 1
 
+  // ✅ FIX: Trigger classification for new IMAP emails (same as Gmail OAuth path)
+  if (syncResult.newEmails > 0) {
+    console.log(`🔄 Triggering classification for ${syncResult.newEmails} new IMAP emails from ${account.email}`)
+
+    try {
+      const { ReplyProcessor } = await import('@/lib/reply-processor')
+      const replyProcessor = new ReplyProcessor()
+      const classificationResult = await replyProcessor.processUnclassifiedEmails(account.user_id, syncResult.newEmails)
+
+      console.log(`✅ Classification completed for ${account.email}: ${classificationResult.successful}/${classificationResult.processed} emails (${classificationResult.autonomousDraftsCreated || 0} auto-drafts created)`)
+
+      if (classificationResult.errors.length > 0) {
+        console.warn(`⚠️ Classification errors for ${account.email}:`, classificationResult.errors.slice(0, 3))
+      }
+    } catch (classificationError) {
+      console.error(`❌ Classification failed for ${account.email}:`, classificationError)
+      // Don't fail the sync - emails are stored and will be picked up by fallback cron
+      combinedErrors.push(`Classification failed: ${classificationError.message}`)
+    }
+  }
+
   await supabase
     .from('imap_connections')
     .upsert({
