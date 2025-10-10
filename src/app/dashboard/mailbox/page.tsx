@@ -109,9 +109,12 @@ interface SentEmail {
   send_status: string
   sent_at: string | null
   created_at: string | null
+  to_address?: string | null
+  from_address?: string | null
   email_accounts: EmailAccount
   contacts: Contact | null
   campaigns: Campaign | null
+  source?: string
 }
 
 type MailboxSelection =
@@ -360,6 +363,18 @@ export default function MailboxPage() {
     }
   }, [mailboxTarget, inboxEmails, sentEmails])
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (mailboxTarget.folder === 'inbox') {
+        fetchInboxEmails(mailboxTarget.accountId, { silent: true })
+      } else {
+        fetchSentEmails(mailboxTarget.accountId, { silent: true })
+      }
+    }, 5 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [mailboxTarget.accountId, mailboxTarget.folder, classificationFilter, searchTerm])
+
   const fetchEmailAccounts = async () => {
     try {
       const response = await fetch('/api/inbox/email-accounts')
@@ -372,9 +387,11 @@ export default function MailboxPage() {
     }
   }
 
-  const fetchInboxEmails = async (accountId: string | null) => {
+  const fetchInboxEmails = async (accountId: string | null, options: { silent?: boolean } = {}) => {
     try {
-      setLoadingList(true)
+      if (!options.silent) {
+        setLoadingList(true)
+      }
       setErrorMessage('')
       const params = new URLSearchParams()
       // Always pass account_id - use 'all' for unified view
@@ -407,7 +424,9 @@ export default function MailboxPage() {
       console.error('Error fetching inbox emails:', error)
       setErrorMessage('Failed to load inbox emails')
     } finally {
-      setLoadingList(false)
+      if (!options.silent) {
+        setLoadingList(false)
+      }
     }
   }
 
@@ -444,9 +463,11 @@ export default function MailboxPage() {
     }
   }
 
-  const fetchSentEmails = async (accountId: string | null) => {
+  const fetchSentEmails = async (accountId: string | null, options: { silent?: boolean } = {}) => {
     try {
-      setLoadingList(true)
+      if (!options.silent) {
+        setLoadingList(true)
+      }
       setErrorMessage('')
       const params = new URLSearchParams()
       // Always pass account_id - use 'all' for unified view
@@ -458,12 +479,25 @@ export default function MailboxPage() {
         return
       }
       const data = await response.json()
+      console.log('📤 Sent emails API response:', {
+        success: data?.success,
+        total: data?.emails?.length,
+        pagination: data?.pagination,
+        sample: data?.emails?.slice?.(0, 1)
+      })
+      if (data?.success === false) {
+        setErrorMessage(data?.error || 'Failed to load sent emails')
+        setSentEmails([])
+        return
+      }
       setSentEmails(data.emails || [])
     } catch (error) {
       console.error('Error fetching sent emails:', error)
       setErrorMessage('Failed to load sent emails')
     } finally {
-      setLoadingList(false)
+      if (!options.silent) {
+        setLoadingList(false)
+      }
     }
   }
 
@@ -731,10 +765,10 @@ export default function MailboxPage() {
   }
 
   const handleSync = async () => {
-    const { accountId } = mailboxTarget
+    const { accountId, folder } = mailboxTarget
     try {
       setSyncing(true)
-      setSyncStatus('Syncing...')
+      setSyncStatus('Syncing mailbox...')
       const response = await fetch('/api/inbox/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -744,8 +778,14 @@ export default function MailboxPage() {
         const data = await response.json().catch(() => ({}))
         throw new Error(data.error || 'Sync failed')
       }
+      if (folder === 'inbox') {
+        await fetchInboxEmails(accountId)
+        await fetchSentEmails(accountId, { silent: true })
+      } else {
+        await fetchSentEmails(accountId)
+        await fetchInboxEmails(accountId, { silent: true })
+      }
       setSyncStatus('Sync completed')
-      await fetchInboxEmails(accountId)
       setTimeout(() => setSyncStatus(''), 2500)
     } catch (error: any) {
       console.error('Sync error:', error)
@@ -1095,7 +1135,7 @@ export default function MailboxPage() {
   }
 
   const renderSentListItem = (email: SentEmail) => {
-    const to = getContactDisplayName(email.contacts) || 'Unknown recipient'
+    const to = getContactDisplayName(email.contacts) || email.contacts?.email || email.to_address || 'Unknown recipient'
     const preview = email.content ? email.content.slice(0, 120) : ''
     const isActive = selectedItem?.type === 'outbox' && selectedItem.email.id === email.id
     return (
@@ -1299,7 +1339,7 @@ export default function MailboxPage() {
     }
 
     const email = selectedItem.email
-    const toDisplay = getContactDisplayName(email.contacts) || email.contacts?.email || 'Unknown recipient'
+    const toDisplay = getContactDisplayName(email.contacts) || email.contacts?.email || email.to_address || 'Unknown recipient'
     const sentAt = email.sent_at ? new Date(email.sent_at).toLocaleString() : null
 
     return (
@@ -1571,17 +1611,15 @@ export default function MailboxPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {mailboxTarget.folder === 'inbox' && (
-                    <Button
-                      onClick={handleSync}
-                      disabled={syncing}
-                      variant="outline"
-                      className="rounded-2xl border-white/40 bg-white/20 text-sm font-semibold text-white hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <RefreshCw className={clsx('mr-2 h-4 w-4', syncing && 'animate-spin')} />
-                      Sync
-                    </Button>
-                  )}
+                  <Button
+                    onClick={handleSync}
+                    disabled={syncing}
+                    variant="outline"
+                    className="rounded-2xl border-white/40 bg-white/20 text-sm font-semibold text-white hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RefreshCw className={clsx('mr-2 h-4 w-4', syncing && 'animate-spin')} />
+                    Sync
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

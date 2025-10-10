@@ -38,6 +38,12 @@ export interface IMAPSyncResult {
   lastProcessedUID: number
 }
 
+export interface IMAPSentSyncResult {
+  totalProcessed: number
+  newEmails: number
+  errors: string[]
+}
+
 /**
  * Core IMAP email processing service
  */
@@ -50,12 +56,13 @@ export class IMAPProcessor {
   }
 
   /**
-   * Discover Trash folder using special-use attributes, with common fallbacks
+   * Flatten IMAP mailbox tree for easier lookup
    */
-  async findTrashMailbox(): Promise<string | null> {
+  private async getFlattenedMailboxes(): Promise<Array<{ path: string; attribs: string[] }>> {
+    if (!this.imap) return []
+
     return new Promise((resolve, reject) => {
-      if (!this.imap) return resolve(null)
-      this.imap.getBoxes((err, boxes) => {
+      this.imap!.getBoxes((err, boxes) => {
         if (err) return reject(err)
 
         const flatten = (tree: any, prefix = ''): Array<{ path: string; attribs: string[] }> => {
@@ -64,20 +71,124 @@ export class IMAPProcessor {
             const box = tree[name]
             const path = prefix ? `${prefix}${box.delimiter}${name}` : name
             result.push({ path, attribs: box.attribs || [] })
-            if (box.children) result.push(...flatten(box.children, path))
+            if (box.children) {
+              result.push(...flatten(box.children, path))
+            }
           }
           return result
         }
 
-        const flat = flatten(boxes)
-        const byAttr = flat.find(b => (b.attribs || []).some((a: string) => /\\Trash/i.test(a)))
-        if (byAttr) return resolve(byAttr.path)
-
-        const candidates = ['Trash', '[Gmail]/Trash', 'Deleted Items', 'Deleted Messages', 'Bin']
-        const found = flat.find(b => candidates.includes(b.path))
-        resolve(found ? found.path : null)
+        resolve(flatten(boxes))
       })
     })
+  }
+
+  private findMailboxByAttribute(
+    boxes: Array<{ path: string; attribs: string[] }>,
+    attributePattern: RegExp,
+    fallbackNames: string[]
+  ): string | null {
+    const byAttribute = boxes.find(box => (box.attribs || []).some(attr => attributePattern.test(attr)))
+    if (byAttribute) {
+      return byAttribute.path
+    }
+
+    const normalize = (value: string) => value?.toLowerCase().replace(/\s+/g, ' ').trim()
+    const fallback = boxes.find(box => {
+      const normalizedPath = normalize(box.path)
+      const pathSegments = normalizedPath
+        .split(/[/\\.\-–—]/)
+        .map(segment => segment.trim())
+        .filter(Boolean)
+
+      return fallbackNames.some(name => {
+        const normalizedName = normalize(name)
+        return (
+          normalizedPath === normalizedName ||
+          pathSegments.includes(normalizedName) ||
+          normalizedPath.includes(`${normalizedName} `) ||
+          normalizedPath.endsWith(normalizedName)
+        )
+      })
+    })
+
+    return fallback ? fallback.path : null
+  }
+
+  /**
+   * Discover Trash folder using special-use attributes, with common fallbacks
+   */
+  async findTrashMailbox(): Promise<string | null> {
+    if (!this.imap) return null
+    const boxes = await this.getFlattenedMailboxes()
+    return this.findMailboxByAttribute(boxes, /\\Trash/i, ['Trash', '[Gmail]/Trash', 'Deleted Items', 'Deleted Messages', 'Bin'])
+  }
+
+  /**
+   * Discover Sent mailbox using special-use attributes and common folder names
+   */
+  async findSentMailbox(): Promise<string | null> {
+    if (!this.imap) return null
+    const boxes = await this.getFlattenedMailboxes()
+
+    console.log(`🔍 Searching for sent mailbox. Available mailboxes: ${boxes.map(b => b.path).join(', ')}`)
+
+    const fallbackNames = [
+      'Sent',
+      'Sent Mail',
+      'Sent Items',
+      'Sent Messages',
+      '[Gmail]/Sent Mail',
+      'Outbox',
+      'Gesendet',
+      'Envoyés',
+      'Enviados',
+      'Postausgang',
+      'Sent Folder'
+    ]
+
+    const found = this.findMailboxByAttribute(boxes, /\\Sent/i, fallbackNames)
+
+    if (found) {
+      console.log(`✅ Found sent mailbox: "${found}"`)
+    } else {
+      console.warn(`⚠️ No sent mailbox found. Tried: ${fallbackNames.join(', ')}`)
+      console.warn(`⚠️ Available folders: ${boxes.map(b => b.path).join(', ')}`)
+    }
+
+    return found
+  }
+
+  private async getLatestOutgoingTimestamp(emailAccountId: string): Promise<Date | null> {
+    const { data, error } = await this.supabase
+      .from('outgoing_emails')
+      .select('date_sent')
+      .eq('email_account_id', emailAccountId)
+      .order('date_sent', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('⚠️ Failed to read latest outgoing email timestamp:', error)
+    }
+
+    if (data?.date_sent) {
+      const parsed = new Date(data.date_sent)
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed
+      }
+    }
+
+    return null
+  }
+
+  private formatImapSearchDate(date: Date): string {
+    // Format as IMAP-friendly date (e.g., 09-Oct-2025)
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const day = date.getUTCDate().toString().padStart(2, '0')
+    const month = months[date.getUTCMonth()]
+    const year = date.getUTCFullYear()
+    return `${day}-${month}-${year}`
   }
 
   /**
@@ -371,6 +482,84 @@ export class IMAPProcessor {
   }
 
   /**
+   * Sync sent emails from IMAP server into outgoing_emails
+   */
+  async syncSentEmails(
+    userId: string,
+    emailAccountId: string,
+    config: IMAPConfig,
+    options: { lookbackDays?: number; maxMessages?: number } = {}
+  ): Promise<IMAPSentSyncResult> {
+    const result: IMAPSentSyncResult = {
+      totalProcessed: 0,
+      newEmails: 0,
+      errors: []
+    }
+
+    const lookbackDays = options.lookbackDays ?? 120
+    const maxMessages = options.maxMessages ?? 200
+
+    try {
+      await this.connect(config)
+
+      if (!this.imap) {
+        throw new Error('Failed to establish IMAP connection')
+      }
+
+      const sentMailbox = await this.findSentMailbox()
+      if (!sentMailbox) {
+        const warning = 'Sent mailbox not found for this provider'
+        console.warn(`⚠️ ${warning}`)
+        result.errors.push(warning)
+        await this.disconnect()
+        return result
+      }
+
+      await this.openMailbox(sentMailbox)
+
+      let sinceDate = await this.getLatestOutgoingTimestamp(emailAccountId)
+      if (sinceDate) {
+        sinceDate = new Date(sinceDate.getTime() - 7 * 24 * 60 * 60 * 1000) // 7-day overlap to avoid gaps
+      } else {
+        sinceDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
+      }
+
+      const criteria: any[] = sinceDate
+        ? [['SINCE', this.formatImapSearchDate(sinceDate)]]
+        : ['ALL']
+
+      const uids = await this.searchMailbox(criteria)
+      if (!uids || uids.length === 0) {
+        await this.disconnect()
+        return result
+      }
+
+      const sorted = uids.sort((a, b) => a - b)
+      const limited = sorted.slice(-maxMessages)
+      result.totalProcessed = limited.length
+
+      const batchSize = 50
+      for (let i = 0; i < limited.length; i += batchSize) {
+        const batch = limited.slice(i, i + batchSize)
+        try {
+          await this.processSentBatch(batch, userId, emailAccountId, result)
+        } catch (error: any) {
+          console.error(`❌ Error processing sent batch ${i}-${i + batchSize}:`, error)
+          result.errors.push(`Sent batch ${i}-${i + batchSize}: ${error.message}`)
+        }
+      }
+
+      await this.disconnect()
+      return result
+    } catch (error: any) {
+      console.error('❌ IMAP sent sync error:', error)
+      result.errors.push(error.message || 'Unknown IMAP sent sync error')
+      await this.disconnect()
+      return result
+    }
+  }
+
+  /**
    * Open mailbox
    */
   private async openMailbox(boxName: string): Promise<void> {
@@ -424,6 +613,23 @@ export class IMAPProcessor {
     })
   }
 
+  private async searchMailbox(criteria: any[]): Promise<number[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.imap) {
+        reject(new Error('IMAP not connected'))
+        return
+      }
+
+      this.imap.search(criteria, (err, uids) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(uids || [])
+        }
+      })
+    })
+  }
+
   /**
    * Process a batch of emails
    */
@@ -457,6 +663,41 @@ export class IMAPProcessor {
 
       fetch.once('end', () => {
         console.log(`✅ Processed batch of ${uids.length} emails`)
+        resolve()
+      })
+    })
+  }
+
+  private async processSentBatch(
+    uids: number[],
+    userId: string,
+    emailAccountId: string,
+    result: IMAPSentSyncResult
+  ): Promise<void> {
+    if (!this.imap || uids.length === 0) return
+
+    return new Promise((resolve, reject) => {
+      const fetch = this.imap!.fetch(uids, {
+        bodies: '',
+        struct: true,
+        envelope: true
+      })
+
+      fetch.on('message', (msg, seqno) => {
+        this.processSentMessage(msg, seqno, userId, emailAccountId, result)
+          .catch(error => {
+            console.error(`❌ Error processing sent message ${seqno}:`, error)
+            result.errors.push(`Sent message ${seqno}: ${error.message}`)
+          })
+      })
+
+      fetch.once('error', (err) => {
+        console.error('❌ Sent fetch error:', err)
+        reject(err)
+      })
+
+      fetch.once('end', () => {
+        console.log(`✅ Processed sent batch of ${uids.length} emails`)
         resolve()
       })
     })
@@ -503,6 +744,48 @@ export class IMAPProcessor {
         } catch (error) {
           console.error(`❌ Error parsing email ${seqno}:`, error)
           result.errors.push(`Parse error ${seqno}: ${error.message}`)
+          reject(error)
+        }
+      })
+    })
+  }
+
+  private async processSentMessage(
+    msg: Imap.ImapMessage,
+    seqno: number,
+    userId: string,
+    emailAccountId: string,
+    result: IMAPSentSyncResult
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let buffer = ''
+      let attributes: any = null
+
+      msg.on('body', (stream) => {
+        stream.on('data', (chunk) => {
+          buffer += chunk.toString('utf8')
+        })
+      })
+
+      msg.once('attributes', (attrs) => {
+        attributes = attrs
+      })
+
+      msg.once('end', async () => {
+        try {
+          const parsed = await simpleParser(buffer)
+          const processedEmail = this.convertParsedEmail(parsed, attributes)
+          const inserted = await this.storeOutgoingEmail(processedEmail, userId, emailAccountId)
+          if (inserted) {
+            result.newEmails++
+            console.log(`✅ Inserted sent email: "${processedEmail.subject}" (UID: ${processedEmail.imapUid})`)
+          } else {
+            console.log(`⏭️ Skipped duplicate sent email: "${processedEmail.subject}" (UID: ${processedEmail.imapUid})`)
+          }
+          resolve()
+        } catch (error) {
+          console.error(`❌ Error parsing sent email ${seqno}:`, error)
+          result.errors.push(`Sent parse error ${seqno}: ${error.message}`)
           reject(error)
         }
       })
@@ -601,6 +884,77 @@ export class IMAPProcessor {
         throw new Error(`Database insert failed: ${fallbackError.message}`)
       }
     }
+  }
+
+  /**
+   * Store outgoing/sent email in database
+   */
+  private async storeOutgoingEmail(
+    email: ProcessedEmail,
+    userId: string,
+    emailAccountId: string
+  ): Promise<boolean> {
+    const messageId = email.messageId || `generated-${Date.now()}-${Math.random()}`
+
+    // Check for duplicates by UID
+    if (email.imapUid) {
+      const { data, error } = await this.supabase
+        .from('outgoing_emails')
+        .select('id')
+        .eq('email_account_id', emailAccountId)
+        .eq('imap_uid', email.imapUid)
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('⚠️ Failed to lookup outgoing email by UID:', error)
+      }
+
+      if (data) {
+        console.log(`⏭️ Skipping duplicate sent email (UID: ${email.imapUid}): "${email.subject}"`)
+        return false
+      }
+    }
+
+    // Check for duplicates by message_id
+    const { data: existingByMessage, error: messageError } = await this.supabase
+      .from('outgoing_emails')
+      .select('id')
+      .eq('email_account_id', emailAccountId)
+      .eq('message_id', messageId)
+      .maybeSingle()
+
+    if (messageError && messageError.code !== 'PGRST116') {
+      console.error('⚠️ Failed to lookup outgoing email by message_id:', messageError)
+    }
+
+    if (existingByMessage) {
+      console.log(`⏭️ Skipping duplicate sent email (Message-ID: ${messageId}): "${email.subject}"`)
+      return false
+    }
+
+    // Insert new sent email
+    const payload: Record<string, any> = {
+      user_id: userId,
+      email_account_id: emailAccountId,
+      message_id: messageId,
+      from_address: email.from || 'unknown@unknown.com',
+      to_address: email.to || null,
+      subject: email.subject || '(No Subject)',
+      text_content: email.textContent || null,
+      html_content: email.htmlContent || null,
+      date_sent: email.dateReceived?.toISOString() || new Date().toISOString(),
+      imap_uid: email.imapUid || null
+    }
+
+    const { error } = await this.supabase.from('outgoing_emails').insert(payload)
+
+    if (error) {
+      console.error('❌ Error storing outgoing email:', error)
+      throw new Error(`Outgoing email insert failed: ${error.message}`)
+    }
+
+    console.log(`✅ Stored outgoing email: "${email.subject}" (UID: ${email.imapUid}, Message-ID: ${messageId})`)
+    return true
   }
 
   /**
