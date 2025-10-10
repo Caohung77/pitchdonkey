@@ -95,8 +95,7 @@ export function EnrichmentProgressBar({
   return (
     <Card className={cn('p-4 space-y-3', className)}>
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        <h3 className="text-sm font-semibold">
           Contact Enrichment in Progress
         </h3>
         <span className="text-xs text-muted-foreground">

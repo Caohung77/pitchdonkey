@@ -507,11 +507,18 @@ export class ReplyProcessor {
     classification: EmailClassificationResult,
     context: any
   ): Promise<ReplyAction | null> {
+    const accountId = email.email_account_id
+
+    if (!accountId) {
+      console.log('⏭️ Incoming email missing email_account_id, skipping autonomous draft')
+      return null
+    }
+
     // Find the email account that received this email
     const { data: emailAccount, error: emailAccountError } = await this.supabase
       .from('email_accounts')
       .select('id, email, assigned_agent_id, user_id')
-      .eq('email', email.to_address)
+      .eq('id', accountId)
       .eq('user_id', email.user_id)
       .single()
 
