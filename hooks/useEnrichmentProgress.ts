@@ -30,6 +30,7 @@ interface BulkEnrichmentJob {
 
 export function useEnrichmentProgress(userId: string | undefined) {
   const [activeJobs, setActiveJobs] = useState<Map<string, EnrichmentProgress>>(new Map())
+  const [staleJobRecovery, setStaleJobRecovery] = useState<Set<string>>(new Set())
   const supabase = createClientSupabase()
 
   // Fetch initial active jobs
@@ -166,9 +167,90 @@ export function useEnrichmentProgress(userId: string | undefined) {
       }
     }, 3000)
 
+    // Stale job detection: Check for jobs stuck >2 minutes without updates
+    const staleJobInterval = setInterval(async () => {
+      if (activeJobs.size === 0) return
+
+      const now = Date.now()
+      const STALE_THRESHOLD_MS = 2 * 60 * 1000 // 2 minutes
+
+      for (const [jobId, job] of activeJobs.entries()) {
+        // Skip if job not active or already being recovered
+        if (!job.isActive || staleJobRecovery.has(jobId)) continue
+
+        // Fetch latest job data to check updated_at timestamp
+        const { data: jobData, error } = await supabase
+          .from('bulk_enrichment_jobs')
+          .select('updated_at, progress, status')
+          .eq('id', jobId)
+          .single()
+
+        if (error || !jobData) continue
+
+        const updatedAt = new Date(jobData.updated_at).getTime()
+        const age = now - updatedAt
+        const progress = jobData.progress as any
+        const hasRemainingWork = (progress?.completed || 0) + (progress?.failed || 0) < (progress?.total || 0)
+
+        // Job is stale if: running + no updates >2min + has remaining work
+        if (jobData.status === 'running' && age > STALE_THRESHOLD_MS && hasRemainingWork) {
+          console.warn(`🚨 STALE JOB DETECTED: ${jobId}`)
+          console.warn(`   Age: ${Math.round(age / 1000)}s (threshold: ${STALE_THRESHOLD_MS / 1000}s)`)
+          console.warn(`   Progress: ${progress?.completed || 0}/${progress?.total || 0}`)
+          console.warn(`   Status: ${jobData.status}`)
+          console.warn(`   Triggering manual recovery...`)
+
+          // Mark as recovering to prevent duplicate recovery attempts
+          setStaleJobRecovery(prev => new Set(prev).add(jobId))
+
+          // Trigger manual recovery by calling the processor endpoint
+          try {
+            const response = await fetch('/api/contacts/bulk-enrich/process', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: jobId })
+            })
+
+            if (response.ok) {
+              console.log(`✅ Successfully triggered recovery for stale job ${jobId}`)
+              // Remove from recovery set after 30 seconds
+              setTimeout(() => {
+                setStaleJobRecovery(prev => {
+                  const next = new Set(prev)
+                  next.delete(jobId)
+                  return next
+                })
+              }, 30000)
+            } else {
+              console.error(`❌ Failed to recover stale job ${jobId}:`, await response.text())
+              // Retry recovery after 1 minute
+              setTimeout(() => {
+                setStaleJobRecovery(prev => {
+                  const next = new Set(prev)
+                  next.delete(jobId)
+                  return next
+                })
+              }, 60000)
+            }
+          } catch (error) {
+            console.error(`❌ Exception recovering stale job ${jobId}:`, error)
+            // Retry recovery after 1 minute
+            setTimeout(() => {
+              setStaleJobRecovery(prev => {
+                const next = new Set(prev)
+                next.delete(jobId)
+                return next
+              })
+            }, 60000)
+          }
+        }
+      }
+    }, 30000) // Check every 30 seconds
+
     return () => {
       console.log('🔌 Unsubscribing from enrichment jobs channel')
       clearInterval(pollInterval)
+      clearInterval(staleJobInterval)
       supabase.removeChannel(channel)
     }
   }, [userId, supabase, fetchActiveJobs, activeJobs.size])

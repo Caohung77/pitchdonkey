@@ -99,6 +99,7 @@ export class OutreachAgentDraftService {
     // 7. Create reply job in database
     const replyJobId = await this.createReplyJob(userId, {
       agentId: request.agentId,
+      agentName: agent.name,
       emailAccountId: request.emailAccountId,
       incomingEmailId: request.incomingEmailId,
       threadId: request.threadId,
@@ -520,6 +521,7 @@ Do not include any commentary or meta-text. Only output the subject and body.`
     userId: string,
     jobData: {
       agentId: string
+      agentName?: string
       emailAccountId: string
       incomingEmailId: string
       threadId: string
@@ -568,7 +570,66 @@ Do not include any commentary or meta-text. Only output the subject and body.`
       throw new Error(`Failed to create reply job: ${error.message}`)
     }
 
+    await this.createNotificationForReplyJob(userId, {
+      ...jobData,
+      replyJobId: data.id
+    })
+
     return data.id
+  }
+
+  private async createNotificationForReplyJob(
+    userId: string,
+    jobData: {
+      replyJobId: string
+      agentId: string
+      agentName?: string
+      draftSubject: string
+      scheduledAt: Date
+      editableUntil: Date
+      status: 'scheduled' | 'needs_approval'
+    }
+  ): Promise<void> {
+    try {
+      const title =
+        jobData.status === 'needs_approval'
+          ? 'Reply draft needs approval'
+          : `Reply scheduled by ${jobData.agentName || 'Outreach agent'}`
+
+      const scheduledAtIso = jobData.scheduledAt.toISOString()
+      const editableUntilIso = jobData.editableUntil.toISOString()
+
+      const message =
+        jobData.status === 'needs_approval'
+          ? `Review "${jobData.draftSubject || 'Untitled reply'}" before ${new Date(editableUntilIso).toLocaleString()}.`
+          : `"${jobData.draftSubject || 'Untitled reply'}" will send automatically at ${new Date(scheduledAtIso).toLocaleString()}.`
+
+      const notificationPayload = {
+        user_id: userId,
+        type: jobData.status === 'needs_approval' ? 'warning' : 'success',
+        title,
+        message,
+        data: {
+          reply_job_id: jobData.replyJobId,
+          agent_id: jobData.agentId,
+          agent_name: jobData.agentName,
+          status: jobData.status,
+          draft_subject: jobData.draftSubject,
+          scheduled_at: scheduledAtIso,
+          editable_until: editableUntilIso,
+        },
+      }
+
+      const { error } = await this.supabase
+        .from('notifications')
+        .insert(notificationPayload)
+
+      if (error) {
+        console.warn('⚠️ Failed to record notification for reply job:', error)
+      }
+    } catch (error) {
+      console.warn('⚠️ Unexpected error while creating reply notification:', error)
+    }
   }
 }
 

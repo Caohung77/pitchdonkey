@@ -85,7 +85,7 @@ export const POST = withAuth(async (
           try {
             const result = await syncEmailAccount(supabase, account.id)
             results.push(result)
-            totalNewEmails += result.newEmails
+            totalNewEmails += (result.newEmails || 0) + (result.newSentEmails || 0)
             console.log(`✅ ${account.email}: ${result.newEmails} new emails`)
           } catch (error) {
             console.error(`❌ Failed to sync ${account.email}:`, error)
@@ -227,7 +227,7 @@ async function syncEmailAccount(supabase: any, accountId: string) {
   // Get current IMAP connection to find last processed UID
   const { data: connection } = await supabase
     .from('imap_connections')
-    .select('last_processed_uid')
+    .select('last_processed_uid, consecutive_failures, last_successful_connection')
     .eq('email_account_id', account.id)
     .single()
 
@@ -250,36 +250,40 @@ async function syncEmailAccount(supabase: any, accountId: string) {
     console.error('❌ Sync errors:', syncResult.errors)
   }
 
-  // Update connection status if sync succeeded
-  if (syncResult.errors.length === 0) {
-    await supabase
-      .from('imap_connections')
-      .update({
-        status: 'active',
-        last_sync_at: new Date().toISOString(),
-        next_sync_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        last_processed_uid: syncResult.lastProcessedUID,
-        consecutive_failures: 0,
-        last_successful_connection: new Date().toISOString(),
-        last_error: null
-      })
-      .eq('email_account_id', account.id)
-  } else {
-    await supabase
-      .from('imap_connections')
-      .update({
-        status: 'error',
-        last_sync_at: new Date().toISOString(),
-        last_error: syncResult.errors.join('; ')
-      })
-      .eq('email_account_id', account.id)
+  const sentResult = await imapProcessor.syncSentEmails(
+    account.user_id,
+    account.id,
+    imapConfig
+  )
+
+  if (sentResult.errors.length > 0) {
+    console.error('❌ Sent sync errors:', sentResult.errors)
   }
 
+  const combinedErrors = [...syncResult.errors, ...sentResult.errors]
+  const success = combinedErrors.length === 0
+  const failureCount = success ? 0 : (connection?.consecutive_failures || 0) + 1
+
+  // Update connection status if sync succeeded
+  await supabase
+    .from('imap_connections')
+    .upsert({
+      email_account_id: account.id,
+      status: success ? 'active' : 'error',
+      last_sync_at: new Date().toISOString(),
+      next_sync_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      last_processed_uid: syncResult.lastProcessedUID,
+      consecutive_failures: failureCount,
+      last_successful_connection: success ? new Date().toISOString() : connection?.last_successful_connection,
+      last_error: success ? null : combinedErrors.join('; ')
+    }, { onConflict: 'email_account_id' })
+
   return {
-    success: syncResult.errors.length === 0,
+    success,
     newEmails: syncResult.newEmails,
+    newSentEmails: sentResult.newEmails,
     totalProcessed: syncResult.totalProcessed,
-    errors: syncResult.errors,
+    errors: combinedErrors,
     account: account.email
   }
 }
@@ -615,7 +619,7 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
         email_account_id: account.id,
         status: 'active',
         last_sync_at: new Date().toISOString(),
-        next_sync_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        next_sync_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
         total_emails_processed: (await supabase
           .from('incoming_emails')
           .select('id', { count: 'exact', head: true })

@@ -16,6 +16,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
     // This gives us the same fast performance as inbox (~100ms vs ~3000ms with Gmail API)
 
     // Build query for outgoing_emails (Gmail sent emails stored in DB)
+    // Using LEFT JOIN to show emails even if email_account is deleted/inactive
     let outgoingQuery = supabase
       .from('outgoing_emails')
       .select(`
@@ -28,7 +29,7 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         html_content,
         created_at,
         email_account_id,
-        email_accounts!inner (
+        email_accounts!left (
           id,
           email,
           provider
@@ -96,6 +97,17 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
 
     const { data: outgoingEmails, error: outgoingError, count: outgoingCount } = outgoingResult
     const { data: campaignEmails, error: campaignError, count: campaignCount } = campaignResult
+
+    // Diagnostic logging for debugging
+    console.log(`📧 Sent emails query results:
+  - User ID: ${user.id}
+  - Account ID filter: ${accountId || 'all'}
+  - Outgoing emails count: ${outgoingCount || 0}
+  - Campaign emails count: ${campaignCount || 0}
+  - Outgoing emails fetched: ${outgoingEmails?.length || 0}
+  - Campaign emails fetched: ${campaignEmails?.length || 0}
+  - Search filter: ${search || 'none'}
+  - Status filter: ${status || 'all'}`)
 
     // Combine both sources
     const allEmails = [

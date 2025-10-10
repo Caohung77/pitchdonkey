@@ -486,16 +486,7 @@ export class BulkContactEnrichmentService {
     const results: Array<{ contact_id: string; success: boolean; error?: string }> = []
     const CONTACT_TIMEOUT = 120000 // 2 minutes max per contact
 
-    // Get current cumulative progress at the start of the batch
-    const supabase = await createServerSupabaseClient()
-    const { data: jobData } = await supabase
-      .from('bulk_enrichment_jobs')
-      .select('progress')
-      .eq('id', jobId)
-      .single()
-
-    const cumulativeProgress = (jobData?.progress as any) || { completed: 0, failed: 0 }
-    console.log(`📊 Starting batch with cumulative progress: ${cumulativeProgress.completed} completed, ${cumulativeProgress.failed} failed`)
+    console.log(`📦 Processing batch with ${contactIds.length} contacts`)
 
     // Process contacts sequentially within the batch for better progress visibility
     for (const contactId of contactIds) {
@@ -558,9 +549,9 @@ export class BulkContactEnrichmentService {
 
         if (result.success) {
           console.log(`✅ Contact ${contactId} enriched successfully`)
-          
+
           // Handle different result structures
-          const enrichmentData = contact.website 
+          const enrichmentData = contact.website
             ? {
                 enrichment_data: result.data,
                 website_url: result.website_url,
@@ -574,21 +565,27 @@ export class BulkContactEnrichmentService {
                 secondary_source: result.secondary_source,
                 scraped_at: new Date().toISOString()
               }
-          
+
           await this.updateContactResult(jobId, contactId, 'completed', enrichmentData)
           results.push({ contact_id: contactId, success: true })
 
-          // Update job progress after each successful contact (CUMULATIVE)
-          const batchCompleted = results.filter(r => r.success).length
-          const batchFailed = results.filter(r => !r.success).length
-          const totalCompleted = cumulativeProgress.completed + batchCompleted
-          const totalFailed = cumulativeProgress.failed + batchFailed
+          // FIXED: Fetch fresh progress from DB to avoid double-counting
+          const supabase = await createServerSupabaseClient()
+          const { data: freshJobData } = await supabase
+            .from('bulk_enrichment_jobs')
+            .select('progress')
+            .eq('id', jobId)
+            .single()
+
+          const currentProgress = (freshJobData?.progress as any) || { completed: 0, failed: 0 }
+
+          // Increment by 1 (this contact)
           await this.updateJobProgress(jobId, {
-            completed: totalCompleted,
-            failed: totalFailed
+            completed: currentProgress.completed + 1,
+            failed: currentProgress.failed
           })
-          console.log(`📊 Progress updated: ${totalCompleted} completed, ${totalFailed} failed (batch: +${batchCompleted}/+${batchFailed})`)
-          
+          console.log(`📊 Progress updated: ${currentProgress.completed + 1} completed, ${currentProgress.failed} failed`)
+
         } else {
           console.log(`❌ Contact ${contactId} enrichment failed: ${result.error}`)
           await this.updateContactResult(jobId, contactId, 'failed', {
@@ -601,16 +598,22 @@ export class BulkContactEnrichmentService {
           })
           results.push({ contact_id: contactId, success: false, error: result.error })
 
-          // Update job progress after each failed contact (CUMULATIVE)
-          const batchCompleted = results.filter(r => r.success).length
-          const batchFailed = results.filter(r => !r.success).length
-          const totalCompleted = cumulativeProgress.completed + batchCompleted
-          const totalFailed = cumulativeProgress.failed + batchFailed
+          // FIXED: Fetch fresh progress from DB to avoid double-counting
+          const supabase = await createServerSupabaseClient()
+          const { data: freshJobData } = await supabase
+            .from('bulk_enrichment_jobs')
+            .select('progress')
+            .eq('id', jobId)
+            .single()
+
+          const currentProgress = (freshJobData?.progress as any) || { completed: 0, failed: 0 }
+
+          // Increment failed by 1 (this contact)
           await this.updateJobProgress(jobId, {
-            completed: totalCompleted,
-            failed: totalFailed
+            completed: currentProgress.completed,
+            failed: currentProgress.failed + 1
           })
-          console.log(`📊 Progress updated: ${totalCompleted} completed, ${totalFailed} failed (batch: +${batchCompleted}/+${batchFailed})`)
+          console.log(`📊 Progress updated: ${currentProgress.completed} completed, ${currentProgress.failed + 1} failed`)
         }
 
       } catch (error) {
@@ -631,18 +634,24 @@ export class BulkContactEnrichmentService {
 
         results.push({ contact_id: contactId, success: false, error: errorMessage })
 
-        // CRITICAL: Always update progress even if contact failed (CUMULATIVE)
-        // This ensures the job doesn't get stuck
+        // CRITICAL: Always update progress even if contact failed
+        // FIXED: Fetch fresh progress from DB to avoid double-counting
         try {
-          const batchCompleted = results.filter(r => r.success).length
-          const batchFailed = results.filter(r => !r.success).length
-          const totalCompleted = cumulativeProgress.completed + batchCompleted
-          const totalFailed = cumulativeProgress.failed + batchFailed
+          const supabase = await createServerSupabaseClient()
+          const { data: freshJobData } = await supabase
+            .from('bulk_enrichment_jobs')
+            .select('progress')
+            .eq('id', jobId)
+            .single()
+
+          const currentProgress = (freshJobData?.progress as any) || { completed: 0, failed: 0 }
+
+          // Increment failed by 1 (this contact)
           await this.updateJobProgress(jobId, {
-            completed: totalCompleted,
-            failed: totalFailed
+            completed: currentProgress.completed,
+            failed: currentProgress.failed + 1
           })
-          console.log(`📊 Progress updated after failure: ${totalCompleted} completed, ${totalFailed} failed (batch: +${batchCompleted}/+${batchFailed})`)
+          console.log(`📊 Progress updated after exception: ${currentProgress.completed} completed, ${currentProgress.failed + 1} failed`)
         } catch (progressError) {
           console.error('Failed to update progress after contact failure:', progressError)
         }

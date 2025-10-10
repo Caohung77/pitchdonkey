@@ -68,6 +68,14 @@ export class ReplyJobProcessor {
             email,
             first_name,
             last_name
+          ),
+          incoming_email:incoming_emails(
+            id,
+            from_address,
+            to_address,
+            cc_addresses,
+            bcc_addresses,
+            subject
           )
         `)
         .in('status', ['scheduled', 'approved'])
@@ -142,6 +150,14 @@ export class ReplyJobProcessor {
           email,
           first_name,
           last_name
+        ),
+        incoming_email:incoming_emails(
+          id,
+          from_address,
+          to_address,
+          cc_addresses,
+          bcc_addresses,
+          subject
         )
       `)
       .eq('id', jobId)
@@ -292,7 +308,7 @@ export class ReplyJobProcessor {
 
     // Prepare email options with threading headers
     const emailOptions = {
-      to: contact?.email || job.incoming_email?.from_address,
+      to: this.resolveRecipient(job),
       subject: job.draft_subject,
       text: job.draft_body,
       html: this.convertTextToHTML(job.draft_body),
@@ -303,6 +319,10 @@ export class ReplyJobProcessor {
     }
 
     // Send based on provider
+    if (!emailOptions.to) {
+      throw new Error('No recipients defined')
+    }
+
     if (emailAccount.provider === 'gmail' || emailAccount.provider === 'gmail-imap-smtp') {
       return await this.sendViaGmail(emailAccount, emailOptions)
     } else if (emailAccount.provider === 'smtp') {
@@ -405,6 +425,17 @@ export class ReplyJobProcessor {
       return `<p>${lines}</p>`
     })
     return htmlParagraphs.join('\n')
+  }
+
+  private resolveRecipient(job: any): string | null {
+    const candidate = job.recipient_email
+      || job.contact?.email
+      || job.incoming_email?.from_address
+
+    if (!candidate) return null
+
+    const match = candidate.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+    return match ? match[0] : candidate.trim() || null
   }
 
   /**
