@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Sparkles, User, MessageSquare, Brain, Database, Check, Loader2, Globe, Type, FileText } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Sparkles, User, MessageSquare, Brain, Database, Check, Loader2, Globe, Type, FileText, Plus, Trash2, Upload, File } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -41,6 +41,16 @@ export default function CreatePersonaPage() {
   const [loading, setLoading] = useState(false)
   const [smartFillLoading, setSmartFillLoading] = useState(false)
   const [smartFillUrl, setSmartFillUrl] = useState('')
+
+  // Knowledge form state
+  const [showAddKnowledge, setShowAddKnowledge] = useState(false)
+  const [knowledgeType, setKnowledgeType] = useState<'text' | 'link' | 'pdf'>('text')
+  const [knowledgeForm, setKnowledgeForm] = useState({
+    title: '',
+    description: '',
+    content: '',
+    url: ''
+  })
 
   // Form data
   const [formData, setFormData] = useState({
@@ -162,6 +172,22 @@ export default function CreatePersonaPage() {
       const response = await ApiClient.post('/api/ai-personas', payload)
 
       if (response.success) {
+        const personaId = response.data.id
+
+        // Add knowledge items if any
+        if (formData.knowledge_items.length > 0) {
+          toast.info(`Adding ${formData.knowledge_items.length} knowledge items...`)
+
+          for (const item of formData.knowledge_items) {
+            try {
+              await ApiClient.post(`/api/ai-personas/${personaId}/knowledge`, item)
+            } catch (knowledgeError: any) {
+              console.error('Error adding knowledge item:', knowledgeError)
+              // Continue with other items even if one fails
+            }
+          }
+        }
+
         toast.success('AI Persona created successfully!')
         router.push('/dashboard/ai-personas')
       } else {
@@ -258,6 +284,55 @@ export default function CreatePersonaPage() {
     } finally {
       setSmartFillLoading(false)
     }
+  }
+
+  const handleAddKnowledge = () => {
+    if (!knowledgeForm.title.trim()) {
+      toast.error('Please enter a title')
+      return
+    }
+
+    if (knowledgeType === 'text' && !knowledgeForm.content.trim()) {
+      toast.error('Please enter content')
+      return
+    }
+
+    if (knowledgeType === 'link' && !knowledgeForm.url.trim()) {
+      toast.error('Please enter a URL')
+      return
+    }
+
+    // Add knowledge item to the list
+    const newItem = {
+      type: knowledgeType,
+      title: knowledgeForm.title,
+      description: knowledgeForm.description,
+      ...(knowledgeType === 'text' ? { content: knowledgeForm.content } : {}),
+      ...(knowledgeType === 'link' ? { url: knowledgeForm.url } : {})
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      knowledge_items: [...prev.knowledge_items, newItem as any]
+    }))
+
+    // Reset form
+    setKnowledgeForm({
+      title: '',
+      description: '',
+      content: '',
+      url: ''
+    })
+    setShowAddKnowledge(false)
+    toast.success('Knowledge item added')
+  }
+
+  const handleRemoveKnowledge = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      knowledge_items: prev.knowledge_items.filter((_, i) => i !== index)
+    }))
+    toast.success('Knowledge item removed')
   }
 
   return (
@@ -811,49 +886,153 @@ export default function CreatePersonaPage() {
           {/* Step 5: Knowledge Base */}
           {currentStep === 5 && (
             <div className="space-y-4">
-              <Card className="bg-primary/5 border-primary/10">
-                <CardContent className="pt-6">
-                  <div className="text-center py-8">
-                    <Database className="h-16 w-16 mx-auto mb-4 text-primary opacity-70" />
-                    <p className="text-lg font-semibold mb-2">Knowledge Base (Optional)</p>
-                    <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
-                      You can add knowledge to your persona after creation. The knowledge base supports:
-                    </p>
+              {!showAddKnowledge && (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    {formData.knowledge_items.length > 0
+                      ? `${formData.knowledge_items.length} knowledge item${formData.knowledge_items.length > 1 ? 's' : ''} added`
+                      : 'No knowledge items added yet (optional)'}
+                  </p>
+                  <Button onClick={() => setShowAddKnowledge(true)} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Knowledge
+                  </Button>
+                </div>
+              )}
 
-                    <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto mt-6">
-                      <div className="bg-background/50 p-4 rounded-lg border">
-                        <Type className="h-8 w-8 mx-auto mb-2 text-primary" />
-                        <p className="font-medium text-sm">Text Content</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Direct text entry
-                        </p>
+              {showAddKnowledge && (
+                <Card className="border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Add Knowledge Item</CardTitle>
+                    <CardDescription>
+                      Add content to enhance your AI persona's knowledge base
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Type</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant={knowledgeType === 'text' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setKnowledgeType('text')}
+                        >
+                          <Type className="h-4 w-4 mr-2" />
+                          Text
+                        </Button>
+                        <Button
+                          variant={knowledgeType === 'link' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setKnowledgeType('link')}
+                        >
+                          <Globe className="h-4 w-4 mr-2" />
+                          URL
+                        </Button>
                       </div>
-
-                      <div className="bg-background/50 p-4 rounded-lg border">
-                        <Globe className="h-8 w-8 mx-auto mb-2 text-primary" />
-                        <p className="font-medium text-sm">Website URLs</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Auto-extract content
-                        </p>
-                      </div>
-
-                      <div className="bg-background/50 p-4 rounded-lg border">
-                        <FileText className="h-8 w-8 mx-auto mb-2 text-primary" />
-                        <p className="font-medium text-sm">PDF Files</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Upload & extract
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-900">
-                      <p className="text-sm text-blue-800 dark:text-blue-200">
-                        💡 <strong>Tip:</strong> Click "Create Persona" and then navigate to the persona detail page to add knowledge items.
+                      <p className="text-xs text-muted-foreground">
+                        Note: PDF upload is available after persona creation
                       </p>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="knowledge_title">Title *</Label>
+                      <Input
+                        id="knowledge_title"
+                        placeholder="e.g., Product Features"
+                        value={knowledgeForm.title}
+                        onChange={(e) => setKnowledgeForm({ ...knowledgeForm, title: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="knowledge_description">Description</Label>
+                      <Input
+                        id="knowledge_description"
+                        placeholder="Brief description"
+                        value={knowledgeForm.description}
+                        onChange={(e) => setKnowledgeForm({ ...knowledgeForm, description: e.target.value })}
+                      />
+                    </div>
+
+                    {knowledgeType === 'text' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="knowledge_content">Content *</Label>
+                        <Textarea
+                          id="knowledge_content"
+                          placeholder="Enter the content here..."
+                          value={knowledgeForm.content}
+                          onChange={(e) => setKnowledgeForm({ ...knowledgeForm, content: e.target.value })}
+                          rows={8}
+                        />
+                      </div>
+                    )}
+
+                    {knowledgeType === 'link' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="knowledge_url">Website URL *</Label>
+                        <Input
+                          id="knowledge_url"
+                          type="url"
+                          placeholder="https://example.com/documentation"
+                          value={knowledgeForm.url}
+                          onChange={(e) => setKnowledgeForm({ ...knowledgeForm, url: e.target.value })}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          The URL will be saved. Content extraction happens after persona creation.
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button onClick={handleAddKnowledge}>
+                        Add Knowledge
+                      </Button>
+                      <Button variant="outline" onClick={() => {
+                        setShowAddKnowledge(false)
+                        setKnowledgeForm({ title: '', description: '', content: '', url: '' })
+                      }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {formData.knowledge_items.length > 0 && (
+                <div className="space-y-2">
+                  {formData.knowledge_items.map((item, index) => (
+                    <Card key={index}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            {item.type === 'text' && <FileText className="h-5 w-5 mt-0.5 text-primary" />}
+                            {item.type === 'link' && <Globe className="h-5 w-5 mt-0.5 text-primary" />}
+                            <div className="flex-1">
+                              <p className="font-medium">{item.title}</p>
+                              {item.description && (
+                                <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
+                              )}
+                              {item.content && (
+                                <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{item.content}</p>
+                              )}
+                              {item.url && (
+                                <p className="text-sm text-primary mt-2">{item.url}</p>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveKnowledge(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </CardContent>
