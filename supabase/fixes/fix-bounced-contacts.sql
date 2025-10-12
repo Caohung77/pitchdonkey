@@ -6,7 +6,7 @@
 SELECT
   id,
   email,
-  engagement_score,
+  engagement_score,x
   status,
   engagement_status,
   unsubscribed_at

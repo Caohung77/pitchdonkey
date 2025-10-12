@@ -91,7 +91,7 @@ export function UnifiedEmailContentEditor({
   const [emailPurpose, setEmailPurpose] = useState(externalEmailPurpose || '')
   const [language, setLanguage] = useState<'English' | 'German'>(externalLanguage || 'English')
   const [searchTerm, setSearchTerm] = useState('')
-  const [showDropdown, setShowDropdown] = useState(false)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [templates, setTemplates] = useState<AITemplate[]>([])
 
   // Personalized Reason state
@@ -245,17 +245,16 @@ export function UnifiedEmailContentEditor({
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showDropdown) {
-        setShowDropdown(false)
-      }
+    if (!isDropdownOpen) return
+
+    const handleClickOutside = () => {
+      setIsDropdownOpen(false)
+      setSearchTerm('')
     }
-    
-    if (showDropdown) {
-      document.addEventListener('click', handleClickOutside)
-      return () => document.removeEventListener('click', handleClickOutside)
-    }
-  }, [showDropdown])
+
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [isDropdownOpen])
 
   // Sync external props with internal state
   useEffect(() => {
@@ -770,6 +769,120 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
     return previewSubject
   }
 
+  const toggleDropdown = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    setIsDropdownOpen(prev => {
+      const next = !prev
+      if (!next) {
+        setSearchTerm('')
+      }
+      return next
+    })
+  }
+
+  const handlePreviousContact = () => {
+    if (contacts.length === 0) return
+    setSelectedContactIndex(prev => Math.max(0, prev - 1))
+  }
+
+  const handleNextContact = () => {
+    if (contacts.length === 0) return
+    setSelectedContactIndex(prev => Math.min(contacts.length - 1, prev + 1))
+  }
+
+  const renderContactSwitcher = () => (
+    <div className="flex items-center space-x-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handlePreviousContact}
+        disabled={selectedContactIndex === 0}
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Previous
+      </Button>
+
+      <div className="relative">
+        <Button
+          variant="outline"
+          onClick={toggleDropdown}
+          className="min-w-[200px] max-w-[250px] justify-between truncate"
+        >
+          <span className="truncate">
+            Contact {contacts.length > 0 ? selectedContactIndex + 1 : 0} of {contacts.length}
+          </span>
+          <ChevronDown className="h-4 w-4 ml-2" />
+        </Button>
+
+        {isDropdownOpen && (
+          <div
+            className="absolute top-full mt-1 w-80 max-w-xs bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-64 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-2 border-b">
+              <div className="relative">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search contacts..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {contacts
+                .map((contact, index) => ({ contact, index }))
+                .filter(({ contact }) =>
+                  searchTerm === '' ||
+                  `${contact.first_name} ${contact.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  contact.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map(({ contact, index }) => (
+                  <button
+                    key={contact.id}
+                    onClick={() => {
+                      setSelectedContactIndex(index)
+                      setActiveDropdown(null)
+                      setSearchTerm('')
+                    }}
+                    className={`w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center space-x-3 ${
+                      index === selectedContactIndex ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">
+                        {contact.first_name} {contact.last_name}
+                      </div>
+                      <div className="text-xs text-gray-500">{contact.email}</div>
+                      {contact.company_name && (
+                        <div className="text-xs text-gray-400">{contact.company_name}</div>
+                      )}
+                    </div>
+                    {generatedEmails.has(contact.id) && (
+                      <Sparkles className="h-3 w-3 text-green-600" />
+                    )}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleNextContact}
+        disabled={selectedContactIndex === contacts.length - 1}
+      >
+        Next
+        <ChevronRight className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+
   return (
     <div className="w-full max-w-full space-y-6 overflow-hidden" style={{ minWidth: 0, maxWidth: '100%' }}>
       {/* Contact Navigation Header */}
@@ -810,100 +923,9 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
 
             {/* Removed AI button from header - moved to better location below */}
           </div>
-          
-          {/* Contact Navigation Controls */}
-          <div className="flex items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedContactIndex(Math.max(0, selectedContactIndex - 1))}
-                disabled={selectedContactIndex === 0}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowDropdown(!showDropdown)}
-                  className="min-w-[200px] max-w-[250px] justify-between truncate"
-                >
-                  <span className="truncate">
-                    Contact {selectedContactIndex + 1} of {contacts.length}
-                  </span>
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </Button>
-                
-                {showDropdown && (
-                  <div className="absolute top-full mt-1 w-80 max-w-xs bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-64 overflow-hidden">
-                    <div className="p-2 border-b">
-                      <div className="relative">
-                        <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Search contacts..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      {contacts
-                        .map((contact, index) => ({ contact, index }))
-                        .filter(({ contact }) => 
-                          searchTerm === '' || 
-                          `${contact.first_name} ${contact.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          contact.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
-                        )
-                        .map(({ contact, index }) => (
-                          <button
-                            key={contact.id}
-                            onClick={() => {
-                              setSelectedContactIndex(index)
-                              setShowDropdown(false)
-                              setSearchTerm('')
-                            }}
-                            className={`w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center space-x-3 ${
-                              index === selectedContactIndex ? 'bg-blue-50 border-r-2 border-blue-500' : ''
-                            }`}
-                          >
-                            <div className="flex-1">
-                              <div className="font-medium text-sm">
-                                {contact.first_name} {contact.last_name}
-                              </div>
-                              <div className="text-xs text-gray-500">{contact.email}</div>
-                              {contact.company_name && (
-                                <div className="text-xs text-gray-400">{contact.company_name}</div>
-                              )}
-                            </div>
-                            {generatedEmails.has(contact.id) && (
-                              <Sparkles className="h-3 w-3 text-green-600" />
-                            )}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedContactIndex(Math.min(contacts.length - 1, selectedContactIndex + 1))}
-                disabled={selectedContactIndex === contacts.length - 1}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
         </CardHeader>
       </Card>
-      
+
       <div className="space-y-4">
 
         {/* Email Purpose Input - Enhanced */}
@@ -1236,12 +1258,15 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
         {/* Live Preview */}
         <Card className="max-w-full overflow-hidden">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center">
-                  <Eye className="h-5 w-5 mr-2" />
-                  Live Preview
-                </CardTitle>
-                <div className="flex items-center border rounded-md">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <CardTitle className="flex items-center">
+                    <Eye className="h-5 w-5 mr-2" />
+                    Live Preview
+                  </CardTitle>
+                  {renderContactSwitcher()}
+                </div>
+                <div className="flex items-center border rounded-md self-start lg:self-auto">
                   <Button
                     variant={viewMode === 'desktop' ? 'default' : 'ghost'}
                     size="sm"

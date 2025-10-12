@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth-middleware'
 import nodemailer from 'nodemailer'
 
+const stripHtml = (input: string) => input.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+
 export const POST = withAuth(async (request: NextRequest, { user, supabase }, { params }) => {
   try {
     const { id } = await params
@@ -46,6 +48,9 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
       details: null
     }
 
+    let htmlBodyForStorage = ''
+    const plainTextBodyForStorage = stripHtml(message || '')
+
     try {
       if (account.provider === 'smtp') {
         // Send via SMTP
@@ -59,16 +64,18 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
           },
         })
 
+        htmlBodyForStorage = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="white-space: pre-wrap;">${message.replace(/\n/g, '<br>')}</div>
+            </div>
+          `
+
         const info = await transporter.sendMail({
           from: `"Eisbrief" <${account.email}>`,
           to,
           subject,
           text: message,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="white-space: pre-wrap;">${message.replace(/\n/g, '<br>')}</div>
-            </div>
-          `
+          html: htmlBodyForStorage
         })
 
         sendResult = {
@@ -110,19 +117,21 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
         const gmailService = await createGmailIMAPSMTPService(tokens, account.email)
         console.log('✅ Gmail service created successfully')
 
-        const emailOptions = {
-          to,
-          subject,
-          text: message,
-          html: `
+        htmlBodyForStorage = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #333;">Test Email from Eisbrief</h2>
               <div style="white-space: pre-wrap; padding: 20px; background: #f9f9f9; border-radius: 8px; margin: 20px 0;">
                 ${message.replace(/\n/g, '<br>')}
               </div>
-              <p style="color: #666; font-size: 12px;">This is a test email sent via Gmail IMAP/SMTP integration.</p>
+              <p style="color: #666; font-size: 12px;">Dieses E-Mail wurde über die Gmail IMAP/SMTP Integration gesendet.</p>
             </div>
           `
+
+        const emailOptions = {
+          to,
+          subject,
+          text: message,
+          html: htmlBodyForStorage
         }
 
         console.log('📧 Sending email with options:', {
@@ -184,6 +193,27 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }, { 
           sent_at: new Date().toISOString(),
           is_test: true
         })
+
+      if (sendResult.success) {
+        try {
+          const fallbackMessageId = sendResult.messageId || `manual-${Date.now()}`
+          await supabase
+            .from('outgoing_emails')
+            .insert({
+              user_id: user.id,
+              email_account_id: account.id,
+              message_id: fallbackMessageId,
+              from_address: account.email,
+              to_address: to,
+              subject,
+              text_content: plainTextBodyForStorage || message,
+              html_content: htmlBodyForStorage || message,
+              date_sent: new Date().toISOString()
+            })
+        } catch (outgoingError: any) {
+          console.error('⚠️ Failed to insert sent email into outgoing_emails:', outgoingError)
+        }
+      }
 
       // Note: last_used_at field doesn't exist in the schema
       // This functionality can be added later if needed

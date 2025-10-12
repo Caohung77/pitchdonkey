@@ -789,6 +789,31 @@ export class CampaignProcessor {
               tracking_pixel_id: trackingPixelId || null
             })
 
+            try {
+              await supabase
+                .from('email_sends')
+                .insert({
+                  user_id: campaign.user_id,
+                  campaign_id: campaign.id,
+                  contact_id: contact.id,
+                  email_account_id: emailAccount.id,
+                  subject: personalizedSubject,
+                  content: personalizedContent,
+                  step_number: 1,
+                  message_id: result.messageId || trackingId,
+                  send_status: 'sent',
+                  sent_at: nowIso,
+                  created_at: nowIso,
+                  tracking_data: {
+                    tracking_pixel_id: trackingPixelId,
+                    tracking_id: trackingId
+                  }
+                })
+              console.log(`📬 Logged sent email ${result.messageId || trackingId} in email_sends`)
+            } catch (emailSendsError) {
+              console.error('⚠️ Failed to insert sent email into email_sends:', emailSendsError)
+            }
+
             // ============================================================================
             // EMAIL TRACKING: Increment counters after successful send
             // ============================================================================
