@@ -1017,7 +1017,39 @@ export class CampaignExecutionEngine {
         })
 
         console.log(`✅ Email sent successfully via SMTP: ${info.messageId}`)
-        
+
+        // Save sent email to Sent folder via IMAP APPEND
+        if (params.emailAccount.imap_host && params.emailAccount.imap_port) {
+          try {
+            const { SMTPSentSync } = await import('./smtp-sent-sync')
+
+            await SMTPSentSync.saveSentEmail(
+              {
+                host: params.emailAccount.imap_host,
+                port: params.emailAccount.imap_port,
+                user: params.emailAccount.imap_username || params.emailAccount.smtp_username,
+                password: params.emailAccount.imap_password || params.emailAccount.smtp_password,
+                tls: params.emailAccount.imap_secure !== false
+              },
+              {
+                from: params.emailAccount.email,
+                to: params.to,
+                subject: params.subject,
+                html: htmlContent,
+                text: params.content.replace(/<[^>]*>/g, ''),
+                messageId: info.messageId,
+                date: new Date()
+              }
+            )
+            console.log('📥 Sent email saved to Sent folder via IMAP APPEND')
+          } catch (error) {
+            console.error('⚠️ Failed to save to Sent folder (non-fatal):', error)
+            // Don't fail the send operation if IMAP append fails
+          }
+        } else {
+          console.log('ℹ️ IMAP credentials not configured, skipping Sent folder sync')
+        }
+
         return {
           messageId: info.messageId,
           status: 'sent',

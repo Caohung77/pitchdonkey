@@ -411,6 +411,38 @@ export class ReplyJobProcessor {
     console.log(`✅ SMTP email sent successfully: ${info.messageId}`)
     console.log(`✅ Email sent with threading headers - In-Reply-To: ${options.inReplyTo}`)
 
+    // Save sent email to Sent folder via IMAP APPEND
+    if (emailAccount.imap_host && emailAccount.imap_port) {
+      try {
+        const { SMTPSentSync } = await import('./smtp-sent-sync')
+
+        await SMTPSentSync.saveSentEmail(
+          {
+            host: emailAccount.imap_host,
+            port: emailAccount.imap_port,
+            user: emailAccount.imap_username || emailAccount.smtp_username,
+            password: emailAccount.imap_password || emailAccount.smtp_password,
+            tls: emailAccount.imap_secure !== false
+          },
+          {
+            from: emailAccount.email,
+            to: options.to,
+            subject: options.subject,
+            html: options.html,
+            text: options.text,
+            messageId: info.messageId,
+            date: new Date()
+          }
+        )
+        console.log('📥 Sent reply saved to Sent folder via IMAP APPEND')
+      } catch (error) {
+        console.error('⚠️ Failed to save reply to Sent folder (non-fatal):', error)
+        // Don't fail the send operation if IMAP append fails
+      }
+    } else {
+      console.log('ℹ️ IMAP credentials not configured, skipping Sent folder sync')
+    }
+
     return info.messageId
   }
 

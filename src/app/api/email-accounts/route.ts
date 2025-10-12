@@ -2,6 +2,42 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, addSecurityHeaders, withRateLimit } from '@/lib/auth-middleware'
 import { extractDomainFromEmail } from '@/lib/domain-auth'
 
+/**
+ * Derive IMAP host from SMTP host for auto-configuration
+ * Converts smtp.example.com → imap.example.com
+ */
+function deriveIMAPHost(smtpHost: string): string {
+  // Common provider mappings
+  const providerMappings: Record<string, string> = {
+    'smtp.gmail.com': 'imap.gmail.com',
+    'smtp-mail.outlook.com': 'outlook.office365.com',
+    'smtp.office365.com': 'outlook.office365.com',
+    'smtp.mail.yahoo.com': 'imap.mail.yahoo.com',
+    'smtp.sendgrid.net': 'smtp.sendgrid.net', // SendGrid doesn't have IMAP
+    'smtp.mailgun.org': 'smtp.mailgun.org', // Mailgun doesn't have IMAP
+  }
+
+  // Check for known providers
+  if (providerMappings[smtpHost.toLowerCase()]) {
+    return providerMappings[smtpHost.toLowerCase()]
+  }
+
+  // Generic transformation: smtp.domain.com → imap.domain.com
+  if (smtpHost.toLowerCase().startsWith('smtp.')) {
+    return smtpHost.replace(/^smtp\./i, 'imap.')
+  }
+
+  // If no pattern matches, return IMAP subdomain of the host
+  // e.g., mail.example.com → imap.example.com
+  const parts = smtpHost.split('.')
+  if (parts.length >= 2) {
+    return `imap.${parts.slice(-2).join('.')}`
+  }
+
+  // Fallback: use SMTP host as-is (some servers use same host for both)
+  return smtpHost
+}
+
 // GET /api/email-accounts - Get user's email accounts
 export const GET = withAuth(async (request: NextRequest, { user, supabase }) => {
   try {
@@ -168,19 +204,32 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
       accountData.smtp_username = smtp_config.username
       accountData.smtp_password = smtp_config.password
       accountData.smtp_secure = smtp_config.secure || false
-      
+
+      // Auto-populate IMAP settings for sent folder sync
+      accountData.imap_host = deriveIMAPHost(smtp_config.host)
+      accountData.imap_port = 993 // Standard IMAP SSL/TLS port
+      accountData.imap_username = smtp_config.username // Usually same as SMTP
+      accountData.imap_password = smtp_config.password // Usually same as SMTP
+      accountData.imap_secure = true // IMAP typically uses SSL/TLS
+
       console.log('SMTP port validation:', {
         original: smtp_config.port,
         parsed: port,
         isValid: !isNaN(port) && port >= 1 && port <= 65535
       })
-      
-      console.log('SMTP config validated and prepared for storage:', { 
-        host: smtp_config.host, 
-        port: smtp_config.port, 
+
+      console.log('SMTP config validated and prepared for storage:', {
+        host: smtp_config.host,
+        port: smtp_config.port,
         username: smtp_config.username,
         secure: smtp_config.secure,
-        password: '[HIDDEN]' 
+        password: '[HIDDEN]'
+      })
+
+      console.log('IMAP config auto-populated for sent folder sync:', {
+        host: accountData.imap_host,
+        port: accountData.imap_port,
+        secure: accountData.imap_secure
       })
     }
 
