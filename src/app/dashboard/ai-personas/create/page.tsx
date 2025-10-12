@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Sparkles, User, MessageSquare, Brain, Database, Check, Loader2, Globe } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Sparkles, User, MessageSquare, Brain, Database, Check, Loader2, Globe, Type, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -811,16 +811,49 @@ export default function CreatePersonaPage() {
           {/* Step 5: Knowledge Base */}
           {currentStep === 5 && (
             <div className="space-y-4">
-              <div className="text-center py-12 text-muted-foreground">
-                <Database className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">Knowledge Base (Optional)</p>
-                <p className="text-sm mt-2">
-                  Knowledge base upload will be available after creating the persona.
-                </p>
-                <p className="text-sm mt-1">
-                  You'll be able to add documents, links, and context to enhance AI responses.
-                </p>
-              </div>
+              <Card className="bg-primary/5 border-primary/10">
+                <CardContent className="pt-6">
+                  <div className="text-center py-8">
+                    <Database className="h-16 w-16 mx-auto mb-4 text-primary opacity-70" />
+                    <p className="text-lg font-semibold mb-2">Knowledge Base (Optional)</p>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                      You can add knowledge to your persona after creation. The knowledge base supports:
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto mt-6">
+                      <div className="bg-background/50 p-4 rounded-lg border">
+                        <Type className="h-8 w-8 mx-auto mb-2 text-primary" />
+                        <p className="font-medium text-sm">Text Content</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Direct text entry
+                        </p>
+                      </div>
+
+                      <div className="bg-background/50 p-4 rounded-lg border">
+                        <Globe className="h-8 w-8 mx-auto mb-2 text-primary" />
+                        <p className="font-medium text-sm">Website URLs</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Auto-extract content
+                        </p>
+                      </div>
+
+                      <div className="bg-background/50 p-4 rounded-lg border">
+                        <FileText className="h-8 w-8 mx-auto mb-2 text-primary" />
+                        <p className="font-medium text-sm">PDF Files</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Upload & extract
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-900">
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        💡 <strong>Tip:</strong> Click "Create Persona" and then navigate to the persona detail page to add knowledge items.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </CardContent>
