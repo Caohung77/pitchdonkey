@@ -25,6 +25,7 @@ import { CreateContactListModal } from './CreateContactListModal'
 import { EditContactListModal } from './EditContactListModal'
 import { ViewContactListModal } from './ViewContactListModal'
 import { ContactListDetailView } from './ContactListDetailView'
+import { useToast } from '@/components/ui/toast'
 
 interface ContactList {
   id: string
@@ -51,6 +52,7 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
   const [editingList, setEditingList] = useState<ContactList | null>(null)
   const [viewingList, setViewingList] = useState<ContactList | null>(null)
   const [detailViewList, setDetailViewList] = useState<ContactList | null>(null)
+  const { addToast } = useToast()
 
   useEffect(() => {
     fetchLists()
@@ -75,16 +77,37 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
     setLists(prev => [newList, ...prev])
   }
 
-  const handleDeleteList = async (listId: string) => {
+  const handleDeleteList = async (list: ContactList) => {
     if (!confirm('Are you sure you want to delete this contact list? This action cannot be undone.')) {
       return
     }
 
     try {
-      await ApiClient.delete(`/api/contacts/lists/${listId}`)
-      setLists(prev => prev.filter(l => l.id !== listId))
-    } catch (error) {
+      await ApiClient.delete(`/api/contacts/lists/${list.id}`)
+      setLists(prev => prev.filter(l => l.id !== list.id))
+
+      if (editingList?.id === list.id) {
+        setEditingList(null)
+      }
+      if (viewingList?.id === list.id) {
+        setViewingList(null)
+      }
+      if (detailViewList?.id === list.id) {
+        setDetailViewList(null)
+      }
+
+      addToast({
+        type: 'success',
+        title: 'List deleted',
+        message: `"${list.name}" has been deleted.`
+      })
+    } catch (error: any) {
       console.error('Error deleting contact list:', error)
+      addToast({
+        type: 'error',
+        title: 'Could not delete list',
+        message: error?.message || 'Something went wrong while deleting the list.'
+      })
     }
   }
 
@@ -198,23 +221,39 @@ export function ContactListManager({ userId }: ContactListManagerProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEditList(list)}>
+                      <DropdownMenuItem 
+                        onSelect={(event) => {
+                          event.stopPropagation()
+                          handleEditList(list)
+                        }}
+                      >
                         <Edit className="h-4 w-4 mr-2" />
                         Edit List
                       </DropdownMenuItem>
                       <DropdownMenuItem 
-                        onClick={() => handleToggleFavorite(list.id, list.isFavorite)}
+                        onSelect={(event) => {
+                          event.stopPropagation()
+                          handleToggleFavorite(list.id, list.isFavorite)
+                        }}
                       >
                         <Heart className="h-4 w-4 mr-2" />
                         {list.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleViewList(list)}>
+                      <DropdownMenuItem 
+                        onSelect={(event) => {
+                          event.stopPropagation()
+                          handleViewList(list)
+                        }}
+                      >
                         <List className="h-4 w-4 mr-2" />
                         View Contacts
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
-                        onClick={() => handleDeleteList(list.id)}
+                        onSelect={(event) => {
+                          event.stopPropagation()
+                          handleDeleteList(list)
+                        }}
                         className="text-red-600"
                       >
                         <Trash2 className="h-4 w-4 mr-2" />

@@ -23,7 +23,9 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     const { data: notifications, error: notificationsError } = await query
 
     if (notificationsError) {
-      console.error('Error fetching notifications:', notificationsError)
+      if (notificationsError.code !== '42P01') {
+        console.error('Error fetching notifications:', notificationsError)
+      }
       // Return empty array if notifications table doesn't exist or has errors
       return createSuccessResponse({
         notifications: [],
@@ -32,11 +34,19 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     }
 
     // Get unread count
-    const { count: unreadCount } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_read', false)
+    let unreadCount = 0
+    try {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false)
+      unreadCount = count || 0
+    } catch (error: any) {
+      if (error?.code !== '42P01') {
+        console.error('Error counting unread notifications:', error)
+      }
+    }
 
     // Transform notifications to match expected format
     const transformedNotifications = (notifications || []).map(notification => ({
@@ -51,7 +61,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
 
     return createSuccessResponse({
       notifications: transformedNotifications,
-      unread_count: unreadCount || 0
+      unread_count: unreadCount
     })
 
   } catch (error) {

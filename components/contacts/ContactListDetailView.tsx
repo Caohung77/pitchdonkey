@@ -41,6 +41,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useToast } from '@/components/ui/toast'
 
 interface ContactList {
   id: string
@@ -84,6 +85,7 @@ export function ContactListDetailView({
     action: () => void
     variant?: 'default' | 'destructive'
   }>({ open: false, title: '', description: '', action: () => {} })
+  const { addToast } = useToast()
 
   useEffect(() => {
     fetchListContacts()
@@ -265,6 +267,38 @@ export function ContactListDetailView({
     setShowEditContactModal(false)
   }
 
+  const confirmDeleteList = () => {
+    setConfirmDialog({
+      open: true,
+      title: 'Delete Contact List',
+      description: `Are you sure you want to delete "${list.name}"? This will remove the list but keep all contacts in your database.`,
+      action: performDeleteList,
+      variant: 'destructive'
+    })
+  }
+
+  const performDeleteList = async () => {
+    try {
+      await ApiClient.delete(`/api/contacts/lists/${list.id}`)
+
+      addToast({
+        type: 'success',
+        title: 'List deleted',
+        message: `"${list.name}" has been removed from your contact lists.`
+      })
+
+      onListDeleted?.(list.id)
+      onBack()
+    } catch (error: any) {
+      console.error('Error deleting contact list:', error)
+      addToast({
+        type: 'error',
+        title: 'Delete failed',
+        message: error?.message || 'Unable to delete contact list. Please try again.'
+      })
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -340,6 +374,15 @@ export function ContactListDetailView({
                   Manage
                 </Button>
               )}
+
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={confirmDeleteList}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete List
+              </Button>
             </>
           )}
         </div>

@@ -163,4 +163,18 @@ export class GmailIMAPSMTPServerService {
     const service = await this.createGmailIMAPSMTPService(accountId)
     return await service.deleteEmail(mailbox, uid)
   }
+
+  /**
+   * Fetch only message IDs from Gmail (lightweight for reconciliation)
+   */
+  async fetchGmailMessageIds(
+    accountId: string,
+    mailbox: string = 'INBOX',
+    options: {
+      since?: Date
+    } = {}
+  ): Promise<string[]> {
+    const service = await this.createGmailIMAPSMTPService(accountId)
+    return await service.fetchMessageIds(mailbox, options)
+  }
 }

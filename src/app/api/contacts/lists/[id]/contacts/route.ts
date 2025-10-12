@@ -14,11 +14,25 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }, { p
       .single()
 
     if (listError) {
+      if (listError.code === 'PGRST116') {
+        return NextResponse.json({
+          success: true,
+          data: []
+        })
+      }
+
       console.error('Error fetching contact list:', listError)
       return NextResponse.json(
         { error: 'Contact list not found' },
         { status: 404 }
       )
+    }
+
+    if (!contactList) {
+      return NextResponse.json({
+        success: true,
+        data: []
+      })
     }
 
     const rawIds = contactList.contact_ids || []

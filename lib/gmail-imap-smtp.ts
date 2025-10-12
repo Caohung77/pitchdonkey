@@ -232,6 +232,79 @@ export class GmailIMAPSMTPService {
   }
 
   /**
+   * Fetch only message IDs from Gmail (lightweight for reconciliation)
+   */
+  async fetchMessageIds(
+    mailbox: string = 'INBOX',
+    options: {
+      since?: Date
+    } = {}
+  ): Promise<string[]> {
+    try {
+      const freshTokens = await this.ensureFreshTokens()
+
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret
+      )
+
+      oauth2Client.setCredentials({
+        access_token: freshTokens.access_token,
+        refresh_token: freshTokens.refresh_token,
+        expiry_date: freshTokens.expires_at,
+        scope: freshTokens.scope,
+        token_type: 'Bearer'
+      })
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+
+      // Build query for Gmail API
+      let query = ''
+      let labelIds: string[] | undefined = undefined
+
+      if (mailbox === 'SENT' || mailbox === 'Sent' || mailbox === '[Gmail]/Sent Mail') {
+        labelIds = ['SENT']
+      } else if (mailbox === 'INBOX' || !mailbox) {
+        // For INBOX, fetch ALL emails excluding SPAM and TRASH
+        query = '-in:spam -in:trash'
+        labelIds = undefined
+      } else {
+        labelIds = [mailbox]
+      }
+
+      if (options.since) {
+        const sinceDate = options.since.toISOString().split('T')[0].replace(/-/g, '/')
+        query += `after:${sinceDate} `
+      }
+
+      const messageIds: string[] = []
+      let pageToken: string | undefined
+
+      // Fetch all message IDs (lightweight - no content)
+      do {
+        const listResponse = await gmail.users.messages.list({
+          userId: 'me',
+          labelIds,
+          q: query.trim() || undefined,
+          maxResults: 500, // Max allowed per page
+          pageToken
+        })
+
+        const messages = listResponse.data.messages || []
+        messageIds.push(...messages.map(m => m.id).filter(Boolean) as string[])
+
+        pageToken = listResponse.data.nextPageToken ?? undefined
+      } while (pageToken)
+
+      console.log(`📧 Fetched ${messageIds.length} message IDs from ${mailbox}`)
+      return messageIds
+    } catch (error) {
+      console.error('Gmail API fetch message IDs error:', error)
+      return []
+    }
+  }
+
+  /**
    * Fetch emails from a specific mailbox using Gmail API
    */
   async fetchEmails(

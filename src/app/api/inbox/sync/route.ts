@@ -288,6 +288,91 @@ async function syncEmailAccount(supabase: any, accountId: string) {
   }
 }
 
+/**
+ * Reconcile Gmail state with database (detect deletions)
+ */
+async function reconcileGmailState(supabase: any, account: any, gmailService: any) {
+  try {
+    console.log('🔄 Starting Gmail reconciliation for', account.email)
+
+    // 1. Fetch ONLY inbox message IDs from Gmail (lightweight query)
+    // NOTE: We do NOT reconcile sent emails because:
+    // - Sent emails are historical records that should be preserved
+    // - Gmail's SENT folder uses different IDs than our stored message_id
+    // - Users expect sent emails to remain even if deleted from Gmail
+    const gmailInboxIds = await gmailService.fetchGmailMessageIds(account.id, 'INBOX')
+
+    console.log(`📧 Gmail has ${gmailInboxIds.length} inbox emails`)
+
+    // 2. Get all non-archived emails from database for this account
+    const { data: dbInboxEmails, error: inboxError } = await supabase
+      .from('incoming_emails')
+      .select('id, gmail_message_id, subject')
+      .eq('email_account_id', account.id)
+      .is('archived_at', null)
+
+    if (inboxError) {
+      console.error('❌ Failed to fetch DB inbox emails:', inboxError)
+      return { archivedInboxCount: 0, archivedSentCount: 0, errors: [inboxError.message] }
+    }
+
+    console.log(`💾 Database has ${dbInboxEmails?.length || 0} active inbox emails`)
+
+    // 3. Find emails in DB but NOT in Gmail (deleted in Gmail)
+    const gmailInboxSet = new Set(gmailInboxIds)
+
+    const deletedInboxEmails = (dbInboxEmails || []).filter(e =>
+      e.gmail_message_id && !gmailInboxSet.has(e.gmail_message_id)
+    )
+
+    console.log(`🗑️  Found ${deletedInboxEmails.length} deleted inbox emails`)
+
+    // 4. Mark deleted inbox emails as archived
+    if (deletedInboxEmails.length > 0) {
+      const { error: archiveError } = await supabase
+        .from('incoming_emails')
+        .update({ archived_at: new Date().toISOString() })
+        .in('id', deletedInboxEmails.map(e => e.id))
+
+      if (archiveError) {
+        console.error('❌ Failed to archive inbox emails:', archiveError)
+      } else {
+        console.log(`✅ Archived ${deletedInboxEmails.length} deleted inbox emails:`)
+        deletedInboxEmails.slice(0, 5).forEach(e => {
+          console.log(`   - "${e.subject?.slice(0, 50) || '(no subject)'}"`)
+        })
+        if (deletedInboxEmails.length > 5) {
+          console.log(`   ... and ${deletedInboxEmails.length - 5} more`)
+        }
+      }
+    }
+
+    // 5. Update last reconciliation timestamp
+    await supabase
+      .from('imap_connections')
+      .upsert({
+        email_account_id: account.id,
+        last_full_reconciliation_at: new Date().toISOString()
+      }, {
+        onConflict: 'email_account_id',
+        ignoreDuplicates: false
+      })
+
+    return {
+      archivedInboxCount: deletedInboxEmails.length,
+      archivedSentCount: 0, // We don't delete sent emails
+      errors: []
+    }
+  } catch (error) {
+    console.error('❌ Gmail reconciliation error:', error)
+    return {
+      archivedInboxCount: 0,
+      archivedSentCount: 0,
+      errors: [error.message || 'Unknown reconciliation error']
+    }
+  }
+}
+
 // Gmail OAuth sync function using Gmail API
 async function syncGmailOAuthAccount(supabase: any, account: any) {
   try {
@@ -611,6 +696,16 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
       console.log(`     (No emails found in database)`)
     }
 
+    // Run reconciliation to detect deleted emails
+    console.log(`\n🔄 Running Gmail reconciliation to detect deletions...`)
+    const reconcileResult = await reconcileGmailState(supabase, account, gmailService)
+
+    if (reconcileResult.archivedInboxCount > 0 || reconcileResult.archivedSentCount > 0) {
+      console.log(`✅ Reconciliation: archived ${reconcileResult.archivedInboxCount} inbox, ${reconcileResult.archivedSentCount} sent`)
+    } else {
+      console.log(`✅ Reconciliation: no deletions detected`)
+    }
+
     // Update connection status
     await supabase
       .from('imap_connections')
@@ -636,6 +731,8 @@ async function syncGmailOAuthAccount(supabase: any, account: any) {
       newEmails: newEmailsCount,
       newSentEmails: newSentCount,
       totalProcessed: emails.length + sentEmails.length,
+      archivedInbox: reconcileResult.archivedInboxCount,
+      archivedSent: reconcileResult.archivedSentCount,
       errors: errors,
       account: account.email
     }
