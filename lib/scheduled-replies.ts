@@ -99,7 +99,7 @@ export async function getScheduledReplies(
     .from('reply_jobs')
     .select(`
       *,
-      agent:outreach_agents!reply_jobs_agent_id_fkey(
+      agent:ai_personas!reply_jobs_agent_id_fkey(
         id,
         name,
         status,

@@ -152,6 +152,9 @@ const DEFAULT_QUALITY_WEIGHTS: QualityWeights = {
 
 const DEFAULT_LANGUAGE: 'en' | 'de' = 'en'
 
+const PERSONA_TABLE = 'ai_personas' as const
+const PERSONA_KNOWLEDGE_TABLE = 'ai_persona_knowledge' as const
+
 const DEFAULT_SEGMENT_CONFIG: SegmentConfig = {
   filters: {
     industries: [],
@@ -549,7 +552,7 @@ function passesFilters(contact: Database['public']['Tables']['contacts']['Row'],
 
 export async function listOutreachAgents(supabase: Supabase, userId: string): Promise<OutreachAgent[]> {
   const { data, error } = await supabase
-    .from('outreach_agents')
+    .from<OutreachAgentRecord>(PERSONA_TABLE as any)
     .select('*')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
@@ -563,7 +566,7 @@ export async function listOutreachAgents(supabase: Supabase, userId: string): Pr
 
 export async function getOutreachAgent(supabase: Supabase, userId: string, agentId: string): Promise<OutreachAgent | null> {
   const { data, error } = await supabase
-    .from('outreach_agents')
+    .from<OutreachAgentRecord>(PERSONA_TABLE as any)
     .select('*')
     .eq('user_id', userId)
     .eq('id', agentId)
@@ -605,7 +608,7 @@ export async function createOutreachAgent(supabase: Supabase, userId: string, in
   }
 
   const { data, error } = await supabase
-    .from('outreach_agents')
+    .from<OutreachAgentRecord>(PERSONA_TABLE as any)
     .insert(payload)
     .select('*')
     .single()
@@ -680,7 +683,7 @@ export async function updateOutreachAgent(
   }
 
   const { data, error } = await supabase
-    .from('outreach_agents')
+    .from<OutreachAgentRecord>(PERSONA_TABLE as any)
     .update(payload)
     .eq('user_id', userId)
     .eq('id', agentId)
@@ -696,7 +699,7 @@ export async function updateOutreachAgent(
 
 export async function deleteOutreachAgent(supabase: Supabase, userId: string, agentId: string): Promise<void> {
   const { error } = await supabase
-    .from('outreach_agents')
+    .from(PERSONA_TABLE as any)
     .delete()
     .eq('user_id', userId)
     .eq('id', agentId)
@@ -776,14 +779,14 @@ export async function duplicateOutreachAgent(supabase: Supabase, userId: string,
 
   // Copy knowledge attachments metadata (not binary content)
   const { data: knowledgeItems, error: knowledgeError } = await supabase
-    .from('outreach_agent_knowledge')
+    .from(PERSONA_KNOWLEDGE_TABLE as any)
     .select('*')
-    .eq('agent_id', agentId)
+    .eq('persona_id', agentId)
     .eq('user_id', userId)
 
   if (!knowledgeError && knowledgeItems && knowledgeItems.length > 0) {
     const clonedItems = knowledgeItems.map((item) => ({
-      agent_id: cloned.id,
+      persona_id: cloned.id,
       user_id: userId,
       type: item.type,
       title: item.title,
@@ -795,7 +798,7 @@ export async function duplicateOutreachAgent(supabase: Supabase, userId: string,
       embedding_metadata: item.embedding_metadata,
     }))
 
-    await supabase.from('outreach_agent_knowledge').insert(clonedItems)
+    await supabase.from(PERSONA_KNOWLEDGE_TABLE as any).insert(clonedItems)
   }
 
   return cloned
@@ -817,7 +820,7 @@ export async function addKnowledgeItem(
   }
 
   const payload: Database['public']['Tables']['outreach_agent_knowledge']['Insert'] = {
-    agent_id: agentId,
+    persona_id: agentId,
     user_id: userId,
     type: input.type,
     title: input.title,
@@ -830,7 +833,7 @@ export async function addKnowledgeItem(
   }
 
   const { data, error } = await supabase
-    .from('outreach_agent_knowledge')
+    .from(PERSONA_KNOWLEDGE_TABLE as any)
     .insert(payload)
     .select('*')
     .single()
@@ -861,10 +864,10 @@ export async function updateKnowledgeItem(
   }
 
   const { data, error } = await supabase
-    .from('outreach_agent_knowledge')
+    .from(PERSONA_KNOWLEDGE_TABLE as any)
     .update(payload)
     .eq('id', knowledgeId)
-    .eq('agent_id', agentId)
+    .eq('persona_id', agentId)
     .eq('user_id', userId)
     .select('*')
     .single()
@@ -883,10 +886,10 @@ export async function removeKnowledgeItem(
   knowledgeId: string
 ) {
   const { error } = await supabase
-    .from('outreach_agent_knowledge')
+    .from(PERSONA_KNOWLEDGE_TABLE as any)
     .delete()
     .eq('id', knowledgeId)
-    .eq('agent_id', agentId)
+    .eq('persona_id', agentId)
     .eq('user_id', userId)
 
   if (error) {
@@ -950,7 +953,7 @@ export async function previewSegment(
 
   if (options.persist && matches.length > 0) {
     const scoreRows = matches.map((entry) => ({
-      agent_id: agent.id,
+      persona_id: agent.id,
       user_id: userId,
       contact_id: entry.contact.id,
       run_id: runId,
@@ -958,10 +961,10 @@ export async function previewSegment(
       reasons: entry.reasons as unknown as Json,
     }))
 
-    await supabase.from('agent_contact_scores').insert(scoreRows)
+    await supabase.from('persona_contact_scores' as any).insert(scoreRows)
 
     const segmentRows = matches.map((entry) => ({
-      agent_id: agent.id,
+      persona_id: agent.id,
       user_id: userId,
       contact_id: entry.contact.id,
       status: 'selected',
@@ -975,8 +978,8 @@ export async function previewSegment(
     }))
 
     await supabase
-      .from('agent_segment_members')
-      .upsert(segmentRows, { onConflict: 'agent_id,contact_id' })
+      .from('persona_segment_members' as any)
+      .upsert(segmentRows, { onConflict: 'persona_id,contact_id' })
   }
 
   const previewContacts: SegmentPreviewContact[] = matches.map((entry) => ({

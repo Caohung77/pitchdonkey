@@ -58,7 +58,7 @@ const getNavigation = (userEmail?: string) => {
     { name: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
     { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
     { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },
-    { name: 'AI Outreach Agents', href: '/dashboard/outreach-agents', icon: Zap },
+    { name: 'AI Personas', href: '/dashboard/ai-personas', icon: Bot },
     { name: 'AI Templates', href: '/dashboard/ai-templates', icon: Palette },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
     { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },

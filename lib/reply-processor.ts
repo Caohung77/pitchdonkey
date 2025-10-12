@@ -517,7 +517,7 @@ export class ReplyProcessor {
     // Find the email account that received this email
     const { data: emailAccount, error: emailAccountError } = await this.supabase
       .from('email_accounts')
-      .select('id, email, assigned_agent_id, user_id')
+      .select('id, email, assigned_agent_id:assigned_persona_id, user_id')
       .eq('id', accountId)
       .eq('user_id', email.user_id)
       .single()

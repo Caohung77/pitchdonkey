@@ -57,7 +57,7 @@ export class ReplyJobProcessor {
             smtp_password,
             smtp_secure
           ),
-          agent:outreach_agents!reply_jobs_agent_id_fkey(
+          agent:ai_personas!reply_jobs_agent_id_fkey(
             id,
             name,
             sender_name,
@@ -122,14 +122,14 @@ export class ReplyJobProcessor {
    * Process a specific reply job immediately
    */
   async processReplyJobById(jobId: string, userId: string): Promise<boolean> {
-    const { data: job, error } = await this.supabase
-      .from('reply_jobs')
-      .select(`
-        *,
-        email_account:email_accounts!reply_jobs_email_account_id_fkey(
-          id,
-          email,
-          provider,
+      const { data: job, error } = await this.supabase
+        .from('reply_jobs')
+        .select(`
+          *,
+          email_account:email_accounts!reply_jobs_email_account_id_fkey(
+            id,
+            email,
+            provider,
           access_token,
           refresh_token,
           token_expires_at,
@@ -139,10 +139,10 @@ export class ReplyJobProcessor {
           smtp_password,
           smtp_secure
         ),
-        agent:outreach_agents!reply_jobs_agent_id_fkey(
-          id,
-          name,
-          sender_name,
+          agent:ai_personas!reply_jobs_agent_id_fkey(
+            id,
+            name,
+            sender_name,
           sender_role
         ),
         contact:contacts(

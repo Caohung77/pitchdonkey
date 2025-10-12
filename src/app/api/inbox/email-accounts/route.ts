@@ -20,13 +20,13 @@ export const GET = withAuth(async (
         status,
         deleted_at,
         outreach_agent_id,
-        assigned_agent_id,
-        outreach_agents_via_outreach:outreach_agents!email_accounts_outreach_agent_id_fkey (
+        assigned_agent_id:assigned_persona_id,
+        outreach_agents_via_outreach:ai_personas!email_accounts_outreach_agent_id_fkey (
           id,
           name,
           sender_name
         ),
-        outreach_agents_via_assigned:outreach_agents!email_accounts_assigned_agent_id_fkey (
+        outreach_agents_via_assigned:ai_personas!email_accounts_assigned_persona_id_fkey (
           id,
           name,
           sender_name

@@ -53,7 +53,8 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
       .from('email_accounts')
       .select(`
         *,
-        assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(
+        assigned_agent_id:assigned_persona_id,
+        assigned_agent:ai_personas!email_accounts_assigned_persona_id_fkey(
           id,
           name,
           status,

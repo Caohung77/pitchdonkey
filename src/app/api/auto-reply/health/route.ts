@@ -65,14 +65,14 @@ export async function GET(request: NextRequest) {
     // 3. Check agent assignments
     const { data: emailAccounts } = await supabase
       .from('email_accounts')
-      .select('id, email, assigned_agent_id, provider')
+      .select('id, email, assigned_agent_id:assigned_persona_id, provider')
 
     const accountsWithAgents = emailAccounts?.filter(a => a.assigned_agent_id) || []
     const accountsWithoutAgents = emailAccounts?.filter(a => !a.assigned_agent_id) || []
 
     // 4. Get active agents
     const { data: activeAgents } = await supabase
-      .from('outreach_agents')
+      .from('ai_personas' as any)
       .select('id, name, status')
       .eq('status', 'active')
 

@@ -44,7 +44,7 @@ export const GET = withAuth(async (
           id,
           email,
           provider,
-          assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(
+          assigned_agent:ai_personas!email_accounts_assigned_persona_id_fkey(
             id,
             name
           )
@@ -68,7 +68,7 @@ export const GET = withAuth(async (
           status,
           draft_subject,
           scheduled_at,
-          agent:outreach_agents!reply_jobs_agent_id_fkey(
+          agent:ai_personas!reply_jobs_agent_id_fkey(
             id,
             name
           )

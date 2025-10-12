@@ -25,10 +25,14 @@ export const GET = withAuth(async (
         *,
         email_account:email_accounts!incoming_emails_email_account_id_fkey(
           email,
-          assigned_agent_id,
-          assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(name)
+          assigned_agent_id:assigned_persona_id,
+          assigned_agent:ai_personas!email_accounts_assigned_persona_id_fkey(name)
         )
-        ${includeReplyJobs ? ',reply_job:reply_jobs!reply_jobs_incoming_email_id_fkey(id, status, draft_subject, scheduled_at, agent:outreach_agents!reply_jobs_agent_id_fkey(name))' : ''}
+        ${
+          includeReplyJobs
+            ? ',reply_job:reply_jobs!reply_jobs_incoming_email_id_fkey(id, status, draft_subject, scheduled_at, agent:ai_personas!reply_jobs_agent_id_fkey(name))'
+            : ''
+        }
       `)
       .eq('user_id', user.id)
       .order('date_received', { ascending: false })

@@ -33,7 +33,7 @@ export const POST = withAuth(async (
     // 1. Get email account details
     const { data: emailAccount, error: accountError } = await supabase
       .from('email_accounts')
-      .select('*, assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(*)')
+      .select('*, assigned_agent:ai_personas!email_accounts_assigned_persona_id_fkey(*)')
       .eq('id', email_account_id)
       .eq('user_id', user.id)
       .single()
@@ -95,7 +95,7 @@ export const POST = withAuth(async (
     if (autonomousDraft) {
       const { data: job } = await supabase
         .from('reply_jobs')
-        .select('*, agent:outreach_agents(name)')
+        .select('*, agent:ai_personas(name)')
         .eq('incoming_email_id', incomingEmail.id)
         .single()
 

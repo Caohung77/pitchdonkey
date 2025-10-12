@@ -25,6 +25,8 @@ import {
   PenSquare,
   Menu,
   X,
+  Sparkles,
+  RotateCcw,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -63,6 +65,15 @@ interface Contact {
   first_name: string | null
   last_name: string | null
   email: string
+}
+
+interface OutreachAgentOption {
+  id: string
+  name: string
+  sender_name: string | null
+  tone?: string | null
+  purpose?: string | null
+  status?: 'draft' | 'active' | 'inactive'
 }
 
 interface IncomingEmail {
@@ -300,10 +311,24 @@ export default function MailboxPage() {
   const [composeAccountId, setComposeAccountId] = useState<string | null>(null)
   const [composeSending, setComposeSending] = useState(false)
   const [composeError, setComposeError] = useState('')
+  const [composeAgents, setComposeAgents] = useState<OutreachAgentOption[]>([])
+  const [composeAgentId, setComposeAgentId] = useState<string | null>(null)
+  const [composeAssistMode, setComposeAssistMode] = useState<'improve' | 'generate'>('improve')
+  const [assistPrompt, setAssistPrompt] = useState('')
+  const [assistStatus, setAssistStatus] = useState<string | null>(null)
+  const [assistError, setAssistError] = useState<string | null>(null)
+  const [assistLoading, setAssistLoading] = useState(false)
+  const [assistSnapshot, setAssistSnapshot] = useState<{ subject: string; body: string } | null>(null)
+  const [composeAgentsLoading, setComposeAgentsLoading] = useState(false)
+  const [composeAgentError, setComposeAgentError] = useState<string | null>(null)
   const [autoReplyDraft, setAutoReplyDraft] = useState<AutoReplyDraft | null>(null)
   const [autoReplyModalOpen, setAutoReplyModalOpen] = useState(false)
   const [autoReplyLoading, setAutoReplyLoading] = useState(false)
   const [autoReplyActionLoading, setAutoReplyActionLoading] = useState(false)
+  const selectedComposeAgent = useMemo(
+    () => composeAgents.find(agent => agent.id === composeAgentId) || null,
+    [composeAgents, composeAgentId]
+  )
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -314,6 +339,40 @@ export default function MailboxPage() {
   useEffect(() => {
     fetchEmailAccounts()
   }, [])
+
+  useEffect(() => {
+    const loadAgents = async () => {
+      try {
+        setComposeAgentsLoading(true)
+        setComposeAgentError(null)
+        const response = await fetch('/api/outreach-agents')
+        if (!response.ok) {
+          throw new Error('Failed to load outreach agents')
+        }
+        const data = await response.json()
+        const activeAgents = (data?.data || []).filter((agent: any) => agent.status === 'active')
+        setComposeAgents(activeAgents)
+        if (activeAgents.length === 0) {
+          setComposeAgentError('Create an outreach agent to enable AI drafting.')
+        }
+      } catch (error: any) {
+        console.error('Error loading outreach agents:', error)
+        setComposeAgentError(error.message || 'Failed to load outreach agents')
+        setComposeAgents([])
+      } finally {
+        setComposeAgentsLoading(false)
+      }
+    }
+
+    loadAgents()
+  }, [])
+
+  useEffect(() => {
+    if (!composeOpen) return
+    if (composeAgentId) return
+    if (composeAgents.length === 0) return
+    setComposeAgentId(composeAgents[0].id)
+  }, [composeOpen, composeAgentId, composeAgents])
 
   useEffect(() => {
     const { accountId, folder } = mailboxTarget
@@ -574,6 +633,19 @@ export default function MailboxPage() {
     setComposeSubject(subject)
     setComposeBody(body)
     setComposeError('')
+    const account = emailAccounts.find(acc => acc.id === accountId) || null
+    const defaultAgentId =
+      account?.outreach_agents_via_outreach?.id ||
+      account?.outreach_agents_via_assigned?.id ||
+      composeAgentId ||
+      (composeAgents.length > 0 ? composeAgents[0].id : null)
+
+    setComposeAssistMode('improve')
+    setAssistPrompt('')
+    setAssistStatus(null)
+    setAssistError(null)
+    setAssistSnapshot(null)
+    setComposeAgentId(defaultAgentId)
     setComposeOpen(true)
   }
 
@@ -624,6 +696,128 @@ export default function MailboxPage() {
     } finally {
       setComposeSending(false)
     }
+  }
+
+  const runDraftImprovement = async () => {
+    if (!composeAgentId) {
+      setAssistError('Select an outreach agent to continue.')
+      return
+    }
+
+    const plainBody = htmlToPlainText(composeBody)
+
+    if (!composeSubject.trim() && !plainBody.trim()) {
+      setAssistError('Write a subject or message before asking the agent to improve it.')
+      return
+    }
+
+    const snapshot = { subject: composeSubject, body: composeBody }
+
+    setAssistError(null)
+    setAssistStatus(`${selectedComposeAgent?.name || 'Your agent'} is polishing your draft…`)
+    setAssistLoading(true)
+    setAssistSnapshot(snapshot)
+
+    try {
+      const response = await fetch(`/api/outreach-agents/${composeAgentId}/compose/improve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: composeSubject,
+          body: composeBody,
+        }),
+      })
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload) {
+        const message =
+          (payload && (payload.error || payload.message || payload.details)) ||
+          'Failed to improve the draft.'
+        throw new Error(message)
+      }
+
+      if (payload.success === false) {
+        throw new Error(payload.error || 'Failed to improve the draft.')
+      }
+
+      const improved = payload.data || payload
+      setComposeSubject(improved.subject ?? composeSubject)
+      setComposeBody(improved.body ?? composeBody)
+      setAssistStatus(`${selectedComposeAgent?.name || 'Your agent'} polished your draft.`)
+      toast.success('Draft updated by outreach agent')
+    } catch (error: any) {
+      console.error('Failed to improve draft:', error)
+      setAssistStatus(null)
+      setAssistError(error.message || 'Failed to improve the draft.')
+      setAssistSnapshot(snapshot)
+    } finally {
+      setAssistLoading(false)
+    }
+  }
+
+  const runDraftGeneration = async () => {
+    if (!composeAgentId) {
+      setAssistError('Select an outreach agent to continue.')
+      return
+    }
+
+    if (!assistPrompt.trim()) {
+      setAssistError('Describe what you want the agent to write.')
+      return
+    }
+
+    const snapshot = { subject: composeSubject, body: composeBody }
+
+    setAssistError(null)
+    setAssistStatus(`${selectedComposeAgent?.name || 'Your agent'} is generating a draft…`)
+    setAssistLoading(true)
+    setAssistSnapshot(snapshot)
+
+    try {
+      const response = await fetch(`/api/outreach-agents/${composeAgentId}/compose/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: assistPrompt.trim(),
+        }),
+      })
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload) {
+        const message =
+          (payload && (payload.error || payload.message || payload.details)) ||
+          'Failed to generate a draft.'
+        throw new Error(message)
+      }
+
+      if (payload.success === false) {
+        throw new Error(payload.error || 'Failed to generate a draft.')
+      }
+
+      const generated = payload.data || payload
+      setComposeSubject(generated.subject ?? composeSubject)
+      setComposeBody(generated.body ?? composeBody)
+      setAssistStatus(`${selectedComposeAgent?.name || 'Your agent'} created a new draft.`)
+      toast.success('New draft generated')
+    } catch (error: any) {
+      console.error('Failed to generate draft:', error)
+      setAssistStatus(null)
+      setAssistError(error.message || 'Failed to generate the draft.')
+      setAssistSnapshot(snapshot)
+    } finally {
+      setAssistLoading(false)
+    }
+  }
+
+  const handleAssistRevert = () => {
+    if (!assistSnapshot) return
+    setComposeSubject(assistSnapshot.subject)
+    setComposeBody(assistSnapshot.body)
+    setAssistSnapshot(null)
+    setAssistStatus('Reverted to your previous draft.')
+    setAssistError(null)
   }
 
   const handleAutoReplyDraft = async () => {
@@ -869,12 +1063,25 @@ export default function MailboxPage() {
       return
     }
 
+    const account = emailAccounts.find(acc => acc.id === primaryAccountId) || null
+    const defaultAgentId =
+      account?.outreach_agents_via_outreach?.id ||
+      account?.outreach_agents_via_assigned?.id ||
+      composeAgentId ||
+      (composeAgents.length > 0 ? composeAgents[0].id : null)
+
     setComposeMode('new')
     setComposeAccountId(primaryAccountId)
     setComposeTo('')
     setComposeSubject('')
     setComposeBody('<p></p>')
     setComposeError('')
+    setComposeAssistMode('improve')
+    setAssistPrompt('')
+    setAssistStatus(null)
+    setAssistError(null)
+    setAssistSnapshot(null)
+    setComposeAgentId(defaultAgentId)
     setComposeOpen(true)
   }
 
@@ -1709,55 +1916,255 @@ export default function MailboxPage() {
         open={composeOpen}
         onOpenChange={(open) => {
           setComposeOpen(open)
-          if (!open) setComposeError('')
+          if (!open) {
+            setComposeError('')
+            setAssistStatus(null)
+            setAssistError(null)
+            setAssistPrompt('')
+            setAssistSnapshot(null)
+            setAssistLoading(false)
+          }
         }}
       >
-        <DialogContent className="max-w-3xl rounded-3xl">
-          <DialogHeader>
-            <DialogTitle>{composeTitle}</DialogTitle>
-            {composeAccountId && (
-              <p className="text-xs text-gray-500">Sending from {getAccountLabel(composeAccountId)}</p>
-            )}
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <Input
-                type="email"
-                value={composeTo}
-                onChange={(e) => setComposeTo(e.target.value)}
-                placeholder="To: recipient@example.com"
-              />
+        <DialogContent className="max-w-3xl w-full overflow-hidden rounded-3xl border border-slate-200 bg-transparent p-0">
+          <div className="flex max-h-[90vh] flex-col bg-[#f3f5f9]">
+            <div className="flex items-start justify-between bg-[linear-gradient(115deg,#2F84FB_0%,#31C4F5_50%,#25D4EB_100%)] px-6 py-6 text-white">
+              <div className="space-y-1">
+                <DialogTitle className="text-xl font-semibold text-white">{composeTitle}</DialogTitle>
+                <p className="text-sm text-white/80">
+                  Sending from {composeAccountId ? getAccountLabel(composeAccountId) : getAccountLabel(primaryAccountId)}
+                </p>
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-4">
-              <Input
-                type="text"
-                value={composeSubject}
-                onChange={(e) => setComposeSubject(e.target.value)}
-                placeholder="Subject"
-              />
+
+            <div className="flex-1 overflow-y-auto px-6 pb-8 pt-7">
+              <div className="space-y-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex-1 space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Outreach agent
+                    </label>
+                    <Select
+                      value={composeAgentId || undefined}
+                      onValueChange={(value) => {
+                        setComposeAgentId(value)
+                        setAssistError(null)
+                        setAssistStatus(null)
+                      }}
+                      disabled={composeAgentsLoading || assistLoading || composeAgents.length === 0}
+                    >
+                      <SelectTrigger className="h-12 w-full rounded-full border border-slate-200 bg-white px-4 text-left text-sm font-medium shadow-sm focus-visible:ring-blue-400">
+                        <SelectValue placeholder={composeAgentsLoading ? 'Loading agents…' : 'Select an agent'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {composeAgents.length === 0 ? (
+                          <SelectItem value="__no_agents" disabled>
+                            No active agents available
+                          </SelectItem>
+                        ) : (
+                          composeAgents.map((agent) => (
+                            <SelectItem key={agent.id} value={agent.id}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{agent.name}</span>
+                                {agent.purpose && (
+                                  <span className="text-xs text-slate-500">{agent.purpose}</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {selectedComposeAgent?.sender_name && (
+                      <p className="text-xs text-slate-500">
+                        Writing as {selectedComposeAgent.sender_name}
+                      </p>
+                    )}
+                    {composeAgentError && (
+                      <p className="text-xs text-red-600">{composeAgentError}</p>
+                    )}
+                  </div>
+
+                  <div className="flex h-12 items-center gap-1 self-start rounded-full bg-slate-200/70 p-1 text-xs font-semibold text-slate-600 sm:self-auto">
+                    <button
+                      type="button"
+                      className={clsx(
+                        'flex h-full items-center rounded-full px-4 transition',
+                        composeAssistMode === 'improve'
+                          ? 'bg-white text-slate-900 shadow'
+                          : 'text-slate-500 hover:text-slate-800'
+                      )}
+                      onClick={() => {
+                        setComposeAssistMode('improve')
+                        setAssistError(null)
+                        setAssistStatus(null)
+                      }}
+                      disabled={assistLoading}
+                    >
+                      Improve
+                    </button>
+                    <button
+                      type="button"
+                      className={clsx(
+                        'flex h-full items-center rounded-full px-4 transition',
+                        composeAssistMode === 'generate'
+                          ? 'bg-white text-slate-900 shadow'
+                          : 'text-slate-500 hover:text-slate-800'
+                      )}
+                      onClick={() => {
+                        setComposeAssistMode('generate')
+                        setAssistError(null)
+                        setAssistStatus(null)
+                      }}
+                      disabled={assistLoading}
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Input
+                    type="email"
+                    value={composeTo}
+                    onChange={(e) => setComposeTo(e.target.value)}
+                    placeholder="To: recipient@example.com"
+                    className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-blue-200"
+                  />
+                  <Input
+                    type="text"
+                    value={composeSubject}
+                    onChange={(e) => setComposeSubject(e.target.value)}
+                    placeholder="Subject"
+                    className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-blue-200"
+                  />
+                </div>
+
+                {composeAssistMode === 'generate' && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Tell {selectedComposeAgent?.name || 'your agent'} what to write
+                    </label>
+                    <Textarea
+                      rows={3}
+                      value={assistPrompt}
+                      onChange={(e) => {
+                        setAssistPrompt(e.target.value)
+                        if (assistError) {
+                          setAssistError(null)
+                        }
+                      }}
+                      placeholder="e.g., Follow up after yesterday’s demo and suggest booking a quick recap call."
+                      className="resize-none rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-blue-200"
+                      disabled={assistLoading}
+                    />
+                  </div>
+                )}
+
+                <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Templates (coming soon)
+                  </div>
+                  <EmailRichTextEditor
+                    value={composeBody}
+                    onChange={setComposeBody}
+                    minHeight="260px"
+                    hideVariables
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  {assistStatus && (
+                    <div className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                      <Sparkles className="h-4 w-4" />
+                      <span className="flex-1">{assistStatus}</span>
+                    </div>
+                  )}
+                  {assistError && (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                      {assistError}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (composeAssistMode === 'improve') {
+                          runDraftImprovement()
+                        } else {
+                          runDraftGeneration()
+                        }
+                      }}
+                      disabled={
+                        assistLoading ||
+                        !composeAgentId ||
+                        (composeAssistMode === 'generate' && !assistPrompt.trim())
+                      }
+                      className="flex items-center gap-2 rounded-2xl border-blue-200 bg-white px-5 py-2 text-sm font-semibold text-blue-600 shadow-sm transition hover:bg-blue-50"
+                    >
+                      {assistLoading ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      {composeAssistMode === 'improve'
+                        ? `Improve with ${selectedComposeAgent?.name || 'agent'}`
+                        : `Generate with ${selectedComposeAgent?.name || 'agent'}`}
+                    </Button>
+                  </div>
+                </div>
+
+                {composeError && <p className="text-sm text-red-600">{composeError}</p>}
+              </div>
             </div>
-            <EmailRichTextEditor
-              value={composeBody}
-              onChange={setComposeBody}
-              minHeight="260px"
-            />
-            {composeError && <p className="text-sm text-red-600">{composeError}</p>}
+
+            <div className="border-t border-slate-200 bg-white px-6 py-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                {assistSnapshot ? (
+                  <button
+                    onClick={handleAssistRevert}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+                    disabled={assistLoading}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Undo agent changes
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-400">&nbsp;</span>
+                )}
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    className="rounded-xl px-5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                    onClick={() => {
+                      setComposeOpen(false)
+                      setComposeError('')
+                      setAssistStatus(null)
+                      setAssistError(null)
+                    }}
+                    disabled={assistLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleComposeSend}
+                    disabled={composeSending || assistLoading}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[linear-gradient(120deg,#2F84FB,#31C4F5)] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {composeSending ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Sending…
+                      </>
+                    ) : (
+                      'Send'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setComposeOpen(false)
-                setComposeError('')
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleComposeSend} disabled={composeSending}>
-              {composeSending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-              Send
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

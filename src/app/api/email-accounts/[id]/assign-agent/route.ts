@@ -61,7 +61,7 @@ export const PUT = withAuth(async (
     // If agent_id is provided, verify it exists and belongs to user
     if (agent_id) {
       const { data: agent, error: agentError } = await supabase
-        .from('outreach_agents')
+        .from('ai_personas' as any)
         .select('id, user_id, name, status')
         .eq('id', agent_id)
         .eq('user_id', user.id)
@@ -85,14 +85,15 @@ export const PUT = withAuth(async (
     const { data: updatedAccount, error: updateError } = await supabase
       .from('email_accounts')
       .update({
-        assigned_agent_id: agent_id,
+        assigned_persona_id: agent_id,
         updated_at: new Date().toISOString()
       })
       .eq('id', emailAccountId)
       .eq('user_id', user.id)
       .select(`
         *,
-        assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(
+        assigned_agent_id:assigned_persona_id,
+        assigned_agent:ai_personas!email_accounts_assigned_persona_id_fkey(
           id,
           name,
           status,
@@ -154,7 +155,8 @@ export const GET = withAuth(async (
       .from('email_accounts')
       .select(`
         *,
-        assigned_agent:outreach_agents!email_accounts_assigned_agent_id_fkey(
+        assigned_agent_id:assigned_persona_id,
+        assigned_agent:ai_personas!email_accounts_assigned_persona_id_fkey(
           id,
           name,
           status,

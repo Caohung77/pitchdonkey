@@ -269,7 +269,7 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase }) =>
           id,
           email,
           outreach_agent_id,
-          outreach_agents:outreach_agents!email_accounts_outreach_agent_id_fkey (
+          outreach_agents:ai_personas!email_accounts_outreach_agent_id_fkey (
             id,
             name,
             sender_name,

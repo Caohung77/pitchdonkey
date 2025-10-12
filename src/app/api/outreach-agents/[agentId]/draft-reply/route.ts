@@ -62,7 +62,7 @@ export const POST = withAuth(async (
 
     // Verify agent exists and belongs to user
     const { data: agent, error: agentError } = await supabase
-      .from('outreach_agents')
+      .from('ai_personas' as any)
       .select('id, user_id, name, status')
       .eq('id', agentId)
       .eq('user_id', user.id)
@@ -86,7 +86,7 @@ export const POST = withAuth(async (
     // Verify email account exists and belongs to user
     const { data: emailAccount, error: emailAccountError } = await supabase
       .from('email_accounts')
-      .select('id, user_id, email, assigned_agent_id')
+      .select('id, user_id, email, assigned_agent_id:assigned_persona_id')
       .eq('id', email_account_id)
       .eq('user_id', user.id)
       .single()
