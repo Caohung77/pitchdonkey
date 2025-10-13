@@ -39,6 +39,7 @@ export const POST = withAuth(async (request: NextRequest, { user }) => {
       )
     }
 
+    // Check for required API keys
     if (!process.env.PERPLEXITY_API_KEY) {
       return NextResponse.json(
         {
@@ -60,17 +61,21 @@ export const POST = withAuth(async (request: NextRequest, { user }) => {
       )
     }
 
+    console.log(`🔍 Verifying website accessibility: ${normalized}`)
     const accessibility = await PerplexityService.verifyWebsiteAccessible(normalized)
     if (!accessibility.ok) {
+      console.error(`❌ Website not accessible: ${normalized}`, accessibility.error)
       return NextResponse.json(
         {
           success: false,
-          error: 'We could not reach that website. Check the URL and try again.',
+          error: `We could not reach that website. ${accessibility.error ? `Error: ${accessibility.error}` : 'Check the URL and try again.'}`,
         },
         { status: 422 }
       )
     }
+    console.log(`✅ Website verified: ${accessibility.finalUrl || normalized}`)
 
+    // Use the SAME Perplexity service that contact enrichment uses
     const service = new PerplexityService()
     const enrichment = await service.analyzeWebsite(accessibility.finalUrl || normalized)
 
@@ -85,13 +90,15 @@ export const POST = withAuth(async (request: NextRequest, { user }) => {
       : ''
 
     const uniqueSellingPoints = (enrichment.unique_points || [])
-      .map((point) => point.trim())
+      .map((point: string) => point.trim())
       .filter(Boolean)
       .slice(0, 5)
 
     const targetPersona = enrichment.target_audience?.length
       ? `We typically work with ${enrichment.target_audience.join(', ').replace(/, ([^,]*)$/, ' and $1')}.`
       : ''
+
+    console.log('✅ Smart fill completed successfully')
 
     return addSecurityHeaders(
       NextResponse.json({

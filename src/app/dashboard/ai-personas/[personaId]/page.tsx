@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Trash2, Upload, Link as LinkIcon, FileText, ExternalLink, Loader2, Plus, Globe, File, Type } from 'lucide-react'
+import { ArrowLeft, Trash2, Upload, Link as LinkIcon, FileText, ExternalLink, Loader2, Plus, Globe, File, Type, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { ApiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import type { AIPersona } from '@/lib/ai-personas'
@@ -35,6 +36,10 @@ export default function PersonaDetailPage() {
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Knowledge form state
   const [showAddKnowledge, setShowAddKnowledge] = useState(false)
@@ -263,6 +268,47 @@ export default function PersonaDetailPage() {
       .toUpperCase()
       .substring(0, 2)
   }
+
+  async function handleDeletePersona() {
+    if (!persona) {
+      console.error('❌ No persona available to delete')
+      return
+    }
+
+    console.log('🗑️ Starting persona deletion:', {
+      personaId,
+      personaName: persona.name,
+      apiUrl: `/api/ai-personas/${personaId}`
+    })
+
+    try {
+      setIsDeleting(true)
+      console.log('🔄 Calling ApiClient.delete...')
+
+      const response = await ApiClient.delete(`/api/ai-personas/${personaId}`)
+
+      console.log('✅ Delete response received:', response)
+
+      if (response.success) {
+        console.log('✅ Persona deleted successfully, showing toast and redirecting')
+        toast.success('AI Persona deleted successfully')
+        // Redirect to personas list after short delay
+        setTimeout(() => {
+          console.log('🔄 Redirecting to personas list')
+          router.push('/dashboard/ai-personas')
+        }, 1000)
+      } else {
+        console.error('❌ Response indicated failure:', response)
+        toast.error(response.error || 'Failed to delete AI persona')
+        setIsDeleting(false)
+      }
+    } catch (error: any) {
+      console.error('❌ Error deleting persona:', error)
+      toast.error(error.message || 'Failed to delete AI persona')
+      setIsDeleting(false)
+    }
+  }
+
 
   if (loading) {
     return (
@@ -784,8 +830,48 @@ export default function PersonaDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Delete Persona */}
+          <Card className="border-red-200">
+            <CardHeader>
+              <CardTitle className="text-red-900">Delete Persona</CardTitle>
+              <CardDescription>
+                Permanently delete this persona and all associated data
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <p className="font-medium">Delete AI Persona</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    This will remove all knowledge base items, chat history, and email assignments. This action cannot be undone.
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete AI Persona?"
+        description={`Are you absolutely sure you want to permanently delete "${persona?.name}"? This will remove all knowledge base items, chat history, and email assignments. This action cannot be undone.`}
+        confirmText="Delete Permanently"
+        cancelText="Cancel"
+        variant="destructive"
+        onConfirm={handleDeletePersona}
+      />
     </div>
   )
 }

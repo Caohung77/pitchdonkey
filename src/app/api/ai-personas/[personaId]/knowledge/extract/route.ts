@@ -94,6 +94,11 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
       throw knowledgeError
     }
 
+    // Cleanup: Delete temporary PDF file if this was a PDF upload
+    if (parsed.type === 'pdf' && parsed.url.includes('temp-pdf-uploads')) {
+      await cleanupTempPdf(supabase, parsed.url)
+    }
+
     // Update persona's knowledge summary
     await updateKnowledgeSummary(supabase, personaId)
 
@@ -133,6 +138,37 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
     )
   }
 })
+
+/**
+ * Clean up temporary PDF file from storage after content extraction
+ */
+async function cleanupTempPdf(supabase: any, pdfUrl: string) {
+  try {
+    // Extract filename from URL
+    // URL format: https://xxx.supabase.co/storage/v1/object/public/temp-pdf-uploads/filename.pdf
+    const urlParts = pdfUrl.split('/temp-pdf-uploads/')
+    if (urlParts.length < 2) {
+      console.error('Invalid temp PDF URL format:', pdfUrl)
+      return
+    }
+
+    const fileName = urlParts[1]
+
+    // Delete from temp storage
+    const { error } = await supabase
+      .storage
+      .from('temp-pdf-uploads')
+      .remove([fileName])
+
+    if (error) {
+      console.error('Failed to delete temp PDF:', error)
+    } else {
+      console.log('✅ Temp PDF deleted:', fileName)
+    }
+  } catch (error) {
+    console.error('Error cleaning up temp PDF:', error)
+  }
+}
 
 async function updateKnowledgeSummary(supabase: any, personaId: string) {
   const { count } = await supabase

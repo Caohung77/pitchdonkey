@@ -72,13 +72,11 @@ export class ApiClient {
     })
     if (!response.ok) {
       let errorMessage = `API Error: ${response.status} ${response.statusText}`
-      console.error('🚨 POST API Request Failed:', {
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
-        requestData: typeof data === 'object' ? Object.keys(data).length : 'non-object'
-      })
+      console.error('🚨 POST API Request Failed:')
+      console.error('  URL:', url)
+      console.error('  Status:', response.status, response.statusText)
+      console.error('  Headers:', Object.fromEntries(response.headers.entries()))
+      console.error('  Request Data:', data)
 
       try {
         const errorData = await response.json()

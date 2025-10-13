@@ -229,8 +229,17 @@ export function ContactListDetailView({
   }
 
   const performDeleteContact = async (contactId: string) => {
+    const contact = contacts.find(c => c.id === contactId)
+    const contactName = contact?.first_name || contact?.email || 'Contact'
+
     try {
-      await ApiClient.delete(`/api/contacts/${contactId}`)
+      console.log('🗑️ Starting contact deletion:', { contactId, contactName })
+
+      const response = await ApiClient.delete(`/api/contacts/${contactId}`)
+
+      console.log('✅ Delete API response:', response)
+
+      // Update local state
       setContacts(prev => prev.filter(c => c.id !== contactId))
 
       // Update parent list
@@ -241,9 +250,26 @@ export function ContactListDetailView({
         }
         onListUpdated(updatedList)
       }
-    } catch (error) {
-      console.error('Error deleting contact:', error)
-      alert('Failed to delete contact')
+
+      // Show success toast
+      addToast({
+        type: 'success',
+        title: 'Contact deleted',
+        message: `${contactName} has been permanently deleted.`
+      })
+
+    } catch (error: any) {
+      console.error('❌ Error deleting contact:', {
+        contactId,
+        error: error.message || error,
+        fullError: error
+      })
+
+      addToast({
+        type: 'error',
+        title: 'Delete failed',
+        message: error?.message || 'Unable to delete contact. Please try again.'
+      })
     }
   }
 

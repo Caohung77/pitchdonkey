@@ -5,7 +5,8 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 /**
  * POST /api/ai-personas/[personaId]/knowledge/upload-pdf
  *
- * Upload PDF file to Supabase storage and return public URL
+ * Upload PDF file to TEMPORARY Supabase storage and return public URL
+ * Note: PDF is stored temporarily for Jina AI extraction, then deleted after content is extracted
  */
 export const POST = withAuth(async (request: NextRequest, { user, supabase, params }) => {
   try {
@@ -54,18 +55,20 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
       )
     }
 
-    // Generate unique filename
+    // Generate unique filename for temporary storage
     const timestamp = Date.now()
+    const randomId = Math.random().toString(36).substring(2, 15)
     const sanitizedName = file.name
       .replace(/[^a-zA-Z0-9.-]/g, '_')
       .replace(/_{2,}/g, '_')
-    const fileName = `${user.id}/${personaId}/${timestamp}_${sanitizedName}`
+    const fileName = `${timestamp}_${randomId}_${sanitizedName}`
 
-    // Upload to Supabase storage
+    // Upload to TEMPORARY Supabase storage bucket
+    // This file will be deleted after content extraction
     const fileBuffer = await file.arrayBuffer()
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('persona-knowledge')
+      .from('temp-pdf-uploads')
       .upload(fileName, fileBuffer, {
         contentType: 'application/pdf',
         upsert: false
@@ -76,10 +79,10 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
       throw new Error(`Failed to upload file: ${uploadError.message}`)
     }
 
-    // Get public URL
+    // Get public URL from temporary storage
     const { data: { publicUrl } } = supabase
       .storage
-      .from('persona-knowledge')
+      .from('temp-pdf-uploads')
       .getPublicUrl(fileName)
 
     return addSecurityHeaders(

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Sparkles, User, MessageSquare, Brain, Database, Check, Loader2, Globe, Type, FileText, Plus, Trash2, Upload, File } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Sparkles, User, MessageSquare, Brain, Database, Check, Loader2, Globe, Type, FileText, Plus, Trash2, Upload, File, Camera, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -31,8 +31,9 @@ const STEPS = [
   { id: 1, title: 'Basic Info', icon: User },
   { id: 2, title: 'Persona Type', icon: Sparkles },
   { id: 3, title: 'Personality', icon: Brain },
-  { id: 4, title: 'Context', icon: MessageSquare },
-  { id: 5, title: 'Knowledge', icon: Database }
+  { id: 4, title: 'Appearance', icon: Camera },
+  { id: 5, title: 'Context', icon: MessageSquare },
+  { id: 6, title: 'Knowledge', icon: Database }
 ]
 
 export default function CreatePersonaPage() {
@@ -51,6 +52,12 @@ export default function CreatePersonaPage() {
     content: '',
     url: ''
   })
+  const [selectedPdfFile, setSelectedPdfFile] = useState<File | null>(null)
+  const [uploadingPdf, setUploadingPdf] = useState(false)
+
+  // Appearance state
+  const [generatingAvatar, setGeneratingAvatar] = useState(false)
+  const [generatedAvatarUrl, setGeneratedAvatarUrl] = useState<string | null>(null)
 
   // Form data
   const [formData, setFormData] = useState({
@@ -80,7 +87,12 @@ export default function CreatePersonaPage() {
       proactivity: 'balanced'
     } as PersonalityTraits,
 
-    // Step 4: Company Context
+    // Step 4: Appearance
+    gender: '' as 'male' | 'female' | 'non-binary' | '',
+    appearance_description: '',
+    avatar_url: '',
+
+    // Step 5: Company Context
     purpose: '',
     product_one_liner: '',
     product_description: '',
@@ -149,6 +161,9 @@ export default function CreatePersonaPage() {
         language: formData.language,
         persona_type: formData.persona_type,
         personality_traits: formData.personality_traits,
+        gender: formData.gender || null,
+        appearance_description: formData.appearance_description || null,
+        avatar_url: formData.avatar_url || null,
         purpose: formData.purpose,
         product_one_liner: formData.product_one_liner,
         product_description: formData.product_description,
@@ -178,13 +193,72 @@ export default function CreatePersonaPage() {
         if (formData.knowledge_items.length > 0) {
           toast.info(`Adding ${formData.knowledge_items.length} knowledge items...`)
 
+          let successCount = 0
+          let failCount = 0
+
           for (const item of formData.knowledge_items) {
             try {
-              await ApiClient.post(`/api/ai-personas/${personaId}/knowledge`, item)
+              console.log('📝 Saving knowledge item:', item)
+
+              // Handle PDF files differently
+              if (item.type === 'pdf' && (item as any).pdfFile) {
+                const pdfFile = (item as any).pdfFile
+
+                // Step 1: Upload PDF to storage
+                toast.info(`Uploading ${item.title}...`)
+                const formData = new FormData()
+                formData.append('file', pdfFile)
+
+                const uploadResponse = await fetch(`/api/ai-personas/${personaId}/knowledge/upload-pdf`, {
+                  method: 'POST',
+                  body: formData
+                })
+
+                if (!uploadResponse.ok) {
+                  throw new Error('Failed to upload PDF')
+                }
+
+                const uploadResult = await uploadResponse.json()
+                const publicUrl = uploadResult.data.publicUrl
+
+                // Step 2: Extract content from uploaded PDF
+                toast.info(`Extracting content from ${item.title}...`)
+                const extractResponse = await ApiClient.post(`/api/ai-personas/${personaId}/knowledge/extract`, {
+                  type: 'pdf',
+                  url: publicUrl,
+                  title: item.title,
+                  description: item.description
+                })
+
+                console.log('✅ PDF knowledge item saved:', extractResponse)
+                successCount++
+              } else {
+                // Handle text and link items
+                const cleanItem = {
+                  type: item.type,
+                  title: item.title,
+                  description: item.description,
+                  ...(item.content ? { content: item.content } : {}),
+                  ...(item.url ? { url: item.url } : {})
+                }
+                const knowledgeResponse = await ApiClient.post(`/api/ai-personas/${personaId}/knowledge`, cleanItem)
+                console.log('✅ Knowledge item saved:', knowledgeResponse)
+                successCount++
+              }
             } catch (knowledgeError: any) {
-              console.error('Error adding knowledge item:', knowledgeError)
+              failCount++
+              console.error('❌ Error adding knowledge item:', knowledgeError)
+              console.error('Failed item:', item)
+              toast.error(`Failed to create knowledge item: ${item.title}`)
               // Continue with other items even if one fails
             }
+          }
+
+          if (successCount > 0) {
+            toast.success(`${successCount} knowledge item${successCount > 1 ? 's' : ''} added successfully`)
+          }
+          if (failCount > 0) {
+            toast.warning(`${failCount} knowledge item${failCount > 1 ? 's' : ''} failed to save`)
           }
         }
 
@@ -286,6 +360,31 @@ export default function CreatePersonaPage() {
     }
   }
 
+  const handlePdfFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      toast.error('Please select a PDF file')
+      return
+    }
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast.error('PDF file size must be less than 10MB')
+      return
+    }
+
+    setSelectedPdfFile(file)
+    // Auto-fill title from filename if empty
+    if (!knowledgeForm.title) {
+      const fileName = file.name.replace(/\.pdf$/i, '')
+      setKnowledgeForm(prev => ({ ...prev, title: fileName }))
+    }
+  }
+
   const handleAddKnowledge = () => {
     if (!knowledgeForm.title.trim()) {
       toast.error('Please enter a title')
@@ -302,8 +401,13 @@ export default function CreatePersonaPage() {
       return
     }
 
+    if (knowledgeType === 'pdf' && !selectedPdfFile) {
+      toast.error('Please select a PDF file')
+      return
+    }
+
     // Add knowledge item to the list
-    const newItem = {
+    const newItem: any = {
       type: knowledgeType,
       title: knowledgeForm.title,
       description: knowledgeForm.description,
@@ -311,9 +415,16 @@ export default function CreatePersonaPage() {
       ...(knowledgeType === 'link' ? { url: knowledgeForm.url } : {})
     }
 
+    // For PDF, store file reference
+    if (knowledgeType === 'pdf' && selectedPdfFile) {
+      newItem.pdfFile = selectedPdfFile
+      newItem.fileName = selectedPdfFile.name
+      newItem.fileSize = selectedPdfFile.size
+    }
+
     setFormData(prev => ({
       ...prev,
-      knowledge_items: [...prev.knowledge_items, newItem as any]
+      knowledge_items: [...prev.knowledge_items, newItem]
     }))
 
     // Reset form
@@ -323,6 +434,7 @@ export default function CreatePersonaPage() {
       content: '',
       url: ''
     })
+    setSelectedPdfFile(null)
     setShowAddKnowledge(false)
     toast.success('Knowledge item added')
   }
@@ -333,6 +445,42 @@ export default function CreatePersonaPage() {
       knowledge_items: prev.knowledge_items.filter((_, i) => i !== index)
     }))
     toast.success('Knowledge item removed')
+  }
+
+  const handleGenerateRandomAvatar = async () => {
+    try {
+      setGeneratingAvatar(true)
+      toast.info('Generating persona headshot...')
+
+      // Build prompt based on personality and role
+      const personalityDesc = `${formData.personality_traits.communication_style} ${formData.personality_traits.formality}`
+      const roleDesc = formData.sender_role || formData.custom_persona_name || 'professional'
+      const genderDesc = formData.gender || 'person'
+      const appearanceDesc = formData.appearance_description || ''
+
+      const prompt = `Professional corporate headshot of a ${genderDesc}, ${roleDesc}, ${personalityDesc} personality, ${appearanceDesc || 'business attire'}, neutral background, high quality, realistic`
+
+      const response = await ApiClient.post(`/api/ai-personas/generate-headshot`, {
+        prompt,
+        gender: formData.gender
+      })
+
+      if (response.success && response.data?.avatar_url) {
+        setGeneratedAvatarUrl(response.data.avatar_url)
+        setFormData(prev => ({
+          ...prev,
+          avatar_url: response.data.avatar_url
+        }))
+        toast.success('Headshot generated successfully!')
+      } else {
+        throw new Error(response.error || 'Failed to generate headshot')
+      }
+    } catch (error: any) {
+      console.error('Error generating avatar:', error)
+      toast.error(error.message || 'Failed to generate headshot. Please try again.')
+    } finally {
+      setGeneratingAvatar(false)
+    }
   }
 
   return (
@@ -397,8 +545,9 @@ export default function CreatePersonaPage() {
             {currentStep === 1 && 'Basic information about your AI persona'}
             {currentStep === 2 && 'Choose the type and role of your persona'}
             {currentStep === 3 && 'Define personality traits and communication style'}
-            {currentStep === 4 && 'Add company context and messaging strategy'}
-            {currentStep === 5 && 'Add knowledge base for better context'}
+            {currentStep === 4 && 'Customize how your persona looks'}
+            {currentStep === 5 && 'Add company context and messaging strategy'}
+            {currentStep === 6 && 'Add knowledge base for better context'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -722,8 +871,99 @@ export default function CreatePersonaPage() {
             </div>
           )}
 
-          {/* Step 4: Context */}
+          {/* Step 4: Appearance */}
           {currentStep === 4 && (
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <Label>Gender</Label>
+                <Select
+                  value={formData.gender}
+                  onValueChange={(value: 'male' | 'female' | 'non-binary') =>
+                    setFormData({ ...formData, gender: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender for avatar generation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="non-binary">Non-binary</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Used to generate a professional headshot for your persona
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="appearance_description">Appearance Description (Optional)</Label>
+                <Textarea
+                  id="appearance_description"
+                  placeholder="Describe how your persona should look (e.g., professional attire, friendly demeanor, modern style)..."
+                  value={formData.appearance_description}
+                  onChange={(e) => setFormData({ ...formData, appearance_description: e.target.value })}
+                  rows={4}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Provide additional details to customize the generated headshot
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  onClick={handleGenerateRandomAvatar}
+                  disabled={!formData.gender || generatingAvatar}
+                  className="w-full gap-2"
+                  size="lg"
+                >
+                  {generatingAvatar ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Generating Headshot...
+                    </>
+                  ) : (
+                    <>
+                      <Shuffle className="h-5 w-5" />
+                      Generate Random Headshot
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  {formData.gender
+                    ? 'Click to generate a professional headshot based on personality and role'
+                    : 'Please select a gender first to generate an avatar'}
+                </p>
+              </div>
+
+              {(generatedAvatarUrl || formData.avatar_url) && (
+                <div className="space-y-3">
+                  <Label>Generated Headshot Preview</Label>
+                  <div className="relative w-full max-w-sm mx-auto aspect-square rounded-lg overflow-hidden border bg-muted">
+                    <img
+                      src={generatedAvatarUrl || formData.avatar_url}
+                      alt="Generated persona headshot"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex justify-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateRandomAvatar}
+                      disabled={generatingAvatar}
+                    >
+                      <Shuffle className="h-4 w-4 mr-2" />
+                      Generate New Headshot
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 5: Context */}
+          {currentStep === 5 && (
             <>
               {/* Smart Fill Section */}
               <Card className="bg-primary/5 border-primary/20">
@@ -883,8 +1123,8 @@ export default function CreatePersonaPage() {
             </>
           )}
 
-          {/* Step 5: Knowledge Base */}
-          {currentStep === 5 && (
+          {/* Step 6: Knowledge Base */}
+          {currentStep === 6 && (
             <div className="space-y-4">
               {!showAddKnowledge && (
                 <div className="flex items-center justify-between">
@@ -911,7 +1151,7 @@ export default function CreatePersonaPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label>Type</Label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <Button
                           variant={knowledgeType === 'text' ? 'default' : 'outline'}
                           size="sm"
@@ -928,9 +1168,19 @@ export default function CreatePersonaPage() {
                           <Globe className="h-4 w-4 mr-2" />
                           URL
                         </Button>
+                        <Button
+                          variant={knowledgeType === 'pdf' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setKnowledgeType('pdf')}
+                        >
+                          <File className="h-4 w-4 mr-2" />
+                          PDF
+                        </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Note: PDF upload is available after persona creation
+                        {knowledgeType === 'pdf' && 'Upload a PDF file to extract content automatically'}
+                        {knowledgeType === 'link' && 'Content will be extracted from the URL after persona creation'}
+                        {knowledgeType === 'text' && 'Paste or type content directly'}
                       </p>
                     </div>
 
@@ -983,6 +1233,35 @@ export default function CreatePersonaPage() {
                       </div>
                     )}
 
+                    {knowledgeType === 'pdf' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="knowledge_pdf">PDF File *</Label>
+                        <div className="flex items-center gap-3">
+                          <Input
+                            id="knowledge_pdf"
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            onChange={handlePdfFileSelect}
+                            className="cursor-pointer"
+                          />
+                          {selectedPdfFile && (
+                            <Badge variant="secondary" className="text-xs">
+                              {(selectedPdfFile.size / 1024).toFixed(1)} KB
+                            </Badge>
+                          )}
+                        </div>
+                        {selectedPdfFile && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <File className="h-4 w-4" />
+                            <span className="truncate">{selectedPdfFile.name}</span>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Max file size: 10MB. Content will be extracted automatically using Jina AI after persona creation.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="flex gap-2">
                       <Button onClick={handleAddKnowledge}>
                         Add Knowledge
@@ -1007,8 +1286,16 @@ export default function CreatePersonaPage() {
                           <div className="flex items-start gap-3 flex-1">
                             {item.type === 'text' && <FileText className="h-5 w-5 mt-0.5 text-primary" />}
                             {item.type === 'link' && <Globe className="h-5 w-5 mt-0.5 text-primary" />}
+                            {item.type === 'pdf' && <File className="h-5 w-5 mt-0.5 text-primary" />}
                             <div className="flex-1">
-                              <p className="font-medium">{item.title}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{item.title}</p>
+                                {item.type === 'pdf' && (item as any).fileSize && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {((item as any).fileSize / 1024).toFixed(1)} KB
+                                  </Badge>
+                                )}
+                              </div>
                               {item.description && (
                                 <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
                               )}
@@ -1017,6 +1304,11 @@ export default function CreatePersonaPage() {
                               )}
                               {item.url && (
                                 <p className="text-sm text-primary mt-2">{item.url}</p>
+                              )}
+                              {item.type === 'pdf' && (item as any).fileName && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                  📄 {(item as any).fileName}
+                                </p>
                               )}
                             </div>
                           </div>

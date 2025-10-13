@@ -2,15 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Sparkles, MessageSquare, Mail, Users, Bot, TrendingUp, Clock } from 'lucide-react'
+import { Plus, MessageSquare, Mail, Bot } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ApiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import type { AIPersona } from '@/lib/ai-personas'
+import { PersonaFlipCard } from '@/components/ai-personas/persona-flip-card'
 
 export default function AIPersonasPage() {
   const router = useRouter()
@@ -49,32 +48,6 @@ export default function AIPersonasPage() {
     success_manager: 'Success Manager',
     marketing_specialist: 'Marketing Specialist',
     custom: 'Custom Persona'
-  }
-
-  const personaTypeIcons: Record<string, any> = {
-    customer_support: MessageSquare,
-    sales_rep: TrendingUp,
-    sales_development: Users,
-    account_manager: Users,
-    consultant: Sparkles,
-    technical_specialist: Bot,
-    success_manager: MessageSquare,
-    marketing_specialist: Mail,
-    custom: Sparkles
-  }
-
-  function getPersonaTypeIcon(type: string) {
-    const Icon = personaTypeIcons[type] || Bot
-    return <Icon className="h-5 w-5" />
-  }
-
-  function getInitials(name: string): string {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2)
   }
 
   return (
@@ -191,141 +164,12 @@ export default function AIPersonasPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {personas.map((persona) => (
-                <PersonaCard key={persona.id} persona={persona} onUpdate={loadPersonas} />
+                <PersonaFlipCard key={persona.id} persona={persona} onUpdate={loadPersonas} />
               ))}
             </div>
           )}
         </TabsContent>
       </Tabs>
     </div>
-  )
-}
-
-function PersonaCard({ persona, onUpdate }: { persona: AIPersona; onUpdate: () => void }) {
-  const router = useRouter()
-  const personaTypeLabels: Record<string, string> = {
-    customer_support: 'Customer Support',
-    sales_rep: 'Sales Rep',
-    sales_development: 'SDR',
-    account_manager: 'Account Manager',
-    consultant: 'Consultant',
-    technical_specialist: 'Technical',
-    success_manager: 'Success Manager',
-    marketing_specialist: 'Marketing',
-    custom: 'Custom'
-  }
-
-  const statusColors: Record<string, string> = {
-    active: 'bg-green-100 text-green-800 border-green-200',
-    draft: 'bg-gray-100 text-gray-800 border-gray-200',
-    inactive: 'bg-red-100 text-red-800 border-red-200'
-  }
-
-  function getInitials(name: string): string {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2)
-  }
-
-  return (
-    <Card
-      className="hover:shadow-lg transition-shadow cursor-pointer group"
-      onClick={() => router.push(`/dashboard/ai-personas/${persona.id}`)}
-    >
-      <CardHeader className="pb-3">
-        <div className="flex items-start gap-4">
-          <Avatar className="h-16 w-16 border-2 border-primary/20">
-            {persona.avatar_url ? (
-              <AvatarImage src={persona.avatar_url} alt={persona.name} />
-            ) : (
-              <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
-                {getInitials(persona.sender_name || persona.name)}
-              </AvatarFallback>
-            )}
-          </Avatar>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <CardTitle className="text-lg truncate">
-                  {persona.sender_name || persona.name}
-                </CardTitle>
-                <CardDescription className="text-sm">
-                  {persona.sender_role || personaTypeLabels[persona.persona_type]}
-                </CardDescription>
-              </div>
-              <Badge className={statusColors[persona.status]} variant="outline">
-                {persona.status}
-              </Badge>
-            </div>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Persona Type */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Bot className="h-4 w-4" />
-          <span>{personaTypeLabels[persona.persona_type]}</span>
-        </div>
-
-        {/* Personality Traits */}
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground font-medium">Personality</p>
-          <div className="flex flex-wrap gap-1">
-            {persona.personality_traits.communication_style && (
-              <Badge variant="secondary" className="text-xs">
-                {persona.personality_traits.communication_style}
-              </Badge>
-            )}
-            {persona.personality_traits.empathy_level && (
-              <Badge variant="secondary" className="text-xs">
-                {persona.personality_traits.empathy_level} empathy
-              </Badge>
-            )}
-            {persona.personality_traits.expertise_depth && (
-              <Badge variant="secondary" className="text-xs">
-                {persona.personality_traits.expertise_depth}
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-          <div>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-              <MessageSquare className="h-3 w-3" />
-              <span>Chats</span>
-            </div>
-            <p className="text-lg font-semibold">{persona.total_chats || 0}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-              <Mail className="h-3 w-3" />
-              <span>Emails</span>
-            </div>
-            <p className="text-lg font-semibold">{persona.total_emails_handled || 0}</p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-2">
-          {persona.chat_enabled && (
-            <Button variant="outline" size="sm" className="flex-1 gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Chat
-            </Button>
-          )}
-          <Button variant="outline" size="sm" className="flex-1 gap-2">
-            <Mail className="h-4 w-4" />
-            Test Email
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
   )
 }

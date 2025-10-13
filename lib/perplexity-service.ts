@@ -200,9 +200,23 @@ export class PerplexityService {
 
       if (!response.ok) {
         const errorData = await response.text()
-        console.error('❌ Perplexity API Error:', response.status, response.statusText)
-        console.error('❌ Perplexity API Error Details:', errorData)
-        throw new Error(`Perplexity API error: ${response.status} ${response.statusText} - ${errorData}`)
+        console.error('❌ Perplexity API Error:')
+        console.error('  Status:', response.status, response.statusText)
+        console.error('  URL:', `${this.baseUrl}/chat/completions`)
+        console.error('  Model:', 'sonar')
+        console.error('  Error Response:', errorData)
+
+        // Try to parse error for more details
+        try {
+          const errorJson = JSON.parse(errorData)
+          if (errorJson.error) {
+            throw new Error(`Perplexity API error: ${errorJson.error.message || errorJson.error}`)
+          }
+        } catch (parseErr) {
+          // If can't parse, use the raw error
+        }
+
+        throw new Error(`Perplexity API error: ${response.status} ${response.statusText} - ${errorData.substring(0, 200)}`)
       }
 
       const data: PerplexityResponse = await response.json()

@@ -65,6 +65,8 @@ export interface AIPersona {
   avatar_prompt?: string | null
   avatar_generation_status: 'pending' | 'generating' | 'completed' | 'failed'
   avatar_metadata?: Record<string, any>
+  gender?: string | null
+  appearance_description?: string | null
 
   // Chat
   chat_enabled: boolean
@@ -233,7 +235,7 @@ export async function createAIPersona(
     const payload: any = {
       user_id: userId,
       name: input.name,
-      status: input.status || 'draft',
+      status: input.status || 'inactive',
       persona_type: input.persona_type,
       purpose: input.purpose,
       tone: input.tone,
@@ -251,7 +253,7 @@ export async function createAIPersona(
       custom_prompt: input.custom_prompt,
       prompt_override: input.prompt_override,
       personality_traits: personalityTraits as unknown as Json,
-      avatar_generation_status: 'pending',
+      avatar_generation_status: input.avatar_url ? 'completed' : 'pending',
       chat_enabled: input.chat_enabled !== undefined ? input.chat_enabled : true,
       total_chats: 0,
       total_emails_handled: 0,
@@ -265,6 +267,17 @@ export async function createAIPersona(
       custom_responsibilities: input.custom_responsibilities,
       custom_communication_guidelines: input.custom_communication_guidelines,
       custom_example_interactions: input.custom_example_interactions as any
+    }
+
+    // Add appearance fields from input (typed on route handler side)
+    if ((input as any).gender) {
+      payload.gender = (input as any).gender
+    }
+    if ((input as any).appearance_description) {
+      payload.appearance_description = (input as any).appearance_description
+    }
+    if ((input as any).avatar_url) {
+      payload.avatar_url = (input as any).avatar_url
     }
 
     const { data, error } = await supabase
@@ -371,17 +384,49 @@ export async function deleteAIPersona(
   personaId: string
 ): Promise<void> {
   try {
-    const { error } = await supabase
+    console.log('🗑️ Starting persona deletion:', { userId, personaId })
+
+    // First verify the persona exists and belongs to the user
+    const { data: existingPersona, error: fetchError } = await supabase
+      .from('ai_personas')
+      .select('id, name')
+      .eq('user_id', userId)
+      .eq('id', personaId)
+      .single()
+
+    if (fetchError || !existingPersona) {
+      console.error('❌ Persona not found:', { personaId, userId, fetchError })
+      throw new Error('AI persona not found or you do not have permission to delete it')
+    }
+
+    console.log('✅ Persona found:', existingPersona.name)
+
+    // Perform the deletion with .select() to verify rows were deleted
+    const { data: deletedRows, error: deleteError } = await supabase
       .from('ai_personas')
       .delete()
       .eq('user_id', userId)
       .eq('id', personaId)
+      .select()
 
-    if (error) {
-      throw new Error(`Failed to delete AI persona: ${error.message}`)
+    if (deleteError) {
+      console.error('❌ Delete error:', deleteError)
+      throw new Error(`Failed to delete AI persona: ${deleteError.message}`)
     }
+
+    // Verify deletion occurred
+    if (!deletedRows || deletedRows.length === 0) {
+      console.error('❌ No rows deleted:', { personaId, userId })
+      throw new Error('AI persona could not be deleted. It may have been already deleted or you lack permissions.')
+    }
+
+    console.log('✅ Persona successfully deleted:', {
+      personaId,
+      deletedCount: deletedRows.length,
+      deletedPersona: deletedRows[0]?.name
+    })
   } catch (error) {
-    console.error('Error deleting AI persona:', error)
+    console.error('❌ Error deleting AI persona:', error)
     throw error
   }
 }
@@ -402,7 +447,7 @@ export async function duplicateAIPersona(
 
     const cloned = await createAIPersona(supabase, userId, {
       name: `${original.name} Copy`,
-      status: 'draft',
+      status: 'inactive',
       persona_type: original.persona_type,
       purpose: original.purpose || undefined,
       tone: original.tone || undefined,
@@ -463,6 +508,8 @@ function mapPersona(record: any): AIPersona {
     avatar_prompt: record.avatar_prompt,
     avatar_generation_status: record.avatar_generation_status || 'pending',
     avatar_metadata: record.avatar_metadata || {},
+    gender: record.gender,
+    appearance_description: record.appearance_description,
     chat_enabled: record.chat_enabled !== false,
     chat_history: record.chat_history || [],
     total_chats: record.total_chats || 0,

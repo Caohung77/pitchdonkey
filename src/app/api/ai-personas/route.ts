@@ -48,6 +48,9 @@ const personaCreateSchema = z.object({
     tone_modifiers: z.array(z.string()).optional(),
     behavioral_quirks: z.array(z.string()).optional()
   }).optional(),
+  gender: z.enum(['male', 'female', 'non-binary']).optional(),
+  appearance_description: z.string().optional(),
+  avatar_url: z.string().optional(),
   segment_config: z.any().optional(),
   quality_weights: z.any().optional(),
   chat_enabled: z.boolean().optional(),

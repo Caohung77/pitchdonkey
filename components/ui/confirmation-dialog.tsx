@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ interface ConfirmationDialogProps {
   confirmText?: string
   cancelText?: string
   variant?: 'default' | 'destructive'
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   onCancel?: () => void
 }
 
@@ -34,9 +34,30 @@ export function ConfirmationDialog({
   onConfirm,
   onCancel
 }: ConfirmationDialogProps) {
-  const handleConfirm = () => {
-    onConfirm()
-    onOpenChange(false)
+  const [isConfirming, setIsConfirming] = React.useState(false)
+
+  const handleConfirm = async () => {
+    console.log('🎯 ConfirmationDialog handleConfirm called!')
+    console.log('🎯 onConfirm function:', onConfirm)
+
+    try {
+      setIsConfirming(true)
+      console.log('🔄 Calling onConfirm callback...')
+
+      // Call the onConfirm callback and wait if it's async
+      await onConfirm()
+
+      console.log('✅ onConfirm completed successfully')
+      // Only close the dialog after the confirm action completes
+      onOpenChange(false)
+    } catch (error) {
+      console.error('❌ Error in confirmation dialog:', error)
+      // Still close the dialog on error, but log it
+      onOpenChange(false)
+    } finally {
+      setIsConfirming(false)
+      console.log('✅ handleConfirm finished')
+    }
   }
 
   const handleCancel = () => {
@@ -66,13 +87,16 @@ export function ConfirmationDialog({
           <Button
             variant="outline"
             onClick={handleCancel}
+            disabled={isConfirming}
           >
             {cancelText}
           </Button>
           <Button
             variant={variant === 'destructive' ? 'destructive' : 'default'}
             onClick={handleConfirm}
+            disabled={isConfirming}
           >
+            {isConfirming && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {confirmText}
           </Button>
         </div>

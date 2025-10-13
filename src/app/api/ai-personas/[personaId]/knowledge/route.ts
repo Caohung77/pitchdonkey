@@ -12,9 +12,13 @@ const knowledgeCreateSchema = z.object({
   storage_path: z.string().optional()
 })
 
-export const GET = withAuth(async (request: NextRequest, { user, supabase, params }) => {
+export const GET = withAuth(async (
+  request: NextRequest,
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string }> }
+) => {
   try {
-    const personaId = params.personaId
+    const { personaId } = await params
 
     // Verify persona belongs to user
     const { data: persona, error: personaError } = await supabase
@@ -59,9 +63,13 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase, param
   }
 })
 
-export const POST = withAuth(async (request: NextRequest, { user, supabase, params }) => {
+export const POST = withAuth(async (
+  request: NextRequest,
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string }> }
+) => {
   try {
-    const personaId = params.personaId
+    const { personaId } = await params
 
     // Verify persona belongs to user
     const { data: persona, error: personaError } = await supabase

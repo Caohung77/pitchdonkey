@@ -56,12 +56,14 @@ const personaUpdateSchema = z.object({
 
 export const GET = withAuth(async (
   request: NextRequest,
-  { user, supabase, params }: { user: any; supabase: any; params: { personaId: string } }
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string }> }
 ) => {
   try {
     await withRateLimit(user, 60, 60000)
 
-    const persona = await getAIPersona(supabase, user.id, params.personaId)
+    const { personaId } = await params
+    const persona = await getAIPersona(supabase, user.id, personaId)
 
     if (!persona) {
       return NextResponse.json(
@@ -88,14 +90,16 @@ export const GET = withAuth(async (
 
 export const PUT = withAuth(async (
   request: NextRequest,
-  { user, supabase, params }: { user: any; supabase: any; params: { personaId: string } }
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string }> }
 ) => {
   try {
     await withRateLimit(user, 30, 60000)
 
+    const { personaId } = await params
     const body = await request.json()
     const parsed = personaUpdateSchema.parse(body)
-    const persona = await updateAIPersona(supabase, user.id, params.personaId, parsed)
+    const persona = await updateAIPersona(supabase, user.id, personaId, parsed)
 
     return addSecurityHeaders(
       NextResponse.json({ success: true, data: persona })
@@ -127,25 +131,51 @@ export const PUT = withAuth(async (
 
 export const DELETE = withAuth(async (
   request: NextRequest,
-  { user, supabase, params }: { user: any; supabase: any; params: { personaId: string } }
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string }> }
 ) => {
   try {
     await withRateLimit(user, 15, 60000)
 
-    await deleteAIPersona(supabase, user.id, params.personaId)
+    const { personaId } = await params
+
+    console.log('🔄 DELETE API route called:', {
+      userId: user.id,
+      personaId,
+      timestamp: new Date().toISOString()
+    })
+
+    await deleteAIPersona(supabase, user.id, personaId)
+
+    console.log('✅ DELETE API route success:', { personaId })
 
     return addSecurityHeaders(
-      NextResponse.json({ success: true, message: 'AI persona deleted' })
+      NextResponse.json({
+        success: true,
+        message: 'AI persona deleted successfully',
+        data: { personaId }
+      })
     )
   } catch (error) {
-    console.error('DELETE /api/ai-personas/[personaId] error:', error)
+    console.error('❌ DELETE /api/ai-personas/[personaId] error:', error)
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+    // Determine appropriate status code based on error message
+    let statusCode = 500
+    if (errorMessage.includes('not found') || errorMessage.includes('do not have permission')) {
+      statusCode = 404
+    } else if (errorMessage.includes('permission')) {
+      statusCode = 403
+    }
+
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to delete AI persona',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: errorMessage
       },
-      { status: 500 }
+      { status: statusCode }
     )
   }
 })

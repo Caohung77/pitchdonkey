@@ -80,11 +80,12 @@ export default function AssignAgentDialog({
     try {
       setIsLoading(true)
       setError('')
-      const response = await ApiClient.get('/api/outreach-agents')
+      // Use new AI Personas API instead of legacy outreach-agents
+      const response = await ApiClient.get('/api/ai-personas')
       setAgents(response.data || [])
     } catch (error) {
       console.error('Error fetching agents:', error)
-      setError('Failed to load outreach agents')
+      setError('Failed to load AI personas')
     } finally {
       setIsLoading(false)
     }
@@ -146,10 +147,10 @@ export default function AssignAgentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bot className="h-5 w-5" />
-            Assign Outreach Agent
+            Assign AI Persona
           </DialogTitle>
           <DialogDescription>
-            Configure which AI agent handles autonomous replies for{' '}
+            Configure which AI persona handles autonomous replies for{' '}
             <span className="font-medium text-foreground">{emailAccount?.email}</span>
           </DialogDescription>
         </DialogHeader>
@@ -190,7 +191,7 @@ export default function AssignAgentDialog({
 
           {/* Agent Selection */}
           <div className="space-y-2">
-            <Label htmlFor="agent-select">Select Outreach Agent</Label>
+            <Label htmlFor="agent-select">Select AI Persona</Label>
             <Select
               value={selectedAgentId || 'manual'}
               onValueChange={(value) => setSelectedAgentId(value === 'manual' ? null : value)}
@@ -212,8 +213,8 @@ export default function AssignAgentDialog({
                   </div>
                 ) : agents.length === 0 ? (
                   <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                    No outreach agents found.{' '}
-                    <a href="/dashboard/outreach-agents" className="text-primary hover:underline">
+                    No AI personas found.{' '}
+                    <a href="/dashboard/ai-personas/create" className="text-primary hover:underline">
                       Create one
                     </a>
                   </div>
