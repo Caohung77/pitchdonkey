@@ -236,13 +236,13 @@ export default function SignUpPage() {
                 />
                 <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
                   I agree to the{' '}
-                  <a href="#" className="text-blue-600 hover:text-blue-500">
+                  <Link href="/terms" target="_blank" className="text-blue-600 hover:text-blue-500 underline">
                     Terms of Service
-                  </a>{' '}
+                  </Link>{' '}
                   and{' '}
-                  <a href="#" className="text-blue-600 hover:text-blue-500">
+                  <Link href="/privacy" target="_blank" className="text-blue-600 hover:text-blue-500 underline">
                     Privacy Policy
-                  </a>
+                  </Link>
                 </label>
               </div>
 

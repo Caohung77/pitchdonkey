@@ -11,7 +11,7 @@ export default function PrivacyPolicyPage() {
           <div className="flex justify-between items-center py-6">
             <Link href="/" className="flex items-center">
               <Zap className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-2xl font-bold text-gray-900">PitchDonkey</span>
+              <span className="ml-2 text-2xl font-bold text-gray-900">Eisbrief</span>
             </Link>
             <div className="flex items-center space-x-4">
               <Link href="/auth/signin">
@@ -37,7 +37,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Controller & Contact Information</h2>
             <div className="bg-gray-50 p-6 rounded-lg">
               <ul className="space-y-2 text-gray-700">
-                <li><strong>Service Provider / Company Name:</strong> The AIWhisperer — PitchDonkey (operated by)</li>
+                <li><strong>Service Provider / Company Name:</strong> The AIWhisperer — Eisbrief (operated by)</li>
                 <li><strong>Owner / Authorized Representative:</strong> Cao Hung Nguyen</li>
                 <li><strong>Registered Address:</strong> Am Kaisersbusch 6, 42781 Haan, Germany</li>
                 <li><strong>Contact Email (for privacy / data protection matters):</strong> hung@theaiwhisperer.de</li>
@@ -50,7 +50,7 @@ export default function PrivacyPolicyPage() {
           <section className="mb-8">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">1. Introduction</h2>
             <p className="text-gray-700 leading-relaxed">
-              PitchDonkey ("we", "us", "our"), operated by The AIWhisperer (Cao Hung Nguyen), provides an outreach and lead enrichment SaaS platform that lets you run cold email outreach, enrich contact/prospect data using publicly available sources (company websites, public LinkedIn etc.), manage contact lists that you upload, handle payments / account management, analytics etc. This Privacy Policy describes how we collect, process, store, protect, and share your personal data, especially for Users in the EU/EEA, in compliance with the GDPR. By using our Service, you agree to the practices described here.
+              Eisbrief ("we", "us", "our"), operated by The AIWhisperer (Cao Hung Nguyen), provides an outreach and lead enrichment SaaS platform that lets you run cold email outreach, enrich contact/prospect data using publicly available sources (company websites, public LinkedIn etc.), manage contact lists that you upload, handle payments / account management, analytics etc. This Privacy Policy describes how we collect, process, store, protect, and share your personal data, especially for Users in the EU/EEA, in compliance with the GDPR. By using our Service, you agree to the practices described here.
             </p>
           </section>
 
@@ -59,7 +59,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">2. Definitions</h2>
             <ul className="space-y-2 text-gray-700">
               <li><strong>Personal Data:</strong> Any information relating to an identified or identifiable natural person</li>
-              <li><strong>User:</strong> Any person who uses our PitchDonkey service</li>
+              <li><strong>User:</strong> Any person who uses our Eisbrief service</li>
               <li><strong>Prospect/Contact Data:</strong> Information about potential customers or leads uploaded by Users</li>
               <li><strong>Enriched Data:</strong> Additional information we append to contact data from publicly available sources</li>
             </ul>
@@ -205,7 +205,7 @@ export default function PrivacyPolicyPage() {
           <section className="mb-8">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">16. Governing Law & Jurisdiction</h2>
             <p className="text-gray-700">
-              This Policy is governed by German law (for The AIWhisperer / PitchDonkey), consistent with GDPR. Disputes will be handled in courts of appropriate jurisdiction in Germany, unless otherwise required by law.
+              This Policy is governed by German law (for The AIWhisperer / Eisbrief), consistent with GDPR. Disputes will be handled in courts of appropriate jurisdiction in Germany, unless otherwise required by law.
             </p>
           </section>
 
@@ -228,13 +228,15 @@ export default function PrivacyPolicyPage() {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
+          <div className="flex flex-col md:flex-row items-center justify-between">
+            <div className="flex items-center mb-4 md:mb-0">
               <Zap className="h-6 w-6 text-blue-400" />
-              <span className="ml-2 text-lg font-semibold">PitchDonkey</span>
+              <span className="ml-2 text-lg font-semibold">Eisbrief</span>
             </div>
-            <div className="text-sm text-gray-400">
-              © 2024 PitchDonkey. Built with Next.js and TypeScript.
+            <div className="flex items-center space-x-6 text-sm text-gray-400">
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
+              <span>© 2024 Eisbrief. Built with Next.js and TypeScript.</span>
             </div>
           </div>
         </div>
