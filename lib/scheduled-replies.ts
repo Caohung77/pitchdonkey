@@ -235,18 +235,37 @@ export async function approveReplyJob(
   userId: string,
   replyJobId: string
 ): Promise<void> {
+  // First, fetch the current audit_log
+  const { data: job, error: fetchError } = await supabase
+    .from('reply_jobs')
+    .select('audit_log')
+    .eq('id', replyJobId)
+    .eq('user_id', userId)
+    .eq('status', 'needs_approval')
+    .single()
+
+  if (fetchError) {
+    console.error('Error fetching reply job:', fetchError)
+    throw fetchError
+  }
+
+  // Append new audit log entry
+  const existingAudit = Array.isArray(job.audit_log) ? job.audit_log : []
+  const newAudit = [
+    ...existingAudit,
+    {
+      action: 'manually_approved',
+      timestamp: new Date().toISOString(),
+    },
+  ]
+
+  // Update with new status and audit log
   const { error } = await supabase
     .from('reply_jobs')
     .update({
       status: 'approved',
       updated_at: new Date().toISOString(),
-      audit_log: supabase.rpc('jsonb_array_append', {
-        arr: supabase.raw('audit_log'),
-        elem: JSON.stringify({
-          action: 'manually_approved',
-          timestamp: new Date().toISOString(),
-        }),
-      }),
+      audit_log: newAudit,
     })
     .eq('id', replyJobId)
     .eq('user_id', userId)
@@ -266,18 +285,37 @@ export async function cancelReplyJob(
   userId: string,
   replyJobId: string
 ): Promise<void> {
+  // First, fetch the current audit_log
+  const { data: job, error: fetchError } = await supabase
+    .from('reply_jobs')
+    .select('audit_log')
+    .eq('id', replyJobId)
+    .eq('user_id', userId)
+    .in('status', ['scheduled', 'needs_approval', 'approved'])
+    .single()
+
+  if (fetchError) {
+    console.error('Error fetching reply job:', fetchError)
+    throw fetchError
+  }
+
+  // Append new audit log entry
+  const existingAudit = Array.isArray(job.audit_log) ? job.audit_log : []
+  const newAudit = [
+    ...existingAudit,
+    {
+      action: 'manually_cancelled',
+      timestamp: new Date().toISOString(),
+    },
+  ]
+
+  // Update with new status and audit log
   const { error } = await supabase
     .from('reply_jobs')
     .update({
       status: 'cancelled',
       updated_at: new Date().toISOString(),
-      audit_log: supabase.rpc('jsonb_array_append', {
-        arr: supabase.raw('audit_log'),
-        elem: JSON.stringify({
-          action: 'manually_cancelled',
-          timestamp: new Date().toISOString(),
-        }),
-      }),
+      audit_log: newAudit,
     })
     .eq('id', replyJobId)
     .eq('user_id', userId)
