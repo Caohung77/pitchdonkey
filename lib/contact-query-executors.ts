@@ -61,6 +61,10 @@ export async function executeContactQuery(
       contacts = await executeEnrichmentQuery(supabase, userId, parameters)
       break
 
+    case 'query_contact_by_name':
+      contacts = await executeContactByNameQuery(supabase, userId, parameters)
+      break
+
     default:
       throw new Error(`Unknown function: ${functionName}`)
   }
@@ -401,6 +405,127 @@ async function executeEnrichmentQuery(
   }
 
   return data || []
+}
+
+/**
+ * Execute contact name/email search query
+ */
+async function executeContactByNameQuery(
+  supabase: Supabase,
+  userId: string,
+  params: {
+    searchName: string
+    limit?: number
+  }
+): Promise<Contact[]> {
+  const searchTerm = params.searchName.trim()
+  const limit = params.limit || 5
+
+  if (!searchTerm) {
+    return []
+  }
+
+  // Split search term into parts (handles "Jim Betterman" → ["Jim", "Betterman"])
+  const nameParts = searchTerm.split(/\s+/).filter(Boolean)
+
+  // Build a comprehensive OR query that searches across multiple fields
+  const conditions: string[] = []
+
+  // 1. Email exact match (highest priority)
+  conditions.push(`email.ilike.%${searchTerm}%`)
+
+  // 2. Full name match (first + last combined)
+  if (nameParts.length > 1) {
+    // Try matching all parts together
+    nameParts.forEach(part => {
+      conditions.push(`first_name.ilike.%${part}%`)
+      conditions.push(`last_name.ilike.%${part}%`)
+    })
+  } else {
+    // Single name - could be first or last
+    conditions.push(`first_name.ilike.%${searchTerm}%`)
+    conditions.push(`last_name.ilike.%${searchTerm}%`)
+  }
+
+  // 3. Company name match (in case they're asking about company contact)
+  conditions.push(`company.ilike.%${searchTerm}%`)
+
+  // Execute query with all conditions
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('*')
+    .eq('user_id', userId)
+    .or(conditions.join(','))
+    .limit(limit * 2) // Fetch more for scoring
+
+  if (error) {
+    console.error('Name search error:', error)
+    throw new Error(`Failed to search contacts by name: ${error.message}`)
+  }
+
+  if (!data || data.length === 0) {
+    return []
+  }
+
+  // Score and rank results by match quality
+  const scoredContacts = data.map(contact => {
+    let score = 0
+    const lowerSearch = searchTerm.toLowerCase()
+    const lowerFirst = (contact.first_name || '').toLowerCase()
+    const lowerLast = (contact.last_name || '').toLowerCase()
+    const lowerEmail = (contact.email || '').toLowerCase()
+    const fullName = `${lowerFirst} ${lowerLast}`.trim()
+
+    // Exact email match = highest priority
+    if (lowerEmail === lowerSearch) {
+      score += 100
+    } else if (lowerEmail.includes(lowerSearch)) {
+      score += 80
+    }
+
+    // Exact full name match
+    if (fullName === lowerSearch) {
+      score += 90
+    }
+
+    // Exact first or last name match
+    if (lowerFirst === lowerSearch || lowerLast === lowerSearch) {
+      score += 85
+    }
+
+    // Partial name matches
+    if (lowerFirst.includes(lowerSearch) || lowerLast.includes(lowerSearch)) {
+      score += 70
+    }
+
+    // Full name contains all parts
+    if (nameParts.length > 1) {
+      const allPartsMatch = nameParts.every(part =>
+        fullName.includes(part.toLowerCase())
+      )
+      if (allPartsMatch) {
+        score += 75
+      }
+    }
+
+    // Company match (lower priority)
+    if ((contact.company || '').toLowerCase().includes(lowerSearch)) {
+      score += 40
+    }
+
+    return { contact, score }
+  })
+
+  // Sort by score (descending) and return top matches
+  const sortedContacts = scoredContacts
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(item => item.contact)
+
+  console.log(`Name search for "${searchTerm}" returned ${sortedContacts.length} contacts`)
+
+  return sortedContacts
 }
 
 /**

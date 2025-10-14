@@ -7,7 +7,8 @@ import { Loader2, Mail, Reply, Send } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 interface ContactEmailsTabProps {
-  contact: Contact
+  contact?: Contact
+  contactId?: string
 }
 
 interface TimelineMessage {
@@ -52,19 +53,28 @@ const formatTimestamp = (iso: string) => {
   return `${date.toLocaleDateString()} · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
-export function ContactEmailsTab({ contact }: ContactEmailsTabProps) {
+export function ContactEmailsTab({ contact, contactId }: ContactEmailsTabProps) {
+  const id = contactId || contact?.id
+  const email = contact?.email || ''
+
   const [messages, setMessages] = useState<TimelineMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!id) {
+      setLoading(false)
+      setError('No contact ID provided')
+      return
+    }
+
     let mounted = true
 
     const fetchMessages = async () => {
       try {
         setLoading(true)
         setError(null)
-        const response = await fetch(`/api/contacts/${contact.id}/emails`)
+        const response = await fetch(`/api/contacts/${id}/emails`)
         const payload = await response.json().catch(() => null)
 
         if (!response.ok || !payload?.success) {
@@ -90,7 +100,7 @@ export function ContactEmailsTab({ contact }: ContactEmailsTabProps) {
     return () => {
       mounted = false
     }
-  }, [contact.id])
+  }, [id])
 
   if (loading) {
     return (
@@ -131,8 +141,11 @@ export function ContactEmailsTab({ contact }: ContactEmailsTabProps) {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-        Showing {messages.length} message{messages.length === 1 ? '' : 's'} exchanged with{' '}
-        <span className="font-semibold text-slate-800">{contact.email}</span>
+        Showing {messages.length} message{messages.length === 1 ? '' : 's'}{email && (
+          <>
+            {' '}exchanged with <span className="font-semibold text-slate-800">{email}</span>
+          </>
+        )}
       </div>
 
       <ol className="relative border-l border-slate-200 pl-6">
@@ -171,7 +184,7 @@ export function ContactEmailsTab({ contact }: ContactEmailsTabProps) {
                 <p className="mt-2 text-xs text-slate-500">
                   {message.direction === 'inbound'
                     ? `From ${message.from_address || 'Unknown sender'}`
-                    : `To ${message.to_address || contact.email}`}
+                    : `To ${message.to_address || email || 'Unknown recipient'}`}
                 </p>
 
                 {message.preview && (

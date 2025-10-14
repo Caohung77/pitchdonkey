@@ -25,8 +25,9 @@ import {
 } from 'lucide-react'
 
 interface CampaignsListsTabProps {
-  contact: Contact
-  onContactUpdate: (contact: Contact) => void
+  contact?: Contact
+  contactId?: string
+  onContactUpdate?: (contact: Contact) => void
 }
 
 interface CampaignHistory {
@@ -47,8 +48,11 @@ interface CampaignHistory {
 
 export function CampaignsListsTab({
   contact,
+  contactId,
   onContactUpdate
 }: CampaignsListsTabProps) {
+  const id = contactId || contact?.id
+  const lists = contact?.lists || []
   const [campaignHistory, setCampaignHistory] = useState<CampaignHistory[]>([])
   const [campaignsLoading, setCampaignsLoading] = useState(false)
   const [campaignPage, setCampaignPage] = useState(1)
@@ -62,11 +66,11 @@ export function CampaignsListsTab({
   // Load campaign history for the contact
   useEffect(() => {
     const loadCampaigns = async () => {
-      if (!contact.id) return
+      if (!id) return
 
       try {
         setCampaignsLoading(true)
-        const resp = await fetch(`/api/contacts/${contact.id}/campaigns?page=${campaignPage}&limit=10`)
+        const resp = await fetch(`/api/contacts/${id}/campaigns?page=${campaignPage}&limit=10`)
         if (resp.ok) {
           const json = await resp.json()
           setCampaignHistory(json.campaigns || [])
@@ -83,7 +87,7 @@ export function CampaignsListsTab({
     }
 
     loadCampaigns()
-  }, [contact.id, campaignPage])
+  }, [id, campaignPage])
 
   // Reset pagination when tab opens
   useEffect(() => {
@@ -166,9 +170,9 @@ export function CampaignsListsTab({
           <h3 className="text-lg font-medium text-gray-900">Contact Lists</h3>
         </div>
 
-        {contact.lists && contact.lists.length > 0 ? (
+        {lists && lists.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {contact.lists.map((listName: string, index: number) => (
+            {lists.map((listName: string, index: number) => (
               <Card key={index} className="border-green-200 bg-green-50">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">

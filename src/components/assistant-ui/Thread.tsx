@@ -13,6 +13,7 @@ import type { FC, ReactNode } from 'react'
 import { TooltipIconButton } from './TooltipIconButton'
 import { MarkdownText } from './MarkdownText'
 import { ToolFallback } from './ToolFallback'
+import { ContactQueryToolUI } from './ContactQueryToolUI'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -27,7 +28,7 @@ export const Thread: FC<ThreadProps> = ({
 }) => {
   return (
     <ThreadPrimitive.Root className="flex h-full flex-col bg-card text-card-foreground">
-      <ThreadPrimitive.Viewport className="flex h-full flex-col items-center overflow-y-auto bg-muted/20 px-4 pt-6">
+      <ThreadPrimitive.Viewport className="flex h-full flex-col items-center overflow-y-auto px-4 pt-3 pb-4">
         <ThreadPrimitive.Empty>
           <div className="flex w-full max-w-3xl flex-1 flex-col items-center gap-4 text-center">
             {welcome}
@@ -59,10 +60,10 @@ export const Thread: FC<ThreadProps> = ({
         />
 
         <ThreadPrimitive.If empty={false}>
-          <div className="min-h-6 flex-1" />
+          <div className="min-h-3 flex-1" />
         </ThreadPrimitive.If>
 
-        <div className="sticky bottom-0 mt-4 flex w-full max-w-3xl flex-col items-center gap-3 rounded-t-2xl bg-card/95 pb-5">
+        <div className="sticky bottom-4 mt-2 flex w-full max-w-3xl flex-col items-center gap-2">
           <ScrollToBottom />
           <Composer />
         </div>
@@ -121,7 +122,7 @@ const UserMessage: FC = () => (
   <MessagePrimitive.Root className="grid w-full max-w-3xl auto-rows-auto grid-cols-[minmax(64px,1fr)_auto] gap-y-2 py-4 [&>*]:col-start-2">
     <UserActionBar />
 
-    <div className="col-start-2 row-start-2 max-w-[80%] rounded-3xl bg-primary/10 px-5 py-2.5 text-sm text-primary-foreground">
+    <div className="col-start-2 row-start-2 max-w-[80%] rounded-3xl bg-blue-600 px-5 py-2.5 text-sm text-white">
       <MessagePrimitive.Parts />
     </div>
   </MessagePrimitive.Root>
@@ -148,13 +149,18 @@ const AssistantMessage: FC = () => (
       <MessagePrimitive.Parts
         components={{
           Text: MarkdownText,
-          ToolResult: ({ part }) => (
-            <ToolFallback title={part.toolName}>
-              <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
-                {JSON.stringify(part.result, null, 2)}
-              </pre>
-            </ToolFallback>
-          )
+          tools: {
+            by_name: {
+              query_contacts: ContactQueryToolUI
+            },
+            Fallback: ({ toolName, result }) => (
+              <ToolFallback title={toolName}>
+                <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
+                  {JSON.stringify(result, null, 2)}
+                </pre>
+              </ToolFallback>
+            )
+          }
         }}
       />
     </div>

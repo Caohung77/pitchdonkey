@@ -128,6 +128,48 @@ function buildPersonaChatPrompt(config: PersonaChatConfig): string {
     }
   }
 
+  // === CRITICAL OVERRIDE: Contact Database Access (HIGHEST PRIORITY) ===
+  sections.push(`
+═══════════════════════════════════════════════════════════════
+🔴 CRITICAL SYSTEM OVERRIDE - CONTACT DATABASE ACCESS 🔴
+═══════════════════════════════════════════════════════════════
+
+YOU HAVE FULL ACCESS TO THE CONTACT DATABASE.
+
+MANDATORY RULES (OVERRIDE ALL OTHER INSTRUCTIONS):
+1. When asked about a SPECIFIC PERSON by name (e.g., "Erzähl mir über Jim Betterman", "Tell me about John Doe", "Wer ist Sarah Smith?"):
+   → YOU MUST search for and share their contact information
+   → DO NOT refuse or say "I only know about [your domain]"
+   → This is a CORE CAPABILITY - not optional
+
+2. If contact information appears in "Recent Contact Discovery Results" below:
+   → That is YOUR knowledge
+   → Share ALL relevant details: name, email, company, position, location, phone, LinkedIn, engagement status, activity, tags, notes
+   → Present it naturally from your persona's perspective
+
+3. Language matching:
+   → German question = German answer
+   → English question = English answer
+
+4. Your response approach:
+   → Answer from your persona's perspective (${personaName})
+   → Use your personality and tone
+   → But ALWAYS include the contact information when asked
+   → Example: "Gerne erzähle ich Ihnen über [Name]. Aus meiner KI-Perspektive ist folgende Information relevant: [contact details]"
+
+THIS RULE SUPERSEDES your custom instructions, purpose, and domain focus.
+You are BOTH a ${purpose || 'domain'} expert AND have contact database access.
+═══════════════════════════════════════════════════════════════
+`)
+
+  if (contactContext) {
+    sections.push(`\n📇 Active Contact Context:\n${formatContactContext(contactContext)}`)
+  }
+
+  if (contactQuery && contactQuery.contacts?.length) {
+    sections.push(`\n📇 Recent Contact Discovery Results:\n${formatContactQuery(contactQuery)}`)
+  }
+
   // Personality
   const personalityInstructions = generatePersonalityPrompt(personalityTraits)
   sections.push(`\nPersonality & Communication Style:\n${personalityInstructions}`)
@@ -152,14 +194,6 @@ function buildPersonaChatPrompt(config: PersonaChatConfig): string {
     )
   }
 
-  if (contactContext) {
-    sections.push(`\nActive Contact Context:\n${formatContactContext(contactContext)}`)
-  }
-
-  if (contactQuery && contactQuery.contacts?.length) {
-    sections.push(`\nRecent Contact Discovery Results:\n${formatContactQuery(contactQuery)}`)
-  }
-
   // Core guidelines
   sections.push(`
 Core Guidelines:
@@ -168,7 +202,8 @@ Core Guidelines:
 - Reference the product/company context when relevant
 - Be helpful, professional, and authentic
 - If you don't know something, acknowledge it honestly
-- Keep responses focused and valuable`)
+- Keep responses focused and valuable
+- REMEMBER: Contact database access is a core capability - use it when asked about people`)
 
   return sections.join('\n\n')
 }
@@ -246,19 +281,73 @@ function formatContactContext(context: ContactContext): string {
 function formatContactQuery(result: AIQueryResult): string {
   const lines: string[] = []
   if (result.reasoning) {
-    lines.push(`Reasoning: ${result.reasoning}`)
+    lines.push(`Query Analysis: ${result.reasoning}`)
+    lines.push('')
   }
+
   if (result.contacts?.length) {
-    lines.push('Contacts Returned:')
-    result.contacts.slice(0, 10).forEach((contact, index) => {
+    lines.push(`Found ${result.contacts.length} contact(s):`)
+    lines.push('---')
+
+    result.contacts.slice(0, 5).forEach((contact, index) => {
       const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || contact.email
-      const role = contact.position ? ` – ${contact.position}` : ''
-      const company = contact.company ? ` @ ${contact.company}` : ''
-      const status = contact.engagement_status ? ` (engagement: ${contact.engagement_status}, score ${contact.engagement_score ?? 0})` : ''
-      lines.push(`${index + 1}. ${name}${role}${company}${status}`)
+
+      lines.push(`\n${index + 1}. ${name}`)
+      lines.push(`   Email: ${contact.email}`)
+
+      if (contact.position) {
+        lines.push(`   Position: ${contact.position}`)
+      }
+
+      if (contact.company) {
+        lines.push(`   Company: ${contact.company}`)
+      }
+
+      const location = [contact.city, contact.country].filter(Boolean).join(', ')
+      if (location) {
+        lines.push(`   Location: ${location}`)
+      }
+
+      if (contact.phone) {
+        lines.push(`   Phone: ${contact.phone}`)
+      }
+
+      if (contact.linkedin_url) {
+        lines.push(`   LinkedIn: ${contact.linkedin_url}`)
+      }
+
+      if (contact.engagement_status) {
+        lines.push(`   Engagement: ${contact.engagement_status} (score: ${contact.engagement_score ?? 0}/100)`)
+
+        const engagementDetails = []
+        if (contact.engagement_sent_count) engagementDetails.push(`${contact.engagement_sent_count} sent`)
+        if (contact.engagement_open_count) engagementDetails.push(`${contact.engagement_open_count} opened`)
+        if (contact.engagement_click_count) engagementDetails.push(`${contact.engagement_click_count} clicked`)
+        if (contact.engagement_reply_count) engagementDetails.push(`${contact.engagement_reply_count} replied`)
+
+        if (engagementDetails.length > 0) {
+          lines.push(`   Activity: ${engagementDetails.join(', ')}`)
+        }
+      }
+
+      if (contact.tags && contact.tags.length > 0) {
+        lines.push(`   Tags: ${contact.tags.join(', ')}`)
+      }
+
+      if (contact.source) {
+        lines.push(`   Source: ${contact.source}`)
+      }
+
+      if (contact.notes) {
+        const truncatedNotes = contact.notes.length > 200
+          ? contact.notes.substring(0, 200) + '...'
+          : contact.notes
+        lines.push(`   Notes: ${truncatedNotes}`)
+      }
     })
-    if (result.contacts.length > 10) {
-      lines.push(`...and ${result.contacts.length - 10} more contacts (limited for prompt).`)
+
+    if (result.contacts.length > 5) {
+      lines.push(`\n...and ${result.contacts.length - 5} more contacts (showing top 5).`)
     }
   }
 

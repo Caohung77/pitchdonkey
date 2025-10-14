@@ -98,13 +98,30 @@ class PersonaChatAdapter implements ChatModelAdapter {
     this.callbacks.handleContactContext(data.contactContext ?? null)
     this.callbacks.handleContactQuery(data.contactQuery ?? null)
 
-    const assistantContent: ThreadAssistantMessagePart = {
-      type: 'text',
-      text: data.message
+    const content: ThreadAssistantMessagePart[] = []
+
+    // Add contact query as tool invocation if present
+    if (data.contactQuery) {
+      content.push({
+        type: 'tool-call',
+        toolCallId: crypto.randomUUID(),
+        toolName: 'query_contacts',
+        args: {
+          query: prompt,
+          agentId: this.personaId
+        },
+        result: data.contactQuery
+      } as any)
     }
 
+    // Add text response
+    content.push({
+      type: 'text',
+      text: data.message
+    })
+
     return {
-      content: [assistantContent],
+      content,
       metadata: {
         unstable_state: {
           sessionId: data.sessionId,
@@ -156,15 +173,33 @@ export function toThreadMessages(messages: ChatMessage[]): ThreadMessageLike[] {
       }
     }
 
+    // Assistant message - check if it has contact query metadata
+    const content: ThreadAssistantMessagePart[] = []
+
+    // Add contact query tool invocation if present in metadata
+    if (message.metadata?.contactQuery) {
+      content.push({
+        type: 'tool-call',
+        toolCallId: crypto.randomUUID(),
+        toolName: 'query_contacts',
+        args: {
+          query: message.metadata.userQuery || 'contact query',
+          agentId: message.metadata.personaId || ''
+        },
+        result: message.metadata.contactQuery
+      } as any)
+    }
+
+    // Add text content
+    content.push({
+      type: 'text' as const,
+      text: message.content
+    })
+
     return {
       ...base,
       role: 'assistant' as const,
-      content: [
-        {
-          type: 'text' as const,
-          text: message.content
-        }
-      ],
+      content,
       status: COMPLETE_STATUS
     }
   })

@@ -287,13 +287,18 @@ export const POST = withAuth(async (
       )
     }
 
-    // Save assistant message
+    // Save assistant message with contact query metadata
     const assistantMessage: ChatMessage = {
       id: response.messageId,
       role: 'assistant',
       content: response.message,
       timestamp: new Date().toISOString(),
-      metadata: response.metadata
+      metadata: {
+        ...response.metadata,
+        contactQuery: contactQueryResult || undefined,
+        personaId: persona.id,
+        userQuery: message
+      }
     }
 
     await saveChatMessage(supabase, session.id, assistantMessage)

@@ -213,6 +213,25 @@ export const CONTACT_QUERY_FUNCTIONS: ContactQueryFunction[] = [
         }
       }
     }
+  },
+  {
+    name: 'query_contact_by_name',
+    description: 'Look up a specific contact by their name or email. Use this when the user asks about a specific person by name (e.g., "tell me about John Doe", "erzähl mir über Jim Betterman", "who is Sarah Smith", "show me info about Mike Johnson"). This function searches first_name, last_name, and email fields with fuzzy matching to find the best match. CRITICAL: Use this function whenever a user mentions a specific person\'s name.',
+    parameters: {
+      type: 'object',
+      properties: {
+        searchName: {
+          type: 'string',
+          description: 'The name or email to search for. Can be first name, last name, full name, or email address. Examples: "Jim Betterman", "Jim", "Betterman", "jim@example.com"'
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of contacts to return (default 5 for name searches)',
+          default: 5
+        }
+      },
+      required: ['searchName']
+    }
   }
 ]
 

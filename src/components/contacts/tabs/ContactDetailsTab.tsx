@@ -29,11 +29,13 @@ import {
 interface ContactDetailsTabProps {
   contact: Contact
   onContactUpdate: (contact: Contact) => void
+  readOnly?: boolean
 }
 
 export function ContactDetailsTab({
   contact,
-  onContactUpdate
+  onContactUpdate,
+  readOnly = false
 }: ContactDetailsTabProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editingData, setEditingData] = useState<Partial<Contact>>({})
@@ -107,37 +109,39 @@ export function ContactDetailsTab({
       {/* Edit Mode Toggle */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-gray-900">Contact Information</h2>
-        <div className="flex items-center gap-2">
-          {isEditing ? (
-            <>
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  className="flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2"
+                >
+                  <Check className="h-4 w-4" />
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </>
+            ) : (
               <Button
-                variant="outline"
-                onClick={handleCancel}
-                disabled={saving}
+                onClick={handleEdit}
                 className="flex items-center gap-2"
               >
-                <X className="h-4 w-4" />
-                Cancel
+                <Edit className="h-4 w-4" />
+                Edit Contact
               </Button>
-              <Button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center gap-2"
-              >
-                <Check className="h-4 w-4" />
-                {saving ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </>
-          ) : (
-            <Button
-              onClick={handleEdit}
-              className="flex items-center gap-2"
-            >
-              <Edit className="h-4 w-4" />
-              Edit Contact
-            </Button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Contact Information Grid */}

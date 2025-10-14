@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles, X, Mail, Building2, MapPin, Phone, Linkedin, Tag, Calendar } from 'lucide-react'
 
 import { ApiClient } from '@/lib/api-client'
 import type { AIPersona } from '@/lib/ai-personas'
@@ -20,6 +20,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Thread } from '@/components/assistant-ui/Thread'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ContactDetailsTab } from '@/components/contacts/tabs/ContactDetailsTab'
+import { EngagementTab } from '@/components/contacts/tabs/EngagementTab'
+import { ContactEmailsTab } from '@/components/contacts/tabs/ContactEmailsTab'
+import { CampaignsListsTab } from '@/components/contacts/tabs/CampaignsListsTab'
+import { LinkedInTab } from '@/components/contacts/tabs/LinkedInTab'
+import { NotesTab } from '@/components/contacts/tabs/NotesTab'
 
 interface PersonaChatSession {
   sessionId: string
@@ -150,21 +159,12 @@ export default function PersonaChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-64px)] flex-col gap-4 px-4 py-4 md:px-6 lg:px-8">
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Persona Chat</h1>
-          <p className="max-w-2xl text-sm text-gray-500">
-            Talk with any active AI persona and let it search contacts and campaigns directly from the database.
-          </p>
-        </div>
-      </div>
-
       <div className="grid flex-1 min-h-0 gap-4 lg:grid-cols-[minmax(0,1.75fr)_minmax(260px,0.85fr)]">
         <Card className="flex min-h-0 flex-col border border-gray-100 shadow-sm">
           <CardHeader className="border-b border-gray-100 bg-gradient-to-r from-white via-blue-50/50 to-white">
             <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
               <Sparkles className="h-5 w-5 text-blue-500" />
-              Conversation
+              Persona Chat
             </CardTitle>
           </CardHeader>
           <CardContent className="flex min-h-0 flex-1 flex-col p-0">
@@ -320,24 +320,99 @@ function PersonaSelectorCard({
 }
 
 function ContactPreviewCard({ contact }: { contact: Contact }) {
+  const [showModal, setShowModal] = useState(false)
   const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || contact.email
   const location = [contact.city, contact.country].filter(Boolean).join(', ')
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
-      <div className="flex items-center gap-3">
-        <Avatar className="h-9 w-9 bg-gradient-to-br from-blue-100 to-purple-100 text-blue-700 font-semibold">
-          <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
-        </Avatar>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-gray-900">{name}</span>
-          <span className="text-xs text-gray-500">{contact.email}</span>
+    <>
+      <button
+        onClick={() => setShowModal(true)}
+        className="w-full rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm hover:border-blue-200 hover:bg-blue-50/30 transition cursor-pointer text-left"
+      >
+        <div className="flex items-center gap-3">
+          <Avatar className="h-9 w-9 bg-gradient-to-br from-blue-100 to-purple-100 text-blue-700 font-semibold">
+            <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-gray-900">{name}</span>
+            <span className="text-xs text-gray-500">{contact.email}</span>
+          </div>
         </div>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-        {contact.company ? <span>{contact.company}</span> : null}
-        {location ? <span>{location}</span> : null}
-      </div>
-    </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-500">
+          {contact.company ? <span>{contact.company}</span> : null}
+          {location ? <span>{location}</span> : null}
+        </div>
+      </button>
+
+      <ContactDetailModal
+        contact={contact}
+        open={showModal}
+        onClose={() => setShowModal(false)}
+      />
+    </>
+  )
+}
+
+function ContactDetailModal({ contact, open, onClose }: { contact: Contact; open: boolean; onClose: () => void }) {
+  const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || contact.email
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle className="flex items-center gap-3">
+            <Avatar className="h-12 w-12 bg-gradient-to-br from-blue-100 to-purple-100 text-blue-700 font-semibold">
+              <AvatarFallback className="text-lg">{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">{name}</h2>
+              {contact.position && <p className="text-sm text-gray-500">{contact.position}</p>}
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">
+          <TabsList className="grid w-full grid-cols-6 flex-shrink-0">
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="engagement">Engagement</TabsTrigger>
+            <TabsTrigger value="emails">Emails</TabsTrigger>
+            <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
+            <TabsTrigger value="linkedin">LinkedIn</TabsTrigger>
+            <TabsTrigger value="notes">Notes</TabsTrigger>
+          </TabsList>
+
+          <div className="flex-1 overflow-y-auto mt-4">
+            <TabsContent value="details" className="mt-0">
+              <ContactDetailsTab contact={contact} onContactUpdate={() => {}} readOnly />
+            </TabsContent>
+
+            <TabsContent value="engagement" className="mt-0">
+              <EngagementTab contact={contact} />
+            </TabsContent>
+
+            <TabsContent value="emails" className="mt-0">
+              <ContactEmailsTab contactId={contact.id} />
+            </TabsContent>
+
+            <TabsContent value="campaigns" className="mt-0">
+              <CampaignsListsTab contactId={contact.id} />
+            </TabsContent>
+
+            <TabsContent value="linkedin" className="mt-0">
+              <LinkedInTab contact={contact} onContactUpdate={() => {}} />
+            </TabsContent>
+
+            <TabsContent value="notes" className="mt-0">
+              <NotesTab contact={contact} onContactUpdate={() => {}} />
+            </TabsContent>
+          </div>
+        </Tabs>
+
+        <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
