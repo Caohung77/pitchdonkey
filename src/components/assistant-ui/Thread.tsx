@@ -13,6 +13,7 @@ import type { FC, ReactNode } from 'react'
 import { TooltipIconButton } from './TooltipIconButton'
 import { MarkdownText } from './MarkdownText'
 import { ToolFallback } from './ToolFallback'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 type ThreadProps = {
