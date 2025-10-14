@@ -517,7 +517,7 @@ export class ReplyProcessor {
     // Find the email account that received this email
     const { data: emailAccount, error: emailAccountError } = await this.supabase
       .from('email_accounts')
-      .select('id, email, assigned_agent_id:assigned_persona_id, user_id')
+      .select('id, email, assigned_persona_id, user_id')
       .eq('id', accountId)
       .eq('user_id', email.user_id)
       .single()
@@ -528,12 +528,12 @@ export class ReplyProcessor {
     }
 
     // Check if agent is assigned
-    if (!emailAccount.assigned_agent_id) {
-      console.log('⏭️ No agent assigned to mailbox', emailAccount.email)
+    if (!emailAccount.assigned_persona_id) {
+      console.log('⏭️ No AI persona assigned to mailbox', emailAccount.email)
       return null
     }
 
-    console.log(`🤖 Agent ${emailAccount.assigned_agent_id} assigned to ${emailAccount.email} - drafting autonomous reply`)
+    console.log(`🤖 AI Persona ${emailAccount.assigned_persona_id} assigned to ${emailAccount.email} - drafting autonomous reply`)
 
     // Create draft service
     const draftService = createDraftService(this.supabase)
@@ -541,7 +541,7 @@ export class ReplyProcessor {
     // Draft the reply
     try {
       const draftResult = await draftService.draftReply(email.user_id, {
-        agentId: emailAccount.assigned_agent_id,
+        agentId: emailAccount.assigned_persona_id,
         emailAccountId: emailAccount.id,
         incomingEmailId: email.id,
         threadId: email.thread_id || email.message_id, // Use thread_id if available, fallback to message_id
