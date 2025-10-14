@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth, addSecurityHeaders } from '@/lib/auth-middleware'
-import { createServerSupabaseClient } from '@/lib/supabase'
 import { extractFromUrl, extractFromPdf } from '@/lib/jina-extractor'
 
 const extractSchema = z.object({
@@ -16,9 +15,14 @@ const extractSchema = z.object({
  *
  * Extract content from URL or PDF using Jina AI and save as knowledge
  */
-export const POST = withAuth(async (request: NextRequest, { user, supabase, params }) => {
+export const POST = withAuth(async (
+  request: NextRequest,
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string }> }
+) => {
+  let parsed: z.infer<typeof extractSchema> | null = null
   try {
-    const personaId = params.personaId
+    const { personaId } = await params
 
     // Verify persona belongs to user
     const { data: persona, error: personaError } = await supabase
@@ -36,7 +40,9 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
     }
 
     const body = await request.json()
-    const parsed = extractSchema.parse(body)
+    parsed = extractSchema.parse(body)
+    const shouldCleanupTempPdf =
+      parsed.type === 'pdf' && parsed.url.includes('temp-pdf-uploads')
 
     // Get Jina API key from environment
     const jinaApiKey = process.env.JINA_API_KEY
@@ -64,6 +70,9 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
     }
 
     if (!extractionResult.success) {
+      if (shouldCleanupTempPdf) {
+        await cleanupTempPdf(supabase, parsed.url)
+      }
       return NextResponse.json(
         {
           success: false,
@@ -95,12 +104,9 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
     }
 
     // Cleanup: Delete temporary PDF file if this was a PDF upload
-    if (parsed.type === 'pdf' && parsed.url.includes('temp-pdf-uploads')) {
+    if (shouldCleanupTempPdf) {
       await cleanupTempPdf(supabase, parsed.url)
     }
-
-    // Update persona's knowledge summary
-    await updateKnowledgeSummary(supabase, personaId)
 
     return addSecurityHeaders(
       NextResponse.json({
@@ -115,6 +121,10 @@ export const POST = withAuth(async (request: NextRequest, { user, supabase, para
       }, { status: 201 })
     )
   } catch (error) {
+    if (parsed?.type === 'pdf' && parsed.url.includes('temp-pdf-uploads')) {
+      await cleanupTempPdf(supabase, parsed.url)
+    }
+
     console.error('POST /api/ai-personas/[personaId]/knowledge/extract error:', error)
 
     if (error instanceof z.ZodError) {
@@ -168,22 +178,4 @@ async function cleanupTempPdf(supabase: any, pdfUrl: string) {
   } catch (error) {
     console.error('Error cleaning up temp PDF:', error)
   }
-}
-
-async function updateKnowledgeSummary(supabase: any, personaId: string) {
-  const { count } = await supabase
-    .from('ai_persona_knowledge')
-    .select('*', { count: 'exact', head: true })
-    .eq('persona_id', personaId)
-
-  await supabase
-    .from('ai_personas')
-    .update({
-      knowledge_summary: {
-        total_items: count || 0,
-        last_updated: new Date().toISOString()
-      },
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', personaId)
 }

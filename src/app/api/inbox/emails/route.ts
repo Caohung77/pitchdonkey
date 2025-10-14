@@ -37,6 +37,7 @@ export const GET = withAuth(async (
         classification_confidence,
         text_content,
         html_content,
+        contact_id,
         ai_summary,
         created_at,
         updated_at,
@@ -141,6 +142,37 @@ export const GET = withAuth(async (
       }, { status: 500 })
     }
 
+    // Build contact lookup for linked emails
+    let contactMap: Record<string, any> = {}
+    if (emails && emails.length > 0) {
+      const contactIds = Array.from(
+        new Set(
+          emails
+            .map(email => email.contact_id)
+            .filter((id): id is string => Boolean(id))
+        )
+      )
+
+      if (contactIds.length > 0) {
+        const { data: contactsData } = await supabase
+          .from('contacts')
+          .select('id, first_name, last_name, email')
+          .in('id', contactIds)
+
+        if (contactsData && contactsData.length > 0) {
+          contactMap = contactsData.reduce<Record<string, any>>((acc, contact) => {
+            acc[contact.id] = contact
+            return acc
+          }, {})
+        }
+      }
+    }
+
+    const enrichedEmails = (emails || []).map(email => ({
+      ...email,
+      contact: email.contact_id ? contactMap[email.contact_id] || null : null
+    }))
+
     // Get classification stats for the user
     const { data: stats } = await supabase
       .from('incoming_emails')
@@ -155,7 +187,7 @@ export const GET = withAuth(async (
 
     const response = NextResponse.json({
       success: true,
-      emails: emails || [],
+      emails: enrichedEmails,
       pagination: {
         total: totalCount,
         limit,

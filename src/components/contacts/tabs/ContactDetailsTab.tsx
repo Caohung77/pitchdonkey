@@ -1,98 +1,101 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Contact } from '@/lib/contacts'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import { parseCompanyName } from '@/lib/contact-utils'
+import { EnrichmentButton } from '../EnrichmentButton'
 import {
-  User,
-  Building,
   Mail,
+  Building,
+  MapPin,
   Phone,
   Globe,
-  Linkedin,
-  MapPin,
-  Calendar,
-  Edit3,
-  Save,
+  User,
+  Edit,
+  Check,
   X,
-  Plus,
-  Sparkles,
-  Briefcase,
-  Target,
-  Lightbulb
+  Calendar,
+  Tag,
+  Hash,
+  Clock4,
+  Sparkles
 } from 'lucide-react'
-
-interface Contact {
-  id: string
-  email: string
-  first_name?: string
-  last_name?: string
-  company?: string
-  job_title?: string
-  phone?: string
-  website?: string
-  linkedin_url?: string
-  engagement_status?: string
-  engagement_score?: number
-  custom_fields?: Record<string, any>
-  enrichment_data?: {
-    company_name?: string
-    industry?: string
-    products_services?: string[]
-    target_audience?: string[]
-    unique_points?: string[]
-    tone_style?: string
-  }
-  created_at: string
-  updated_at: string
-}
 
 interface ContactDetailsTabProps {
   contact: Contact
   onContactUpdate: (contact: Contact) => void
 }
 
-export function ContactDetailsTab({ contact, onContactUpdate }: ContactDetailsTabProps) {
+export function ContactDetailsTab({
+  contact,
+  onContactUpdate
+}: ContactDetailsTabProps) {
   const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({
-    first_name: contact.first_name || '',
-    last_name: contact.last_name || '',
-    email: contact.email || '',
-    phone: contact.phone || '',
-    company: contact.company || '',
-    job_title: contact.job_title || '',
-    website: contact.website || '',
-    linkedin_url: contact.linkedin_url || ''
-  })
+  const [editingData, setEditingData] = useState<Partial<Contact>>({})
+  const [saving, setSaving] = useState(false)
 
-  const handleSave = async () => {
-    // TODO: Implement save functionality
-    console.log('Saving contact updates:', editForm)
-    setIsEditing(false)
-    // onContactUpdate({ ...contact, ...editForm })
+  const handleEdit = () => {
+    setIsEditing(true)
+    setEditingData({
+      first_name: contact.first_name || '',
+      last_name: contact.last_name || '',
+      email: contact.email,
+      phone: contact.phone || '',
+      company: contact.company || '',
+      position: contact.position || '',
+      website: contact.website || '',
+      linkedin_url: contact.linkedin_url || '',
+      address: contact.address || '',
+      city: contact.city || '',
+      postcode: contact.postcode || '',
+      country: contact.country || '',
+      timezone: contact.timezone || '',
+      source: contact.source || ''
+    })
   }
 
   const handleCancel = () => {
-    setEditForm({
-      first_name: contact.first_name || '',
-      last_name: contact.last_name || '',
-      email: contact.email || '',
-      phone: contact.phone || '',
-      company: contact.company || '',
-      job_title: contact.job_title || '',
-      website: contact.website || '',
-      linkedin_url: contact.linkedin_url || ''
-    })
     setIsEditing(false)
+    setEditingData({})
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-US', {
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(editingData)
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update contact')
+      }
+
+      const result = await response.json()
+      onContactUpdate({ ...contact, ...editingData })
+      setIsEditing(false)
+      setEditingData({})
+    } catch (error) {
+      console.error('Error updating contact:', error)
+      // TODO: Show error toast
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -100,428 +103,524 @@ export function ContactDetailsTab({ contact, onContactUpdate }: ContactDetailsTa
   }
 
   return (
-    <div className="space-y-6">
-      {/* Basic Information Card */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="flex items-center space-x-2">
-            <User className="h-5 w-5" />
-            <span>Basic Information</span>
-          </CardTitle>
-
-          {!isEditing ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(true)}
-              className="flex items-center space-x-2"
-            >
-              <Edit3 className="h-4 w-4" />
-              <span>Edit</span>
-            </Button>
-          ) : (
-            <div className="flex items-center space-x-2">
+    <div className="space-y-8">
+      {/* Edit Mode Toggle */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-gray-900">Contact Information</h2>
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
               <Button
                 variant="outline"
-                size="sm"
                 onClick={handleCancel}
-                className="flex items-center space-x-1"
+                disabled={saving}
+                className="flex items-center gap-2"
               >
                 <X className="h-4 w-4" />
-                <span>Cancel</span>
+                Cancel
               </Button>
               <Button
-                size="sm"
                 onClick={handleSave}
-                className="flex items-center space-x-1"
+                disabled={saving}
+                className="flex items-center gap-2"
               >
-                <Save className="h-4 w-4" />
-                <span>Save</span>
+                <Check className="h-4 w-4" />
+                {saving ? 'Saving...' : 'Save Changes'}
               </Button>
-            </div>
+            </>
+          ) : (
+            <Button
+              onClick={handleEdit}
+              className="flex items-center gap-2"
+            >
+              <Edit className="h-4 w-4" />
+              Edit Contact
+            </Button>
           )}
-        </CardHeader>
+        </div>
+      </div>
 
-        <CardContent className="space-y-6">
-          {/* Personal Information */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center space-x-2">
-              <User className="h-4 w-4" />
-              <span>Personal Information</span>
-            </h3>
+      {/* Contact Information Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Personal Information */}
+        <div className="space-y-6">
+          <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+            <User className="h-5 w-5 text-gray-600" />
+            Personal Information
+          </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            {/* First Name */}
+            <div>
+              <Label htmlFor="first_name" className="text-sm font-medium text-gray-700">
+                First Name
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="first_name"
+                  value={editingData.first_name || ''}
+                  onChange={(e) => setEditingData({ ...editingData, first_name: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.first_name || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* Last Name */}
+            <div>
+              <Label htmlFor="last_name" className="text-sm font-medium text-gray-700">
+                Last Name
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="last_name"
+                  value={editingData.last_name || ''}
+                  onChange={(e) => setEditingData({ ...editingData, last_name: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.last_name || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* Email */}
+            <div>
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Mail className="h-4 w-4" />
+                Email
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="email"
+                  type="email"
+                  value={editingData.email || ''}
+                  onChange={(e) => setEditingData({ ...editingData, email: e.target.value })}
+                  className="mt-1"
+                  required
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">{contact.email}</p>
+              )}
+            </div>
+
+            {/* Phone */}
+            <div>
+              <Label htmlFor="phone" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Phone
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="phone"
+                  value={editingData.phone || ''}
+                  onChange={(e) => setEditingData({ ...editingData, phone: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.phone || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* Gender */}
+            {'sex' in contact && contact.sex && (
               <div>
-                <Label htmlFor="first_name">First Name</Label>
-                {isEditing ? (
-                  <Input
-                    id="first_name"
-                    value={editForm.first_name}
-                    onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    {contact.first_name || 'Not provided'}
-                  </div>
-                )}
+                <Label className="text-sm font-medium text-gray-700">Gender</Label>
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.sex === 'm' ? 'Male' : contact.sex === 'f' ? 'Female' : 'Not specified'}
+                </p>
               </div>
+            )}
 
-              <div>
-                <Label htmlFor="last_name">Last Name</Label>
-                {isEditing ? (
-                  <Input
-                    id="last_name"
-                    value={editForm.last_name}
-                    onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    {contact.last_name || 'Not provided'}
-                  </div>
-                )}
-              </div>
+            {/* Timezone */}
+            <div>
+              <Label htmlFor="timezone" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Clock4 className="h-4 w-4" />
+                Timezone
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="timezone"
+                  value={editingData.timezone || ''}
+                  onChange={(e) => setEditingData({ ...editingData, timezone: e.target.value })}
+                  className="mt-1"
+                  placeholder="e.g., America/New_York"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.timezone || 'Not specified'}
+                </p>
+              )}
+            </div>
 
-              <div>
-                <Label htmlFor="email">Email Address</Label>
-                {isEditing ? (
-                  <Input
-                    id="email"
-                    type="email"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    <Mail className="h-4 w-4 mr-2 text-gray-500" />
-                    <a href={`mailto:${contact.email}`} className="hover:text-blue-600">
-                      {contact.email}
+            {/* Source */}
+            <div>
+              <Label htmlFor="source" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Hash className="h-4 w-4" />
+                Source
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="source"
+                  value={editingData.source || ''}
+                  onChange={(e) => setEditingData({ ...editingData, source: e.target.value })}
+                  className="mt-1"
+                  placeholder="e.g., Website, LinkedIn, Referral"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.source || 'Not specified'}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Professional Information */}
+        <div className="space-y-6">
+          <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+            <Building className="h-5 w-5 text-gray-600" />
+            Professional Information
+          </h3>
+
+          <div className="space-y-4">
+            {/* Company */}
+            <div>
+              <Label htmlFor="company" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Building className="h-4 w-4" />
+                Company
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="company"
+                  value={editingData.company || ''}
+                  onChange={(e) => setEditingData({ ...editingData, company: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {parseCompanyName(contact.company) || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* Position */}
+            <div>
+              <Label htmlFor="position" className="text-sm font-medium text-gray-700">
+                Position
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="position"
+                  value={editingData.position || ''}
+                  onChange={(e) => setEditingData({ ...editingData, position: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.position || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* Website */}
+            <div>
+              <Label htmlFor="website" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Website
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="website"
+                  value={editingData.website || ''}
+                  onChange={(e) => setEditingData({ ...editingData, website: e.target.value })}
+                  className="mt-1"
+                  placeholder="https://example.com"
+                />
+              ) : (
+                <div className="mt-1">
+                  {contact.website ? (
+                    <a
+                      href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-800 underline"
+                    >
+                      {contact.website}
                     </a>
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <p className="text-sm text-gray-900">Not specified</p>
+                  )}
+                </div>
+              )}
+            </div>
 
-              <div>
-                <Label htmlFor="phone">Phone Number</Label>
-                {isEditing ? (
-                  <Input
-                    id="phone"
-                    value={editForm.phone}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    {contact.phone ? (
-                      <>
-                        <Phone className="h-4 w-4 mr-2 text-gray-500" />
-                        <a href={`tel:${contact.phone}`} className="hover:text-blue-600">
-                          {contact.phone}
-                        </a>
-                      </>
-                    ) : (
-                      'Not provided'
-                    )}
-                  </div>
-                )}
-              </div>
+            {/* LinkedIn */}
+            <div>
+              <Label htmlFor="linkedin_url" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                LinkedIn URL
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="linkedin_url"
+                  value={editingData.linkedin_url || ''}
+                  onChange={(e) => setEditingData({ ...editingData, linkedin_url: e.target.value })}
+                  className="mt-1"
+                  placeholder="https://linkedin.com/in/username"
+                />
+              ) : (
+                <div className="mt-1">
+                  {contact.linkedin_url ? (
+                    <a
+                      href={contact.linkedin_url.startsWith('http') ? contact.linkedin_url : `https://${contact.linkedin_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-800 underline"
+                    >
+                      LinkedIn Profile
+                    </a>
+                  ) : (
+                    <p className="text-sm text-gray-900">Not specified</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Address */}
+            <div>
+              <Label htmlFor="address" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Address
+              </Label>
+              {isEditing ? (
+                <Textarea
+                  id="address"
+                  value={editingData.address || ''}
+                  onChange={(e) => setEditingData({ ...editingData, address: e.target.value })}
+                  className="mt-1"
+                  rows={2}
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.address || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* City */}
+            <div>
+              <Label htmlFor="city" className="text-sm font-medium text-gray-700">
+                City
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="city"
+                  value={editingData.city || ''}
+                  onChange={(e) => setEditingData({ ...editingData, city: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.city || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* Postcode */}
+            <div>
+              <Label htmlFor="postcode" className="text-sm font-medium text-gray-700">
+                Postcode
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="postcode"
+                  value={editingData.postcode || ''}
+                  onChange={(e) => setEditingData({ ...editingData, postcode: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.postcode || 'Not specified'}
+                </p>
+              )}
+            </div>
+
+            {/* Country */}
+            <div>
+              <Label htmlFor="country" className="text-sm font-medium text-gray-700">
+                Country
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="country"
+                  value={editingData.country || ''}
+                  onChange={(e) => setEditingData({ ...editingData, country: e.target.value })}
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-gray-900">
+                  {contact.country || 'Not specified'}
+                </p>
+              )}
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Professional Information */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center space-x-2">
-              <Building className="h-4 w-4" />
-              <span>Professional Information</span>
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="company">Company</Label>
-                {isEditing ? (
-                  <Input
-                    id="company"
-                    value={editForm.company}
-                    onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    {contact.company ? (
-                      <>
-                        <Building className="h-4 w-4 mr-2 text-gray-500" />
-                        {contact.company}
-                      </>
-                    ) : (
-                      'Not provided'
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="job_title">Job Title</Label>
-                {isEditing ? (
-                  <Input
-                    id="job_title"
-                    value={editForm.job_title}
-                    onChange={(e) => setEditForm({ ...editForm, job_title: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    {contact.job_title || 'Not provided'}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="website">Website</Label>
-                {isEditing ? (
-                  <Input
-                    id="website"
-                    value={editForm.website}
-                    onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    {contact.website ? (
-                      <>
-                        <Globe className="h-4 w-4 mr-2 text-gray-500" />
-                        <a
-                          href={contact.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-blue-600"
-                        >
-                          {contact.website}
-                        </a>
-                      </>
-                    ) : (
-                      'Not provided'
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="linkedin_url">LinkedIn Profile</Label>
-                {isEditing ? (
-                  <Input
-                    id="linkedin_url"
-                    value={editForm.linkedin_url}
-                    onChange={(e) => setEditForm({ ...editForm, linkedin_url: e.target.value })}
-                    className="mt-1"
-                  />
-                ) : (
-                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 min-h-[38px] flex items-center">
-                    {contact.linkedin_url ? (
-                      <>
-                        <Linkedin className="h-4 w-4 mr-2 text-gray-500" />
-                        <a
-                          href={contact.linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-blue-600"
-                        >
-                          LinkedIn Profile
-                        </a>
-                      </>
-                    ) : (
-                      'Not provided'
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Tags */}
+      {contact.tags && contact.tags.length > 0 && (
+        <div className="pt-6 border-t border-gray-200">
+          <div className="flex items-center gap-2 mb-3">
+            <Tag className="h-4 w-4 text-gray-500" />
+            <h3 className="text-lg font-medium text-gray-900">Tags</h3>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Enrichment Data Card */}
-      {contact.enrichment_data && Object.keys(contact.enrichment_data).some(key => {
-        const value = contact.enrichment_data![key as keyof typeof contact.enrichment_data]
-        return value && (Array.isArray(value) ? value.length > 0 : value.toString().trim().length > 0)
-      }) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Sparkles className="h-5 w-5 text-purple-600" />
-              <span>AI-Enriched Company Data</span>
-              <Badge variant="secondary" className="ml-2 text-xs">Auto-scraped</Badge>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-6">
-            {contact.enrichment_data.industry && contact.enrichment_data.industry.trim().length > 0 && (
-              <div>
-                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-                  <Briefcase className="h-4 w-4" />
-                  <span>Industry</span>
-                </Label>
-                <div className="text-sm text-gray-900 bg-gradient-to-r from-purple-50 to-blue-50 rounded-md px-4 py-3 border border-purple-200">
-                  {contact.enrichment_data.industry}
-                </div>
-              </div>
-            )}
-
-            {contact.enrichment_data.products_services && contact.enrichment_data.products_services.length > 0 && (
-              <div>
-                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-                  <Target className="h-4 w-4" />
-                  <span>Products & Services</span>
-                </Label>
-                <div className="space-y-2">
-                  {contact.enrichment_data.products_services.map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex items-start space-x-2 text-sm text-gray-900 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-md px-4 py-2 border border-blue-200"
-                    >
-                      <span className="text-blue-600 font-medium">•</span>
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {contact.enrichment_data.target_audience && contact.enrichment_data.target_audience.length > 0 && (
-              <div>
-                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-                  <User className="h-4 w-4" />
-                  <span>Target Audience</span>
-                </Label>
-                <div className="space-y-2">
-                  {contact.enrichment_data.target_audience.map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex items-start space-x-2 text-sm text-gray-900 bg-gradient-to-r from-green-50 to-emerald-50 rounded-md px-4 py-2 border border-green-200"
-                    >
-                      <span className="text-green-600 font-medium">•</span>
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {contact.enrichment_data.unique_points && contact.enrichment_data.unique_points.length > 0 && (
-              <div>
-                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-                  <Lightbulb className="h-4 w-4" />
-                  <span>Unique Value Propositions</span>
-                </Label>
-                <div className="space-y-2">
-                  {contact.enrichment_data.unique_points.map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex items-start space-x-2 text-sm text-gray-900 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-md px-4 py-2 border border-yellow-200"
-                    >
-                      <span className="text-yellow-600 font-medium">•</span>
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {contact.enrichment_data.tone_style && contact.enrichment_data.tone_style.trim().length > 0 && (
-              <div>
-                <Label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-                  <Sparkles className="h-4 w-4" />
-                  <span>Brand Tone & Style</span>
-                </Label>
-                <div className="text-sm text-gray-900 bg-gradient-to-r from-pink-50 to-rose-50 rounded-md px-4 py-3 border border-pink-200">
-                  {contact.enrichment_data.tone_style}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          <div className="flex flex-wrap gap-2">
+            {contact.tags.map((tag, index) => (
+              <Badge key={index} variant="outline" className="text-xs">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Custom Fields Card */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle>Custom Fields</CardTitle>
-          <Button variant="outline" size="sm" className="flex items-center space-x-2">
-            <Plus className="h-4 w-4" />
-            <span>Add Field</span>
-          </Button>
-        </CardHeader>
+      {/* AI Enrichment Section */}
+      <div className="pt-6 border-t border-gray-200">
+        <div className="bg-gray-50 rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-blue-600" />
+              AI Enrichment
+            </h3>
+          </div>
 
-        <CardContent>
-          {contact.custom_fields && Object.keys(contact.custom_fields).length > 0 ? (
-            <div className="space-y-4">
-              {Object.entries(contact.custom_fields).map(([key, value]) => (
-                <div key={key} className="flex items-center space-x-4">
-                  <div className="flex-1">
-                    <Label className="text-sm font-medium text-gray-700">{key}</Label>
-                    <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2">
-                      {String(value)}
+          <EnrichmentButton
+            contactId={contact.id}
+            hasWebsite={!!contact.website}
+            hasLinkedIn={!!contact.linkedin_url}
+            linkedInUrl={contact.linkedin_url}
+            currentStatus={(contact as any).enrichment_status}
+            linkedInStatus={(contact as any).linkedin_extraction_status}
+            onEnrichmentComplete={(updatedContact) => {
+              onContactUpdate({ ...contact, ...updatedContact })
+            }}
+            className="w-full"
+          />
+
+          {/* Enrichment Data Display */}
+          {(contact as any).enrichment_data && (contact as any).enrichment_status === 'completed' && (
+            <div className="mt-6 bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-green-600" />
+                <h4 className="text-lg font-medium text-green-900">Website Enrichment Data</h4>
+                {(contact as any).enrichment_updated_at && (
+                  <span className="text-xs text-green-600 ml-auto">
+                    Enriched {formatDate((contact as any).enrichment_updated_at)}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                {contact.enrichment_data.industry && (
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Industry</p>
+                    <p className="text-sm text-green-700">{contact.enrichment_data.industry}</p>
+                  </div>
+                )}
+
+                {contact.enrichment_data.products_services && contact.enrichment_data.products_services.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Products & Services</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {contact.enrichment_data.products_services.map((service, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs bg-green-100 text-green-800">
+                          {service}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <Edit3 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <p>No custom fields added yet</p>
-              <p className="text-sm mt-1">Add custom fields to track additional information</p>
+                )}
+
+                {contact.enrichment_data.target_audience && contact.enrichment_data.target_audience.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Target Audience</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {contact.enrichment_data.target_audience.map((audience, index) => (
+                        <Badge key={index} variant="outline" className="text-xs border-green-300 text-green-700">
+                          {audience}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {contact.enrichment_data.unique_points && contact.enrichment_data.unique_points.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Unique Points</p>
+                    <ul className="text-sm text-green-700 mt-1 space-y-1">
+                      {contact.enrichment_data.unique_points.map((point, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-green-500 mt-1">•</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {contact.enrichment_data.tone_style && (
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Communication Style</p>
+                    <p className="text-sm text-green-700">{contact.enrichment_data.tone_style}</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Metadata Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Calendar className="h-5 w-5" />
-            <span>Contact Metadata</span>
-          </CardTitle>
-        </CardHeader>
+      {/* Metadata */}
+      <div className="pt-6 border-t border-gray-200">
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar className="h-4 w-4 text-gray-500" />
+          <h3 className="text-lg font-medium text-gray-900">Metadata</h3>
+        </div>
 
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>Created At</Label>
-              <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2">
-                {formatDate(contact.created_at)}
-              </div>
-            </div>
-
-            <div>
-              <Label>Last Updated</Label>
-              <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2">
-                {formatDate(contact.updated_at)}
-              </div>
-            </div>
-
-            <div>
-              <Label>Contact ID</Label>
-              <div className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-md px-3 py-2 font-mono">
-                {contact.id}
-              </div>
-            </div>
-
-            <div>
-              <Label>Engagement Status</Label>
-              <div className="mt-1">
-                <Badge variant="secondary" className="text-xs">
-                  {contact.engagement_status || 'not_contacted'}
-                </Badge>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <p className="font-medium text-gray-700">Contact ID</p>
+            <p className="text-gray-600 font-mono">{contact.id}</p>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <p className="font-medium text-gray-700">Created</p>
+            <p className="text-gray-600">{formatDate(contact.created_at)}</p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-700">Last Updated</p>
+            <p className="text-gray-600">{formatDate(contact.updated_at)}</p>
+          </div>
+          {(contact as any).enrichment_updated_at && (
+            <div>
+              <p className="font-medium text-gray-700">Website Enriched</p>
+              <p className="text-gray-600">{formatDate((contact as any).enrichment_updated_at)}</p>
+            </div>
+          )}
+          {(contact as any).linkedin_extracted_at && (
+            <div>
+              <p className="font-medium text-gray-700">LinkedIn Extracted</p>
+              <p className="text-gray-600">{formatDate((contact as any).linkedin_extracted_at)}</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

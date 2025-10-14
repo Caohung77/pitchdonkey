@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth, addSecurityHeaders } from '@/lib/auth-middleware'
-import { createServerSupabaseClient } from '@/lib/supabase'
 
 const knowledgeCreateSchema = z.object({
   type: z.enum(['text', 'link', 'pdf', 'doc', 'html']),
@@ -111,18 +110,6 @@ export const POST = withAuth(async (
       throw error
     }
 
-    // Update persona's knowledge summary
-    await supabase
-      .from('ai_personas')
-      .update({
-        knowledge_summary: {
-          total_items: await getKnowledgeCount(supabase, personaId),
-          last_updated: new Date().toISOString()
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', personaId)
-
     return addSecurityHeaders(
       NextResponse.json({ success: true, data: knowledge }, { status: 201 })
     )
@@ -150,12 +137,3 @@ export const POST = withAuth(async (
     )
   }
 })
-
-async function getKnowledgeCount(supabase: any, personaId: string): Promise<number> {
-  const { count } = await supabase
-    .from('ai_persona_knowledge')
-    .select('*', { count: 'exact', head: true })
-    .eq('persona_id', personaId)
-
-  return count || 0
-}

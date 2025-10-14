@@ -8,9 +8,13 @@ import { createServerSupabaseClient } from '@/lib/supabase'
  * Upload PDF file to TEMPORARY Supabase storage and return public URL
  * Note: PDF is stored temporarily for Jina AI extraction, then deleted after content is extracted
  */
-export const POST = withAuth(async (request: NextRequest, { user, supabase, params }) => {
+export const POST = withAuth(async (
+  request: NextRequest,
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string }> }
+) => {
   try {
-    const personaId = params.personaId
+    const { personaId } = await params
 
     // Verify persona belongs to user
     const { data: persona, error: personaError } = await supabase

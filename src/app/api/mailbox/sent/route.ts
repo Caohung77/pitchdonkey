@@ -29,6 +29,14 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         html_content,
         created_at,
         email_account_id,
+        contact_id,
+        contact_id,
+        contact:contacts!outgoing_emails_contact_id_fkey (
+          id,
+          first_name,
+          last_name,
+          email
+        ),
         email_accounts!left (
           id,
           email,
@@ -109,6 +117,32 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
   - Search filter: ${search || 'none'}
   - Status filter: ${status || 'all'}`)
 
+    // Build contact lookup for outgoing emails
+    let outgoingContactMap: Record<string, any> = {}
+    if (outgoingEmails && outgoingEmails.length > 0) {
+      const contactIds = Array.from(
+        new Set(
+          outgoingEmails
+            .map(email => email.contact_id)
+            .filter((id): id is string => Boolean(id))
+        )
+      )
+
+      if (contactIds.length > 0) {
+        const { data: outgoingContacts } = await supabase
+          .from('contacts')
+          .select('id, first_name, last_name, email')
+          .in('id', contactIds)
+
+        if (outgoingContacts && outgoingContacts.length > 0) {
+          outgoingContactMap = outgoingContacts.reduce<Record<string, any>>((acc, contact) => {
+            acc[contact.id] = contact
+            return acc
+          }, {})
+        }
+      }
+    }
+
     // Combine both sources
     const allEmails = [
       ...(outgoingEmails || []).map(email => ({
@@ -122,6 +156,8 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         to_address: email.to_address,
         from_address: email.from_address,
         email_accounts: email.email_accounts,
+        contact_id: email.contact_id,
+        contacts: email.contact_id ? outgoingContactMap[email.contact_id] || null : null,
         source: 'gmail'
       })),
       ...(campaignEmails || []).map(email => ({

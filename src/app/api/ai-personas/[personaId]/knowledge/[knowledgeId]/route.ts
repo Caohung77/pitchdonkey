@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, addSecurityHeaders } from '@/lib/auth-middleware'
 
-export const DELETE = withAuth(async (request: NextRequest, { user, supabase, params }) => {
+export const DELETE = withAuth(async (
+  request: NextRequest,
+  { user, supabase }: { user: any; supabase: any },
+  { params }: { params: Promise<{ personaId: string; knowledgeId: string }> }
+) => {
   try {
-    const { personaId, knowledgeId } = params
+    const { personaId, knowledgeId } = await params
 
     // Verify persona belongs to user
     const { data: persona, error: personaError } = await supabase
@@ -31,23 +35,6 @@ export const DELETE = withAuth(async (request: NextRequest, { user, supabase, pa
     if (error) {
       throw error
     }
-
-    // Update persona's knowledge summary
-    const { count } = await supabase
-      .from('ai_persona_knowledge')
-      .select('*', { count: 'exact', head: true })
-      .eq('persona_id', personaId)
-
-    await supabase
-      .from('ai_personas')
-      .update({
-        knowledge_summary: {
-          total_items: count || 0,
-          last_updated: new Date().toISOString()
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', personaId)
 
     return addSecurityHeaders(
       NextResponse.json({ success: true })

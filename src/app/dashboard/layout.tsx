@@ -27,7 +27,8 @@ import {
   AlertCircle,
   Inbox,
   Bot,
-  ShieldCheck
+  ShieldCheck,
+  MessageCircle
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -59,6 +60,7 @@ const getNavigation = (userEmail?: string) => {
     { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
     { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },
     { name: 'AI Personas', href: '/dashboard/ai-personas', icon: Bot },
+    { name: 'Persona Chat', href: '/dashboard/persona-chat', icon: MessageCircle },
     { name: 'AI Templates', href: '/dashboard/ai-templates', icon: Palette },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
     { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },

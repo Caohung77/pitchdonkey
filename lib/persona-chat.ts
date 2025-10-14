@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 import { generatePersonalityPrompt, type PersonalityTraits } from './persona-personality'
+import type { ContactContext } from './ai-persona-contact-context'
+import type { AIQueryResult } from './ai-contact-query-service'
 
 type Supabase = SupabaseClient<Database>
 
@@ -39,6 +41,8 @@ export interface PersonaChatConfig {
   purpose?: string
   productContext?: string
   customPrompt?: string
+  contactContext?: ContactContext
+  contactQuery?: AIQueryResult
   customPersonaDefinition?: {
     customPersonaName: string
     customPersonaDescription: string
@@ -59,7 +63,9 @@ export interface ChatResponse {
   }
 }
 
-const DEFAULT_MODEL = 'gemini-1.5-flash'
+const DEFAULT_MODEL =
+  (process.env.GOOGLE_GEMINI_MODEL && process.env.GOOGLE_GEMINI_MODEL.trim()) ||
+  'gemini-2.5-flash-lite'
 const MAX_CONTEXT_MESSAGES = 10 // Keep last 10 messages for context
 
 /**
@@ -72,7 +78,10 @@ function buildPersonaChatPrompt(config: PersonaChatConfig): string {
     personalityTraits,
     purpose,
     productContext,
-    customPrompt
+    customPrompt,
+    knowledgeBase,
+    contactContext,
+    contactQuery
   } = config
 
   const sections: string[] = []
@@ -133,6 +142,24 @@ function buildPersonaChatPrompt(config: PersonaChatConfig): string {
     sections.push(`\nAdditional Instructions:\n${customPrompt}`)
   }
 
+  if (knowledgeBase && knowledgeBase.length > 0) {
+    sections.push(
+      `\nPersona Knowledge Base (high priority factual context):\n${
+        knowledgeBase
+          .map((entry, index) => `${index + 1}. ${entry}`)
+          .join('\n')
+      }`
+    )
+  }
+
+  if (contactContext) {
+    sections.push(`\nActive Contact Context:\n${formatContactContext(contactContext)}`)
+  }
+
+  if (contactQuery && contactQuery.contacts?.length) {
+    sections.push(`\nRecent Contact Discovery Results:\n${formatContactQuery(contactQuery)}`)
+  }
+
   // Core guidelines
   sections.push(`
 Core Guidelines:
@@ -144,6 +171,98 @@ Core Guidelines:
 - Keep responses focused and valuable`)
 
   return sections.join('\n\n')
+}
+
+function formatContactContext(context: ContactContext): string {
+  const lines: string[] = []
+  const { contact, engagement, campaigns, recentEmails } = context
+
+  lines.push(`Name: ${contact.fullName}`)
+  lines.push(`Email: ${contact.email}`)
+  if (contact.company) lines.push(`Company: ${contact.company}`)
+  if (contact.position) lines.push(`Role: ${contact.position}`)
+  if (contact.source) lines.push(`Source: ${contact.source}`)
+  if (contact.linkedinUrl) lines.push(`LinkedIn: ${contact.linkedinUrl}`)
+  if (contact.tags?.length) lines.push(`Tags: ${contact.tags.join(', ')}`)
+  if (contact.lists?.length) lines.push(`Lists: ${contact.lists.join(', ')}`)
+  if (contact.segments?.length) lines.push(`Segments: ${contact.segments.join(', ')}`)
+  if (contact.notes) {
+    lines.push(`Notes: ${contact.notes}`)
+    if (contact.notesUpdatedAt) {
+      lines.push(`Notes Updated At: ${contact.notesUpdatedAt}`)
+    }
+  }
+  if (contact.enrichmentStatus) {
+    lines.push(`Enrichment Status: ${contact.enrichmentStatus}`)
+    if (contact.enrichmentUpdatedAt) {
+      lines.push(`Enrichment Updated At: ${contact.enrichmentUpdatedAt}`)
+    }
+  }
+
+  if (engagement) {
+    lines.push('\nEngagement Snapshot:')
+    lines.push(`- Status: ${engagement.status ?? 'unknown'} (score ${engagement.score ?? 0})`)
+    lines.push(`- Sent: ${engagement.sentCount ?? 0}, Opens: ${engagement.openCount ?? 0}, Clicks: ${engagement.clickCount ?? 0}, Replies: ${engagement.replyCount ?? 0}`)
+    if (engagement.bounceCount) {
+      lines.push(`- Bounces: ${engagement.bounceCount}`)
+    }
+    if (engagement.lastPositiveAt) {
+      lines.push(`- Last Positive Interaction: ${engagement.lastPositiveAt}`)
+    }
+  }
+
+  if (campaigns.length) {
+    lines.push('\nRecent Campaign Touchpoints (most recent first):')
+    campaigns.slice(0, 5).forEach((campaign, index) => {
+      lines.push(`${index + 1}. ${campaign.campaignName || campaign.campaignId} – Status: ${campaign.status || 'unknown'} (updated ${campaign.lastUpdatedAt || campaign.createdAt})`)
+      if (campaign.personalizedSubject) {
+        lines.push(`   Subject: ${campaign.personalizedSubject}`)
+      }
+      if (campaign.personalizedBodyPreview) {
+        lines.push(`   Preview: ${campaign.personalizedBodyPreview}`)
+      }
+    })
+  }
+
+  if (recentEmails.length) {
+    lines.push('\nRecent Email Activity (most recent first):')
+    recentEmails.slice(0, 5).forEach((email, index) => {
+      lines.push(`${index + 1}. Subject: ${email.subject || 'No subject'} – Status: ${email.status || 'unknown'}`)
+      const events: string[] = []
+      if (email.sentAt) events.push(`sent ${email.sentAt}`)
+      if (email.openedAt) events.push(`opened ${email.openedAt}`)
+      if (email.clickedAt) events.push(`clicked ${email.clickedAt}`)
+      if (email.repliedAt) events.push(`replied ${email.repliedAt}`)
+      if (email.bouncedAt) events.push(`bounced ${email.bouncedAt}`)
+      if (events.length) {
+        lines.push(`   Events: ${events.join(', ')}`)
+      }
+    })
+  }
+
+  return lines.join('\n')
+}
+
+function formatContactQuery(result: AIQueryResult): string {
+  const lines: string[] = []
+  if (result.reasoning) {
+    lines.push(`Reasoning: ${result.reasoning}`)
+  }
+  if (result.contacts?.length) {
+    lines.push('Contacts Returned:')
+    result.contacts.slice(0, 10).forEach((contact, index) => {
+      const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || contact.email
+      const role = contact.position ? ` – ${contact.position}` : ''
+      const company = contact.company ? ` @ ${contact.company}` : ''
+      const status = contact.engagement_status ? ` (engagement: ${contact.engagement_status}, score ${contact.engagement_score ?? 0})` : ''
+      lines.push(`${index + 1}. ${name}${role}${company}${status}`)
+    })
+    if (result.contacts.length > 10) {
+      lines.push(`...and ${result.contacts.length - 10} more contacts (limited for prompt).`)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 /**
@@ -240,6 +359,7 @@ export async function sendChatMessage(
   conversationHistory: ChatMessage[] = []
 ): Promise<ChatResponse | null> {
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY
+  const modelId = DEFAULT_MODEL
 
   if (!apiKey) {
     console.error('Google Gemini API key not configured')
@@ -254,7 +374,7 @@ export async function sendChatMessage(
 
     // Initialize Gemini
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: DEFAULT_MODEL })
+    const model = genAI.getGenerativeModel({ model: modelId })
 
     // Build conversation context
     const contextMessages = conversationHistory
@@ -283,13 +403,13 @@ ${config.personaName}:`
       message,
       messageId: crypto.randomUUID(),
       metadata: {
-        model: DEFAULT_MODEL,
+        model: modelId,
         responseTime,
         tokensUsed: undefined // Gemini API doesn't provide this directly
       }
     }
   } catch (error) {
-    console.error('Chat message error:', error)
+    console.error(`Chat message error using Gemini model "${modelId}":`, error)
     return null
   }
 }
@@ -336,6 +456,35 @@ export async function saveChatMessage(
     return true
   } catch (error) {
     console.error('Error saving chat message:', error)
+    return false
+  }
+}
+
+/**
+ * Replace the stored context for a chat session
+ */
+export async function updateChatSessionContext(
+  supabase: Supabase,
+  sessionId: string,
+  context: Record<string, any>
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('ai_persona_chat_sessions')
+      .update({
+        context,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessionId)
+
+    if (error) {
+      console.error('Failed to update chat session context:', error)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error('Error updating chat session context:', error)
     return false
   }
 }

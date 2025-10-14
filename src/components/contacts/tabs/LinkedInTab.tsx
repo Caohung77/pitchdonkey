@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Contact } from '@/lib/contacts'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -9,451 +8,442 @@ import { Label } from '@/components/ui/label'
 import {
   Linkedin,
   Building,
-  MapPin,
-  Users,
-  Briefcase,
-  GraduationCap,
+  User,
+  Globe,
   Award,
-  ExternalLink,
-  RefreshCw,
   AlertCircle,
-  CheckCircle,
-  Calendar,
-  User
+  ExternalLink,
+  Calendar
 } from 'lucide-react'
-
-interface Contact {
-  id: string
-  linkedin_url?: string
-  enriched_data?: Record<string, any>
-  company?: string
-  job_title?: string
-}
-
-interface LinkedInData {
-  profile_url: string
-  headline: string
-  summary: string
-  location: string
-  industry: string
-  current_company: string
-  current_position: string
-  connections: number
-  experience: Array<{
-    company: string
-    title: string
-    duration: string
-    location?: string
-    description?: string
-  }>
-  education: Array<{
-    school: string
-    degree: string
-    field: string
-    year: string
-  }>
-  skills: string[]
-  certifications: Array<{
-    name: string
-    issuer: string
-    date: string
-  }>
-  profile_photo?: string
-  last_updated: string
-}
 
 interface LinkedInTabProps {
   contact: Contact
   onContactUpdate: (contact: Contact) => void
 }
 
-export function LinkedInTab({ contact, onContactUpdate }: LinkedInTabProps) {
-  const [linkedinUrl, setLinkedinUrl] = useState(contact.linkedin_url || '')
-  const [loading, setLoading] = useState(false)
-  const [enriching, setEnriching] = useState(false)
+export function LinkedInTab({
+  contact,
+  onContactUpdate
+}: LinkedInTabProps) {
+  // Check for individual LinkedIn fields first, fallback to legacy JSON blob
+  const hasLinkedInData = !!(
+    contact.linkedin_first_name ||
+    contact.linkedin_headline ||
+    contact.linkedin_about ||
+    contact.linkedin_current_company ||
+    (contact as any).linkedin_profile_data
+  )
 
-  // Mock LinkedIn data - in production, this would come from enriched_data
-  const linkedInData: LinkedInData | null = contact.enriched_data?.linkedin ? {
-    profile_url: contact.linkedin_url || '',
-    headline: 'Senior Marketing Director | B2B Growth Specialist',
-    summary: 'Experienced marketing professional with 10+ years in B2B growth, lead generation, and digital marketing. Passionate about helping companies scale through data-driven marketing strategies.',
-    location: 'San Francisco, CA',
-    industry: 'Marketing and Advertising',
-    current_company: contact.company || 'TechCorp Solutions',
-    current_position: contact.job_title || 'Senior Marketing Director',
-    connections: 2847,
-    experience: [
-      {
-        company: 'TechCorp Solutions',
-        title: 'Senior Marketing Director',
-        duration: '2022 - Present',
-        location: 'San Francisco, CA',
-        description: 'Leading a team of 12 marketers to drive B2B growth through integrated campaigns'
-      },
-      {
-        company: 'Growth Dynamics',
-        title: 'Marketing Manager',
-        duration: '2019 - 2022',
-        location: 'San Francisco, CA',
-        description: 'Managed lead generation campaigns that increased MQLs by 300%'
-      },
-      {
-        company: 'StartupCo',
-        title: 'Marketing Specialist',
-        duration: '2017 - 2019',
-        location: 'San Jose, CA',
-        description: 'Built marketing function from ground up, launched multiple product campaigns'
-      }
-    ],
-    education: [
-      {
-        school: 'University of California, Berkeley',
-        degree: 'Bachelor of Arts',
-        field: 'Marketing',
-        year: '2017'
-      },
-      {
-        school: 'Stanford University',
-        degree: 'Certificate',
-        field: 'Digital Marketing Strategy',
-        year: '2020'
-      }
-    ],
-    skills: [
-      'Digital Marketing', 'Lead Generation', 'B2B Marketing', 'Marketing Strategy',
-      'Content Marketing', 'Email Marketing', 'Marketing Automation', 'Analytics',
-      'SEO/SEM', 'Social Media Marketing', 'Campaign Management', 'Team Leadership'
-    ],
-    certifications: [
-      {
-        name: 'Google Analytics Certified',
-        issuer: 'Google',
-        date: '2023'
-      },
-      {
-        name: 'HubSpot Content Marketing Certified',
-        issuer: 'HubSpot',
-        date: '2022'
-      },
-      {
-        name: 'Facebook Blueprint Certified',
-        issuer: 'Meta',
-        date: '2022'
-      }
-    ],
-    last_updated: '2024-01-15T10:00:00Z'
-  } : null
+  // Backwards compatibility: use JSON blob if individual fields aren't populated yet
+  const lp: any = hasLinkedInData ? {
+    // Personal Information
+    first_name: contact.linkedin_first_name,
+    last_name: contact.linkedin_last_name,
+    name: contact.linkedin_first_name && contact.linkedin_last_name ?
+          `${contact.linkedin_first_name} ${contact.linkedin_last_name}` :
+          contact.linkedin_first_name || contact.linkedin_last_name,
+    headline: contact.linkedin_headline,
+    summary: contact.linkedin_summary,
+    about: contact.linkedin_about,
 
-  const handleSaveLinkedInUrl = async () => {
-    // TODO: Implement save LinkedIn URL
-    console.log('Saving LinkedIn URL:', linkedinUrl)
-  }
+    // Professional Information
+    current_company: contact.linkedin_current_company,
+    position: contact.linkedin_current_position,
+    industry: contact.linkedin_industry,
 
-  const handleEnrichProfile = async () => {
-    if (!linkedinUrl) return
+    // Location
+    location: contact.linkedin_location,
+    city: contact.linkedin_city,
+    country: contact.linkedin_country,
+    country_code: contact.linkedin_country_code,
 
-    setEnriching(true)
-    try {
-      // TODO: Implement LinkedIn profile enrichment API call
-      console.log('Enriching LinkedIn profile:', linkedinUrl)
-      await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate API call
-      // Mock successful enrichment
-      const updatedContact = {
-        ...contact,
-        linkedin_url: linkedinUrl,
-        enriched_data: {
-          ...contact.enriched_data,
-          linkedin: true
-        }
-      }
-      onContactUpdate(updatedContact)
-    } catch (error) {
-      console.error('Failed to enrich LinkedIn profile:', error)
-    } finally {
-      setEnriching(false)
-    }
-  }
+    // Social Stats
+    follower_count: contact.linkedin_follower_count,
+    connection_count: contact.linkedin_connection_count,
+    recommendations_count: contact.linkedin_recommendations_count,
+    profile_completeness: contact.linkedin_profile_completeness,
 
-  const formatDate = (dateString: string) => {
+    // Media
+    avatar: contact.linkedin_avatar_url,
+    banner_image: contact.linkedin_banner_url,
+
+    // Complex Data (from JSONB fields)
+    experience: contact.linkedin_experience,
+    education: contact.linkedin_education,
+    skills: contact.linkedin_skills,
+    languages: contact.linkedin_languages,
+    certifications: contact.linkedin_certifications,
+    volunteer_experience: contact.linkedin_volunteer_experience,
+    honors_and_awards: contact.linkedin_honors_awards,
+    projects: contact.linkedin_projects,
+    courses: contact.linkedin_courses,
+    publications: contact.linkedin_publications,
+    patents: contact.linkedin_patents,
+    organizations: contact.linkedin_organizations,
+    posts: contact.linkedin_posts,
+    activity: contact.linkedin_activity,
+    recommendations: contact.linkedin_recommendations,
+    people_also_viewed: contact.linkedin_people_also_viewed,
+    contact_info: contact.linkedin_contact_info,
+    services: contact.linkedin_services
+  } : (contact as any).linkedin_profile_data
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
   return (
-    <div className="space-y-6">
-      {/* LinkedIn URL Setup */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Linkedin className="h-5 w-5" />
-            <span>LinkedIn Profile</span>
-          </CardTitle>
-        </CardHeader>
+    <div className="space-y-8">
+      {/* Header Section */}
+      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-3 rounded-lg">
+              <Linkedin className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-blue-900">LinkedIn Profile</h2>
+              {'linkedin_extracted_at' in contact && contact.linkedin_extracted_at && (
+                <p className="text-sm text-blue-600">
+                  Extracted {formatDate(contact.linkedin_extracted_at as string)}
+                </p>
+              )}
+            </div>
+          </div>
+          <div>
+            {hasLinkedInData && lp ? (
+              <Badge className="bg-green-100 text-green-800 border-green-200">
+                ✓ Data Available
+              </Badge>
+            ) : contact.linkedin_extraction_status === 'failed' ? (
+              <Badge className="bg-red-100 text-red-800 border-red-200">
+                ⚠ Extraction Failed
+              </Badge>
+            ) : (
+              <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+                No Data
+              </Badge>
+            )}
+          </div>
+        </div>
 
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="linkedin_url">LinkedIn Profile URL</Label>
-            <div className="flex items-center space-x-2">
-              <Input
-                id="linkedin_url"
-                value={linkedinUrl}
-                onChange={(e) => setLinkedinUrl(e.target.value)}
-                placeholder="https://linkedin.com/in/username"
-                className="flex-1"
-              />
-              <Button
-                onClick={handleSaveLinkedInUrl}
-                disabled={linkedinUrl === contact.linkedin_url}
-                size="sm"
-              >
-                Save
-              </Button>
+        {/* LinkedIn URL Management */}
+        <div className="mt-4 pt-4 border-t border-blue-200">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Label htmlFor="linkedin_url" className="text-sm font-medium text-blue-800">
+                LinkedIn Profile URL
+              </Label>
+              <div className="mt-1 flex gap-2">
+                <Input
+                  id="linkedin_url"
+                  value={contact.linkedin_url || ''}
+                  placeholder="https://linkedin.com/in/username"
+                  className="bg-white"
+                  readOnly
+                />
+                {contact.linkedin_url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(
+                      contact.linkedin_url!.startsWith('http')
+                        ? contact.linkedin_url!
+                        : `https://${contact.linkedin_url}`,
+                      '_blank'
+                    )}
+                    className="flex items-center gap-2"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Visit
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Show failure message if extraction failed */}
+      {contact.linkedin_extraction_status === 'failed' && (!hasLinkedInData || !lp) && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-red-100 p-2 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-red-900">LinkedIn Extraction Failed</h3>
+              <p className="text-sm text-red-700">Unable to extract data from this LinkedIn profile</p>
             </div>
           </div>
 
-          {linkedinUrl && (
-            <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center space-x-3">
-                <Linkedin className="h-5 w-5 text-blue-600" />
-                <div>
-                  <div className="text-sm font-medium">LinkedIn Profile</div>
-                  <a
-                    href={linkedinUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:underline flex items-center space-x-1"
-                  >
-                    <span>View Profile</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              </div>
-
-              <Button
-                onClick={handleEnrichProfile}
-                disabled={enriching}
-                size="sm"
-                className="flex items-center space-x-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${enriching ? 'animate-spin' : ''}`} />
-                <span>{enriching ? 'Enriching...' : 'Enrich Profile'}</span>
-              </Button>
+          <div className="space-y-3 text-sm">
+            <div className="bg-red-100 p-3 rounded-lg border-l-4 border-red-400">
+              <p className="font-medium text-red-800 mb-1">Possible Reasons:</p>
+              <ul className="text-red-700 space-y-1">
+                <li>• Profile privacy settings prevent data extraction</li>
+                <li>• Profile may be restricted or incomplete</li>
+                <li>• LinkedIn URL may be invalid or redirected</li>
+                <li>• Temporary API limitations or rate limiting</li>
+              </ul>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
+              <p className="font-medium text-blue-800 mb-1">What you can try:</p>
+              <ul className="text-blue-700 space-y-1">
+                <li>• Verify the LinkedIn URL is correct and accessible</li>
+                <li>• Try again later (rate limits may have been reached)</li>
+                <li>• Use website enrichment instead for company information</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LinkedIn Profile Data */}
-      {linkedInData ? (
-        <>
-          {/* Profile Summary */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-              <CardTitle>Profile Summary</CardTitle>
-              <Badge variant="secondary" className="text-xs">
-                Updated {formatDate(linkedInData.last_updated)}
-              </Badge>
-            </CardHeader>
+      {typeof lp === 'object' && lp && (
+        <div className="grid gap-6">
 
-            <CardContent className="space-y-4">
-              <div>
-                <h3 className="font-semibold text-lg text-gray-900">{linkedInData.headline}</h3>
-                <div className="flex items-center space-x-4 text-sm text-gray-600 mt-2">
-                  <div className="flex items-center space-x-1">
-                    <Building className="h-4 w-4" />
-                    <span>{linkedInData.current_company}</span>
+          {/* Professional Summary Card */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Building className="h-5 w-5 text-gray-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Professional Summary</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Company & Position */}
+              <div className="space-y-4">
+                {lp.current_company && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500 uppercase tracking-wide">Company</span>
+                    <p className="text-base font-medium text-gray-900 mt-1">
+                      {typeof lp.current_company === 'object'
+                        ? lp.current_company.name
+                        : lp.current_company}
+                    </p>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <MapPin className="h-4 w-4" />
-                    <span>{linkedInData.location}</span>
+                )}
+
+                {lp.position && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500 uppercase tracking-wide">Position</span>
+                    <p className="text-base text-gray-800 mt-1">{lp.position}</p>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <Users className="h-4 w-4" />
-                    <span>{linkedInData.connections.toLocaleString()} connections</span>
+                )}
+              </div>
+
+              {/* Location & Industry */}
+              <div className="space-y-4">
+                {lp.city && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500 uppercase tracking-wide">Location</span>
+                    <p className="text-base text-gray-800 mt-1">
+                      {lp.city}
+                      {lp.country && `, ${lp.country}`}
+                    </p>
+                  </div>
+                )}
+
+                {lp.industry && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500 uppercase tracking-wide">Industry</span>
+                    <p className="text-base text-gray-800 mt-1">{lp.industry}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* About Section - CRITICAL for personalization */}
+          {lp.about && (
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <User className="h-5 w-5 text-gray-600" />
+                <h3 className="text-lg font-semibold text-gray-900">About</h3>
+                <Badge variant="outline" className="text-xs">Personalization Key</Badge>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg border-l-4 border-blue-400">
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+                  {lp.about}
+                </p>
+                {lp.about && (lp.about.endsWith('…') || lp.about.endsWith('...')) && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      ⚠️ <span>Content may be truncated due to LinkedIn privacy settings</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Network Stats */}
+          {(lp.followers || lp.connections || lp.follower_count || lp.connection_count || lp.profile_completeness) && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {(lp.followers || lp.follower_count) && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {(lp.followers || lp.follower_count)?.toLocaleString()}
+                  </div>
+                  <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Followers</div>
+                </div>
+              )}
+
+              {(lp.connections || lp.connection_count) && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {(lp.connections || lp.connection_count)}+
+                  </div>
+                  <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Connections</div>
+                </div>
+              )}
+
+              {lp.recommendations_count && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {lp.recommendations_count}
+                  </div>
+                  <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recommendations</div>
+                </div>
+              )}
+
+              {lp.profile_completeness && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm text-center">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {lp.profile_completeness}%
+                  </div>
+                  <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Profile Complete</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Experience */}
+          {(lp.experience && Array.isArray(lp.experience) && lp.experience.length > 0) ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-5 w-5 text-gray-600">💼</div>
+                <h3 className="text-lg font-semibold text-gray-900">Professional Experience</h3>
+              </div>
+              <div className="space-y-4">
+                {lp.experience.slice(0, 3).map((exp: any, index: number) => (
+                  <div key={index} className="border border-gray-100 rounded-lg p-4 bg-gray-50 relative">
+                    {/* Timeline indicator */}
+                    {index < lp.experience.length - 1 && (
+                      <div className="absolute left-4 top-16 w-px h-8 bg-gray-300"></div>
+                    )}
+                    <div className="flex items-start gap-3">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
+                      <div className="flex-1">
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">{exp.title}</p>
+                            <p className="text-sm text-gray-700">{exp.company}</p>
+                            {exp.location && <p className="text-xs text-gray-600">{exp.location}</p>}
+                          </div>
+                          <div className="text-xs text-gray-500 bg-white px-2 py-1 rounded text-right">
+                            {exp.start_date && (
+                              <div>{exp.start_date} - {exp.end_date || 'Present'}</div>
+                            )}
+                            {exp.duration && <div className="text-gray-400">{exp.duration}</div>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {lp.experience.length > 3 && (
+                  <div className="text-center">
+                    <Badge variant="outline" className="text-xs">
+                      +{lp.experience.length - 3} more positions
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-5 w-5 text-gray-600">💼</div>
+                <h3 className="text-lg font-semibold text-gray-900">Professional Experience</h3>
+              </div>
+              <div className="text-center py-8">
+                <div className="text-gray-500 text-sm">
+                  <div className="mb-2">📍 Professional experience not available on LinkedIn profile</div>
+                  <div className="text-xs text-gray-400">
+                    This contact may have their experience section set to private or not filled out
                   </div>
                 </div>
               </div>
+            </div>
+          )}
 
-              {linkedInData.summary && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">About</h4>
-                  <p className="text-sm text-gray-700 leading-relaxed">{linkedInData.summary}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Experience */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Briefcase className="h-5 w-5" />
-                <span>Experience</span>
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              <div className="space-y-6">
-                {linkedInData.experience.map((exp, index) => (
-                  <div key={index} className="flex space-x-4">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
-                        <Building className="h-5 w-5 text-gray-600" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{exp.title}</h4>
-                          <p className="text-sm text-gray-600">{exp.company}</p>
-                          {exp.location && (
-                            <p className="text-sm text-gray-500">{exp.location}</p>
-                          )}
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          {exp.duration}
-                        </Badge>
-                      </div>
-
-                      {exp.description && (
-                        <p className="text-sm text-gray-700 mt-2 leading-relaxed">
-                          {exp.description}
+          {/* Education */}
+          {((lp.education && Array.isArray(lp.education) && lp.education.length > 0) ||
+            (lp.educations_details && Array.isArray(lp.educations_details) && lp.educations_details.length > 0)) && (
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-5 w-5 text-gray-600">🎓</div>
+                <h3 className="text-lg font-semibold text-gray-900">Education</h3>
+              </div>
+              <div className="space-y-3">
+                {(Array.isArray(lp.education) ? lp.education : (Array.isArray(lp.educations_details) ? lp.educations_details : [])).map((edu: any, index: number) => (
+                  <div key={index} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
+                          {edu.title || edu.school || edu.institute || edu.institution || (typeof edu === 'string' ? edu : `Education ${index + 1}`)}
                         </p>
+                        {edu.degree && <p className="text-sm text-gray-700">{edu.degree}</p>}
+                        {(edu.field_of_study || edu.field) && <p className="text-sm text-gray-600">{edu.field_of_study || edu.field}</p>}
+                      </div>
+                      {(edu.start_year || edu.end_year || edu.start_date || edu.end_date) && (
+                        <div className="text-xs text-gray-500 text-right bg-white px-2 py-1 rounded">
+                          {(edu.start_year || edu.start_date) && (edu.start_year || edu.start_date).toString().replace(':', '')} {(edu.start_year || edu.start_date) && (edu.end_year || edu.end_date) ? '–' : ''} {(edu.end_year || edu.end_date) && (edu.end_year || edu.end_date).toString().replace(':', '')}
+                        </div>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Education */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <GraduationCap className="h-5 w-5" />
-                <span>Education</span>
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              <div className="space-y-4">
-                {linkedInData.education.map((edu, index) => (
-                  <div key={index} className="flex space-x-4">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <GraduationCap className="h-5 w-5 text-blue-600" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{edu.school}</h4>
-                          <p className="text-sm text-gray-600">
-                            {edu.degree} in {edu.field}
-                          </p>
-                        </div>
-                        <span className="text-sm text-gray-500">{edu.year}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          )}
 
           {/* Skills */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Skills & Expertise</CardTitle>
-            </CardHeader>
-
-            <CardContent>
+          {lp.skills && Array.isArray(lp.skills) && lp.skills.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Award className="h-5 w-5 text-gray-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Skills</h3>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {linkedInData.skills.map((skill, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs">
-                    {skill}
+                {lp.skills.slice(0, 20).map((skill: any, index: number) => (
+                  <Badge
+                    key={index}
+                    variant="secondary"
+                    className="text-xs"
+                  >
+                    {typeof skill === 'object' ? skill.name || skill.title : skill}
                   </Badge>
                 ))}
+                {lp.skills.length > 20 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{lp.skills.length - 20} more
+                  </Badge>
+                )}
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Certifications */}
-          {linkedInData.certifications.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Award className="h-5 w-5" />
-                  <span>Certifications</span>
-                </CardTitle>
-              </CardHeader>
-
-              <CardContent>
-                <div className="space-y-4">
-                  {linkedInData.certifications.map((cert, index) => (
-                    <div key={index} className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                          <Award className="h-5 w-5 text-yellow-600" />
-                        </div>
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="font-medium text-gray-900">{cert.name}</h4>
-                            <p className="text-sm text-gray-600">{cert.issuer}</p>
-                          </div>
-                          <span className="text-sm text-gray-500">{cert.date}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            </div>
           )}
-        </>
-      ) : (
-        /* No LinkedIn Data */
-        <Card>
-          <CardContent className="text-center py-12">
-            {linkedinUrl ? (
-              <div>
-                <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Profile Not Enriched</h3>
-                <p className="text-gray-600 mb-6">
-                  Click "Enrich Profile" to gather professional information from LinkedIn.
-                </p>
-                <Button
-                  onClick={handleEnrichProfile}
-                  disabled={enriching}
-                  className="flex items-center space-x-2"
-                >
-                  <RefreshCw className={`h-4 w-4 ${enriching ? 'animate-spin' : ''}`} />
-                  <span>{enriching ? 'Enriching...' : 'Enrich Profile'}</span>
-                </Button>
-              </div>
-            ) : (
-              <div>
-                <Linkedin className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No LinkedIn Profile</h3>
-                <p className="text-gray-600 mb-6">
-                  Add a LinkedIn profile URL to view and enrich professional information.
-                </p>
-                <p className="text-sm text-gray-500">
-                  Professional data includes work experience, education, skills, and more.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+
+        </div>
       )}
     </div>
   )

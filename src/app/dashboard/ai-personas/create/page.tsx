@@ -232,8 +232,18 @@ export default function CreatePersonaPage() {
 
                 console.log('✅ PDF knowledge item saved:', extractResponse)
                 successCount++
+              } else if (item.type === 'link') {
+                toast.info(`Extracting content from ${item.title || item.url}...`)
+                const extractResponse = await ApiClient.post(`/api/ai-personas/${personaId}/knowledge/extract`, {
+                  type: 'url',
+                  url: item.url,
+                  title: item.title,
+                  description: item.description
+                })
+                console.log('✅ URL knowledge item extracted:', extractResponse)
+                successCount++
               } else {
-                // Handle text and link items
+                // Handle text items
                 const cleanItem = {
                   type: item.type,
                   title: item.title,

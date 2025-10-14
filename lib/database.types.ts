@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           agent_id: string
           contact_id: string
+          contact_id: string | null
           created_at: string | null
           id: string
           reasons: Json | null
@@ -28,6 +29,7 @@ export type Database = {
         Insert: {
           agent_id: string
           contact_id: string
+          contact_id?: string | null
           created_at?: string | null
           id?: string
           reasons?: Json | null
@@ -38,6 +40,7 @@ export type Database = {
         Update: {
           agent_id?: string
           contact_id?: string
+          contact_id?: string | null
           created_at?: string | null
           id?: string
           reasons?: Json | null

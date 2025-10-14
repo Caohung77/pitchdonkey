@@ -5,6 +5,13 @@ import { IMAPProcessor } from './imap-processor'
 import { createReplyProcessor } from './reply-processor'
 import type { OAuthTokens } from './oauth-providers'
 
+const extractEmailAddress = (value?: string | null): string | null => {
+  if (!value) return null
+  const match = value.match(/<([^>]+)>/)
+  if (match) return match[1].trim().toLowerCase()
+  const simple = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  return simple ? simple[0].toLowerCase() : value.trim().toLowerCase()
+}
 export type Supabase = SupabaseClient<Database>
 
 export interface EmailFetchResult {
@@ -279,6 +286,8 @@ export class EmailFetchService {
         ? email.from
         : email.from?.[0]?.address || email.from?.address || 'unknown@example.com'
 
+      const contactId = await this.findContactIdByEmail(account.user_id, fromAddress)
+
       // Create incoming email record
       const { data: incomingEmail, error: insertError } = await this.supabase
         .from('incoming_emails')
@@ -300,6 +309,7 @@ export class EmailFetchService {
           is_read: false,
           is_starred: false,
           is_archived: false,
+          contact_id: contactId,
         })
         .select()
         .single()
@@ -337,6 +347,25 @@ export class EmailFetchService {
       // Don't throw - reply processing errors shouldn't stop email fetching
       console.error('Error in reply processing:', error)
     }
+  }
+
+  private async findContactIdByEmail(userId: string, emailAddress?: string | null): Promise<string | null> {
+    const parsed = extractEmailAddress(emailAddress)
+    if (!parsed) return null
+
+    const { data, error } = await this.supabase
+      .from('contacts')
+      .select('id')
+      .eq('user_id', userId)
+      .ilike('email', parsed)
+      .maybeSingle()
+
+    if (error && error.code !== 'PGRST116') {
+      console.warn('⚠️ Failed to lookup contact by email:', { email: parsed, error })
+      return null
+    }
+
+    return data?.id || null
   }
 }
 

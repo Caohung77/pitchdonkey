@@ -2,6 +2,14 @@ import * as Imap from 'node-imap'
 import { simpleParser, ParsedMail } from 'mailparser'
 import { createServerSupabaseClient } from './supabase-server'
 
+const extractEmailAddress = (value?: string | null): string | null => {
+  if (!value) return null
+  const match = value.match(/<([^>]+)>/)
+  if (match) return match[1].trim().toLowerCase()
+  const simple = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  return simple ? simple[0].toLowerCase() : value.trim().toLowerCase()
+}
+
 export interface IMAPConfig {
   host: string
   port: number
@@ -846,6 +854,8 @@ export class IMAPProcessor {
     }
 
     // Try to include imap metadata, but fall back if columns not present
+    const contactId = await this.findContactIdByEmail(userId, email.from)
+
     const base = {
         user_id: userId,
         email_account_id: emailAccountId,
@@ -866,7 +876,8 @@ export class IMAPProcessor {
           // Note: We don't store attachment data in DB for space reasons
         })),
         processing_status: 'pending',
-        classification_status: 'unclassified'
+        classification_status: 'unclassified',
+        contact_id: contactId
       }
 
     // Attempt to set imap_uid and flags if the columns exist
@@ -933,6 +944,8 @@ export class IMAPProcessor {
     }
 
     // Insert new sent email
+    const contactId = await this.findContactIdByEmail(userId, email.to)
+
     const payload: Record<string, any> = {
       user_id: userId,
       email_account_id: emailAccountId,
@@ -943,7 +956,8 @@ export class IMAPProcessor {
       text_content: email.textContent || null,
       html_content: email.htmlContent || null,
       date_sent: email.dateReceived?.toISOString() || new Date().toISOString(),
-      imap_uid: email.imapUid || null
+      imap_uid: email.imapUid || null,
+      contact_id: contactId
     }
 
     const { error } = await this.supabase.from('outgoing_emails').insert(payload)
@@ -955,6 +969,25 @@ export class IMAPProcessor {
 
     console.log(`✅ Stored outgoing email: "${email.subject}" (UID: ${email.imapUid}, Message-ID: ${messageId})`)
     return true
+  }
+
+  private async findContactIdByEmail(userId: string, emailAddress?: string | null): Promise<string | null> {
+    const parsed = extractEmailAddress(emailAddress)
+    if (!parsed) return null
+
+    const { data, error } = await this.supabase
+      .from('contacts')
+      .select('id')
+      .eq('user_id', userId)
+      .ilike('email', parsed)
+      .maybeSingle()
+
+    if (error && error.code !== 'PGRST116') {
+      console.warn('⚠️ Failed to lookup contact by email:', { email: parsed, error })
+      return null
+    }
+
+    return data?.id || null
   }
 
   /**

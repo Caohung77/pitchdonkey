@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -91,6 +92,8 @@ interface IncomingEmail {
   text_content: string | null
   html_content: string | null
   ai_summary?: EmailInsight | null
+  contact_id?: string | null
+  contact?: Contact | null
   email_accounts: EmailAccount & {
     assigned_agent?: {
       id: string
@@ -123,6 +126,7 @@ interface SentEmail {
   to_address?: string | null
   from_address?: string | null
   email_accounts: EmailAccount
+  contact_id?: string | null
   contacts: Contact | null
   campaigns: Campaign | null
   source?: string
@@ -335,6 +339,7 @@ export default function MailboxPage() {
   const [emailInsights, setEmailInsights] = useState<Record<string, EmailInsight>>({})
   const [generatingInsights, setGeneratingInsights] = useState<Record<string, boolean>>({})
   const [showingSummary, setShowingSummary] = useState<Record<string, boolean>>({})
+  const [creatingContact, setCreatingContact] = useState(false)
 
   useEffect(() => {
     fetchEmailAccounts()
@@ -840,7 +845,7 @@ export default function MailboxPage() {
 
     setAutoReplyLoading(true)
     try {
-      const contactId = email.email_replies?.[0]?.contacts?.id || null
+      const contactId = email.contact?.id || email.email_replies?.[0]?.contacts?.id || null
       const plainBody = email.text_content?.trim() || htmlToPlainText(email.html_content) || ''
       if (!plainBody) {
         throw new Error('Email body is empty; unable to generate auto reply')
@@ -897,6 +902,79 @@ export default function MailboxPage() {
       toast.error(error.message || 'Failed to draft autonomous reply')
     } finally {
       setAutoReplyLoading(false)
+    }
+  }
+
+  const handleCreateContactFromEmail = async () => {
+    if (!selectedItem || selectedItem.type !== 'inbox') {
+      toast.error('Select an incoming email first')
+      return
+    }
+
+    const email = selectedItem.email as IncomingEmail
+    const contactEmail = extractEmailAddress(email.from_address) || email.from_address
+
+    if (!contactEmail) {
+      toast.error('Unable to determine sender address')
+      return
+    }
+
+    const derivedName = deriveNameFromEmail(contactEmail)
+    const nameParts = derivedName.split(' ')
+    const maybeFirst = nameParts[0]
+    const firstName = maybeFirst && maybeFirst.includes('@') ? undefined : maybeFirst
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') || undefined : undefined
+
+    setCreatingContact(true)
+    try {
+      const response = await fetch('/api/inbox/create-contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emailId: email.id,
+          emailAddress: contactEmail,
+          first_name: firstName,
+          last_name: lastName
+        })
+      })
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        const message = payload?.error || 'Failed to create contact'
+        throw new Error(message)
+      }
+
+      const newContact = payload.data?.contact as Contact | undefined
+
+      if (newContact) {
+        setInboxEmails(prev =>
+          prev.map(item => {
+            const itemEmail = extractEmailAddress(item.from_address) || item.from_address
+            if (item.id === email.id || (itemEmail && itemEmail.toLowerCase() === contactEmail)) {
+              return { ...item, contact: newContact, contact_id: newContact.id }
+            }
+            return item
+          })
+        )
+        setSentEmails(prev =>
+          prev.map(item => {
+            const toAddress = extractEmailAddress(item.to_address) || item.to_address
+            if (toAddress && toAddress.toLowerCase() === contactEmail) {
+              return { ...item, contacts: newContact, contact_id: newContact.id }
+            }
+            return item
+          })
+        )
+        setSelectedItem({ type: 'inbox', email: { ...email, contact: newContact, contact_id: newContact.id } })
+      }
+
+      toast.success(payload?.message || 'Contact created from email')
+    } catch (error: any) {
+      console.error('Error creating contact from email:', error)
+      toast.error(error?.message || 'Failed to create contact')
+    } finally {
+      setCreatingContact(false)
     }
   }
 
@@ -1435,7 +1513,7 @@ export default function MailboxPage() {
 
     if (selectedItem.type === 'inbox') {
       const email = selectedItem.email
-      const contact = email.email_replies?.[0]?.contacts || null
+      const contact = email.contact || email.email_replies?.[0]?.contacts || null
       const campaign = email.email_replies?.[0]?.campaigns || null
       const fromName = email.from_address || 'Unknown sender'
       const receivedAt = new Date(email.date_received).toLocaleString()
@@ -1467,6 +1545,32 @@ export default function MailboxPage() {
                     isInboxEmail={true}
                     className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
                   />
+                  {!contact && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCreateContactFromEmail}
+                      disabled={creatingContact}
+                      className={clsx(
+                        'rounded-full border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100',
+                        creatingContact && 'opacity-70 cursor-not-allowed'
+                      )}
+                    >
+                      {creatingContact ? 'Creating...' : 'Add to Contacts'}
+                    </Button>
+                  )}
+                  {contact && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      asChild
+                    >
+                      <Link href={`/dashboard/contacts/${contact.id}`}>
+                        View Contact
+                      </Link>
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     onClick={handleAutoReplyDraft}
