@@ -7,13 +7,15 @@ import { emailTracker } from './email-tracking'
 export class EmailLinkRewriter {
   /**
    * Rewrite all links in email HTML content to use tracking URLs
+   * Optionally adds UTM parameters for Google Analytics attribution
    */
   static async rewriteLinksForTracking(
     htmlContent: string,
     messageId: string,
     recipientEmail: string,
     campaignId?: string,
-    contactId?: string
+    contactId?: string,
+    campaignName?: string
   ): Promise<string> {
     try {
       // Regular expression to match all <a> tags with href attributes
@@ -34,11 +36,17 @@ export class EmailLinkRewriter {
           continue
         }
 
-        // Generate tracking URL
+        // Add UTM parameters to the destination URL if campaign name is provided
+        let destinationUrl = originalUrl
+        if (campaignName) {
+          destinationUrl = this.addUTMParameters(originalUrl, campaignName)
+        }
+
+        // Generate tracking URL (wraps the UTM-enhanced destination URL)
         const trackingUrl = await emailTracker.generateClickTrackingUrl(
           messageId,
           recipientEmail,
-          originalUrl,
+          destinationUrl,
           campaignId,
           contactId
         )
@@ -98,6 +106,33 @@ export class EmailLinkRewriter {
     }
 
     return false
+  }
+
+  /**
+   * Add UTM parameters to a URL for Google Analytics attribution
+   * Preserves existing UTM parameters if present
+   */
+  private static addUTMParameters(url: string, campaignName: string): string {
+    try {
+      const urlObj = new URL(url)
+
+      // Only add UTM parameters if not already present (preserve user's existing UTM)
+      if (!urlObj.searchParams.has('utm_source')) {
+        urlObj.searchParams.set('utm_source', 'eisbrief')
+      }
+      if (!urlObj.searchParams.has('utm_medium')) {
+        urlObj.searchParams.set('utm_medium', 'email')
+      }
+      if (!urlObj.searchParams.has('utm_campaign')) {
+        urlObj.searchParams.set('utm_campaign', campaignName)
+      }
+
+      return urlObj.toString()
+    } catch (error) {
+      console.error('Error adding UTM parameters to URL:', error)
+      // Return original URL if there's an error parsing
+      return url
+    }
   }
 
   /**

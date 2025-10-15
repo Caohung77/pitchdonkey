@@ -982,6 +982,17 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
           </p>
         </div>
 
+        {/* UTM Tracking Info Banner */}
+        <div className="p-3 bg-green-50 border-l-4 border-green-500 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <p className="text-sm font-medium text-green-900">Automatic Link Tracking Enabled</p>
+          </div>
+          <p className="text-xs text-green-700 mt-1">
+            All links in your emails will automatically include UTM parameters (utm_source=eisbrief, utm_medium=email, utm_campaign=campaign_name) and click tracking. View analytics in Google Analytics and campaign reports.
+          </p>
+        </div>
+
         {/* Streamlined AI Options & Personalise Button */}
         <div className="p-4 bg-gray-50 rounded-lg">
           <div className="flex items-center justify-between gap-6">

@@ -30,6 +30,7 @@ Follow these rules strictly:
 8. Output clean HTML with inline CSS (max-width: 600px, simple personal email styling - NOT newsletter style).
 9. Use Arial or similar web-safe fonts.
 10. Make it look like a personal email, not a marketing newsletter.
+11. **IMPORTANT - Links:** If you include any links in the email, use complete, valid URLs starting with https://. Keep URLs clean and simple (e.g., https://example.com/page). Do NOT add any tracking parameters or query strings - the system will automatically add UTM parameters and click tracking.
 
 Generate a complete email including the signature. The signature should be properly formatted with line breaks.
 

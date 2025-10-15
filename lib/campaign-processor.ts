@@ -771,7 +771,8 @@ export class CampaignProcessor {
             trackingId: trackingId,
             pixelId: trackingPixelId || undefined,
             campaignId: campaign.id,
-            contactId: contact.id
+            contactId: contact.id,
+            campaignName: campaign.name
           })
 
           if (result.status === 'sent') {
@@ -1191,6 +1192,7 @@ export class CampaignProcessor {
     pixelId?: string
     campaignId?: string
     contactId?: string
+    campaignName?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
     
@@ -1209,14 +1211,15 @@ export class CampaignProcessor {
           },
         })
 
-        // Rewrite links for click tracking
-        console.log('🔗 Rewriting links for click tracking...')
+        // Rewrite links for click tracking and add UTM parameters
+        console.log('🔗 Rewriting links for click tracking and adding UTM parameters...')
         let htmlContent = await EmailLinkRewriter.rewriteLinksForTracking(
           params.content,
           params.trackingId,
           params.to,
           params.campaignId,
-          params.contactId
+          params.contactId,
+          params.campaignName
         )
 
         // Generate tracking pixel URL for this email using the actual pixelId
@@ -1264,14 +1267,15 @@ export class CampaignProcessor {
           const { GmailIMAPSMTPServerService } = await import('./server/gmail-imap-smtp-server')
           const gmailService = new GmailIMAPSMTPServerService()
 
-          // Rewrite links for click tracking
-          console.log('🔗 Rewriting links for click tracking...')
+          // Rewrite links for click tracking and add UTM parameters
+          console.log('🔗 Rewriting links for click tracking and adding UTM parameters...')
           let htmlContent = await EmailLinkRewriter.rewriteLinksForTracking(
             params.content,
             params.trackingId,
             params.to,
             params.campaignId,
-            params.contactId
+            params.contactId,
+            params.campaignName
           )
 
           // Generate tracking pixel URL for this email using the actual pixelId
