@@ -44,6 +44,7 @@ const EMAIL_VARIABLES = {
   email: '{{email}}',
   website: '{{website}}',
   sender_name: '{{sender_name}}',
+  personalised: '{{personalised}}',
   personalised_reason: '((personalised_reason))'
 }
 

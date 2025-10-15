@@ -95,9 +95,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
       throw new ValidationError('Google Gemini API key not configured')
     }
-    
+
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' })
 
     console.log('📝 Enhanced prompt length:', enhancedPromptResult.enhancedPrompt.length)
 

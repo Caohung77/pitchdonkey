@@ -100,6 +100,9 @@ export function UnifiedEmailContentEditor({
   const [generatedReasons, setGeneratedReasons] = useState<Map<string, string>>(new Map())
   const [reasonError, setReasonError] = useState<string | null>(null)
 
+  // Personalized Content state (full AI-generated email content without signature)
+  const [generatedPersonalisedContent, setGeneratedPersonalisedContent] = useState<Map<string, string>>(new Map())
+
   // Ensure generated reasons are persisted into per-contact personalized content
   const upsertPersonalizedEmailWithReason = (contactId: string, reason: string) => {
     setGeneratedEmails(prev => {
@@ -485,35 +488,42 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
       })
       
       if (response.success && response.data) {
-        const { subject, htmlContent } = response.data
-        
-        // Always update main content for single contact generation, but not during batch generation
-        if (!generateForAll && !batchProgress.isRunning) {
-          onSubjectChange(subject || 'Professional Outreach')
-          onContentChange(htmlContent || '')
-          console.log('✅ Updated main editor with generated content:', {
-            subject: subject,
-            hasContent: !!htmlContent,
-            contentLength: htmlContent?.length || 0
+        const { subject, htmlContent: aiGeneratedContent } = response.data
+
+        // Store the personalized content (without signature) for {{personalised}} variable
+        setGeneratedPersonalisedContent(prev => {
+          const newContent = new Map(prev)
+          newContent.set(contact.id, aiGeneratedContent || '')
+          console.log(`✅ Stored {{personalised}} content for ${contact.first_name} ${contact.last_name}`, {
+            contentLength: (aiGeneratedContent || '').length
           })
-        }
-        
-        // Store generated email for this contact
+          return newContent
+        })
+
+        // Replace {{personalised}} in the current template to create the full email
+        // Use the current htmlContent (template) and replace {{personalised}} with AI content
+        const fullEmail = htmlContent.replace(/\{\{personalised\}\}/g, aiGeneratedContent || '')
+
+        // Store generated email for this contact (with personalised replaced)
         setGeneratedEmails(prev => {
           const newEmails = new Map(prev)
           newEmails.set(contact.id, {
             subject: subject || 'Professional Outreach',
-            content: htmlContent || ''
+            content: fullEmail
           })
-          
+
           console.log(`✅ Stored personalized email for ${contact.first_name} ${contact.last_name}`, {
             hasExistingReason: !!existingReason,
-            contentLength: (htmlContent || '').length,
-            reasonPreview: existingReason ? existingReason.substring(0, 50) + '...' : 'none'
+            contentLength: fullEmail.length,
+            baseTemplateLength: htmlContent.length,
+            aiContentLength: (aiGeneratedContent || '').length
           })
-          
+
           return newEmails
         })
+
+        // DO NOT update main editor - keep the original template with {{personalised}} and signature intact
+        // This way the user's template structure is preserved
         
         // Set personalization info
         const insights = response.data?.personalization?.insights_used || ['Contact Name', 'Company Name']
@@ -534,35 +544,39 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
         const fallbackResponse = await ApiClient.post('/api/ai/generate-outreach', fallbackRequestBody)
         
         if (fallbackResponse.success && fallbackResponse.data) {
-          const { subject: fallbackSubject, htmlContent: fallbackContent } = fallbackResponse.data
+          const { subject: fallbackSubject, htmlContent: fallbackAIContent } = fallbackResponse.data
           const safeSubject = fallbackSubject || 'Professional Outreach'
-          const safeContent = fallbackContent || ''
-          
-          if (!generateForAll && !batchProgress.isRunning) {
-            onSubjectChange(safeSubject)
-            onContentChange(safeContent)
-            console.log('✅ Updated main editor with fallback content:', {
-              subject: safeSubject,
-              hasContent: !!safeContent,
-              contentLength: safeContent.length
-            })
-          }
-          
+          const safeAIContent = fallbackAIContent || ''
+
+          // Store the personalized content (without signature) for {{personalised}} variable
+          setGeneratedPersonalisedContent(prev => {
+            const newContent = new Map(prev)
+            newContent.set(contact.id, safeAIContent)
+            console.log(`✅ Stored fallback {{personalised}} content for ${contact.first_name} ${contact.last_name}`)
+            return newContent
+          })
+
+          // Replace {{personalised}} in the current template to create the full email
+          const fullEmail = htmlContent.replace(/\{\{personalised\}\}/g, safeAIContent)
+
           setGeneratedEmails(prev => {
             const newEmails = new Map(prev)
             newEmails.set(contact.id, {
               subject: safeSubject,
-              content: safeContent
+              content: fullEmail
             })
-            
+
             console.log(`✅ Stored fallback email for ${contact.first_name} ${contact.last_name}`, {
               hasExistingReason: !!existingReason,
-              contentLength: safeContent.length,
-              reasonPreview: existingReason ? existingReason.substring(0, 50) + '...' : 'none'
+              contentLength: fullEmail.length,
+              baseTemplateLength: htmlContent.length,
+              aiContentLength: safeAIContent.length
             })
-            
+
             return newEmails
           })
+
+          // DO NOT update main editor - keep the original template with {{personalised}} and signature intact
           
           setPersonalizationInfo(['Contact Name', 'Company Name'])
           
@@ -625,18 +639,10 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
     } finally {
       // Update batch progress to indicate completion
       setBatchProgress({ current: 0, total: 0, isRunning: false })
-      
-      // After batch generation is complete, update the main editor with first generated email
-      // This happens after isRunning is set to false, so the useEffect can run
-      if (firstGeneratedEmail) {
-        // Small delay to ensure state has updated
-        setTimeout(() => {
-          onSubjectChange(firstGeneratedEmail.subject)
-          onContentChange(firstGeneratedEmail.content)
-          console.log('✅ Updated main editor with first generated email after batch completion')
-        }, 100)
-      }
-      
+
+      // DO NOT update main editor - keep the original template with {{personalised}} and signature intact
+      // The preview will show personalized content for each contact when you switch between them
+
       setIsGeneratingAI(false)
     }
   }
@@ -734,12 +740,29 @@ IMPORTANT: No contact info is provided. You MUST use placeholders only and NOT i
       totalStoredReasons: generatedReasons.size,
       allStoredContactIds: Array.from(generatedReasons.keys())
     })
-    
+
     if (generatedReason) {
       previewContent = previewContent.replace(/\(\(personalised_reason\)\)/g, generatedReason)
     } else {
       // Show placeholder text if no reason generated yet
       previewContent = previewContent.replace(/\(\(personalised_reason\)\)/g, '<em style="color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">((personalised_reason - click "Personalised Reason" button to generate))</em>')
+    }
+
+    // Replace {{personalised}} placeholder if we have generated personalized content for this contact
+    const generatedPersonalised = generatedPersonalisedContent.get(selectedContact.id)
+    console.log('🔍 Personalised Content Debug:', {
+      contactId: selectedContact.id,
+      contactName: `${selectedContact.first_name} ${selectedContact.last_name}`,
+      hasGeneratedPersonalised: !!generatedPersonalised,
+      contentPreview: generatedPersonalised ? generatedPersonalised.substring(0, 100) + '...' : 'none',
+      totalStoredContent: generatedPersonalisedContent.size
+    })
+
+    if (generatedPersonalised) {
+      previewContent = previewContent.replace(/\{\{personalised\}\}/g, generatedPersonalised)
+    } else {
+      // Show placeholder text if no personalized content generated yet
+      previewContent = previewContent.replace(/\{\{personalised\}\}/g, '<em style="color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">{{personalised}} - click "Personalise Email" button to generate AI content</em>')
     }
 
     // Sanitize to prevent global styles from leaking and breaking layout

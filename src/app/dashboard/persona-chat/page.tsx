@@ -174,6 +174,7 @@ export default function PersonaChatPage() {
                 personaId={selectedPersonaId!}
                 initialMessages={initialMessages ?? []}
                 runtimeCallbacks={runtimeCallbacks}
+                persona={currentPersona}
               />
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -221,11 +222,13 @@ export default function PersonaChatPage() {
 function PersonaChatThread({
   personaId,
   initialMessages,
-  runtimeCallbacks
+  runtimeCallbacks,
+  persona
 }: {
   personaId: string
   initialMessages: ReturnType<typeof toThreadMessages>
   runtimeCallbacks: PersonaRuntimeCallbacks
+  persona: AIPersona | null
 }) {
   const runtime = usePersonaAssistantRuntime({
     personaId,
@@ -233,17 +236,54 @@ function PersonaChatThread({
     ...runtimeCallbacks
   })
 
+  // Determine suggestions based on persona language
+  const suggestions = useMemo(() => {
+    const lang = persona?.language || 'en'
+
+    if (lang === 'de') {
+      return [
+        { prompt: 'Zeige mir Entscheider aus Deutschland', label: 'Zeige mir Entscheider' },
+        { prompt: 'Erzähl mir mehr über Philipp Haupt', label: 'Info über Kontakt' },
+        { prompt: 'Welche Kontakte haben hohe Engagement-Scores?', label: 'Engagement-Analyse' },
+        { prompt: 'Zeige mir nicht kontaktierte Leads', label: 'Neue Leads' }
+      ]
+    }
+
+    // English suggestions
+    return [
+      { prompt: 'Show me decision makers from Germany', label: 'Show decision makers' },
+      { prompt: 'Tell me more about Philipp Haupt', label: 'Contact info' },
+      { prompt: 'Which contacts have high engagement scores?', label: 'Engagement analysis' },
+      { prompt: 'Show me contacts that were never contacted', label: 'New leads' }
+    ]
+  }, [persona?.language])
+
+  const welcomeText = useMemo(() => {
+    const lang = persona?.language || 'en'
+
+    if (lang === 'de') {
+      return {
+        title: 'Starte eine Unterhaltung',
+        subtitle: 'Frage nach Kampagnen, Kontakthistorie oder allem, was deine Persona weiß.'
+      }
+    }
+
+    return {
+      title: 'Start a conversation',
+      subtitle: 'Ask about campaigns, contact history, or anything your persona knows.'
+    }
+  }, [persona?.language])
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <Thread
         welcome={
           <div className="w-full max-w-xl space-y-2 text-center text-muted-foreground">
-            <h2 className="text-lg font-semibold text-foreground">Start a conversation</h2>
-            <p className="text-sm">
-              Ask about campaigns, contact history, or anything your persona knows.
-            </p>
+            <h2 className="text-lg font-semibold text-foreground">{welcomeText.title}</h2>
+            <p className="text-sm">{welcomeText.subtitle}</p>
           </div>
         }
+        suggestions={suggestions}
       />
     </AssistantRuntimeProvider>
   )

@@ -121,6 +121,8 @@ TECHNICAL REQUIREMENTS:
 - Tone: ${toneGuidance} but conversational and human
 - HTML Format: Clean, personal email style (NOT newsletter format)
 - Font: Arial or web-safe fonts with max-width: 600px
+- IMPORTANT: Do NOT include any signature or sender name/details in the email body
+- End the email with a professional closing phrase ONLY (e.g., "Best regards", "Regards", "Kind regards") WITHOUT any name or contact details
 
 PLACEHOLDER POLICY (NO REAL DATA):
 - When no contact info is provided, you MUST use placeholders instead of real names or companies.
@@ -131,15 +133,14 @@ PLACEHOLDER POLICY (NO REAL DATA):
 
 PURPOSE: ${config.purpose}
 LANGUAGE: ${config.language}
-SIGNATURE: ${config.signature}
 
 Return ONLY a JSON object with this exact structure:
 {
   "subject": "Your subject line with {{first_name}} and {{company}} variables if natural",
-  "htmlContent": "Complete HTML email including signature with proper line breaks"
+  "htmlContent": "Complete HTML email WITHOUT signature - end with closing phrase only (e.g., 'Best regards' or 'Regards')"
 }
 
-The email should feel personal, not automated. Focus on building genuine connection.`
+The email should feel personal, not automated. Focus on building genuine connection. Remember: NO signature, NO sender name - just the closing phrase.`
   }
 
   /**

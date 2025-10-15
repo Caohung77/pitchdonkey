@@ -1376,13 +1376,17 @@ export class CampaignProcessor {
       .replace(/&#123;&#123;company&#125;&#125;/g, contact.company || '')
       .replace(/&#123;&#123;company_name&#125;&#125;/g, contact.company_name || contact.company || '')
       .replace(/&#123;&#123;sender_name&#125;&#125;/g, 'Your Name')
-      
+
     // Only apply fallback personalized reason replacement if this is NOT AI-personalized content
     if (!isAIPersonalized) {
       personalizedContent = personalizedContent
         .replace(/\(\(personalised_reason\)\)/g, `I noticed your work at ${contact.company_name || contact.company || 'your company'} and wanted to connect.`)
     }
-    
+
+    // Note: {{personalised}} variable is handled separately during email sending
+    // The personalized content is stored in campaign_contacts.personalized_body and used directly
+    // No fallback replacement needed here as it's AI-generated content only
+
     return personalizedContent
   }
 
