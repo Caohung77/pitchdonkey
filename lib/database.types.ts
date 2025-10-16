@@ -437,6 +437,8 @@ export type Database = {
           name: string
           next_batch_send_time: string | null
           reply_to_email: string | null
+          sequence_id: string | null
+          sequence_position: number | null
           scheduled_date: string | null
           send_days: number[] | null
           send_immediately: boolean | null
@@ -483,6 +485,8 @@ export type Database = {
           name: string
           next_batch_send_time?: string | null
           reply_to_email?: string | null
+          sequence_id?: string | null
+          sequence_position?: number | null
           scheduled_date?: string | null
           send_days?: number[] | null
           send_immediately?: boolean | null
@@ -529,6 +533,8 @@ export type Database = {
           name?: string
           next_batch_send_time?: string | null
           reply_to_email?: string | null
+          sequence_id?: string | null
+          sequence_position?: number | null
           scheduled_date?: string | null
           send_days?: number[] | null
           send_immediately?: boolean | null
@@ -559,6 +565,13 @@ export type Database = {
             columns: ["from_email_account_id"]
             isOneToOne: false
             referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "sequences"
             referencedColumns: ["id"]
           },
           {
@@ -794,6 +807,7 @@ export type Database = {
           engagement_sent_count: number
           engagement_status: string
           engagement_updated_at: string | null
+          auto_reply_until: string | null
           enrichment_data: Json | null
           enrichment_priority: string | null
           enrichment_sources: string[] | null
@@ -882,6 +896,7 @@ export type Database = {
           engagement_sent_count?: number
           engagement_status?: string
           engagement_updated_at?: string | null
+          auto_reply_until?: string | null
           enrichment_data?: Json | null
           enrichment_priority?: string | null
           enrichment_sources?: string[] | null
@@ -970,6 +985,7 @@ export type Database = {
           engagement_sent_count?: number
           engagement_status?: string
           engagement_updated_at?: string | null
+          auto_reply_until?: string | null
           enrichment_data?: Json | null
           enrichment_priority?: string | null
           enrichment_sources?: string[] | null
@@ -2177,6 +2193,215 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "outreach_agents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+          referencedColumns: ["id"]
+        },
+      ]
+    }
+      sequence_enrollments: {
+        Row: {
+          completed_at: string | null
+          contact_id: string
+          created_at: string | null
+          current_campaign_id: string | null
+          current_link_id: string | null
+          error_reason: string | null
+          id: string
+          last_transition_at: string | null
+          sequence_id: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          contact_id: string
+          created_at?: string | null
+          current_campaign_id?: string | null
+          current_link_id?: string | null
+          error_reason?: string | null
+          id?: string
+          last_transition_at?: string | null
+          sequence_id: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          contact_id?: string
+          created_at?: string | null
+          current_campaign_id?: string | null
+          current_link_id?: string | null
+          error_reason?: string | null
+          id?: string
+          last_transition_at?: string | null
+          sequence_id?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sequence_enrollments_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contact_tags_view"
+            referencedColumns: ["contact_id"]
+          },
+          {
+            foreignKeyName: "sequence_enrollments_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequence_enrollments_current_campaign_id_fkey"
+            columns: ["current_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequence_enrollments_current_link_id_fkey"
+            columns: ["current_link_id"]
+            isOneToOne: false
+            referencedRelation: "sequence_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequence_enrollments_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sequence_links: {
+        Row: {
+          condition_type: string
+          created_at: string | null
+          delay_days: number
+          delay_hours: number
+          delivery_window: Json | null
+          engagement_required: boolean
+          id: string
+          metadata: Json
+          min_clicks: number
+          min_opens: number
+          next_campaign_id: string
+          parent_campaign_id: string | null
+          persona_override_id: string | null
+          sequence_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          condition_type?: string
+          created_at?: string | null
+          delay_days?: number
+          delay_hours?: number
+          delivery_window?: Json | null
+          engagement_required?: boolean
+          id?: string
+          metadata?: Json
+          min_clicks?: number
+          min_opens?: number
+          next_campaign_id: string
+          parent_campaign_id?: string | null
+          persona_override_id?: string | null
+          sequence_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          condition_type?: string
+          created_at?: string | null
+          delay_days?: number
+          delay_hours?: number
+          delivery_window?: Json | null
+          engagement_required?: boolean
+          id?: string
+          metadata?: Json
+          min_clicks?: number
+          min_opens?: number
+          next_campaign_id?: string
+          parent_campaign_id?: string | null
+          persona_override_id?: string | null
+          sequence_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sequence_links_next_campaign_id_fkey"
+            columns: ["next_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequence_links_parent_campaign_id_fkey"
+            columns: ["parent_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequence_links_persona_override_id_fkey"
+            columns: ["persona_override_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequence_links_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sequences: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          entry_campaign_id: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          entry_campaign_id?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          entry_campaign_id?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sequences_entry_campaign_id_fkey"
+            columns: ["entry_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequences_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"

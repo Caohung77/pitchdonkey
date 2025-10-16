@@ -393,7 +393,7 @@ export class ReplyProcessor {
   }
 
   /**
-   * Handle auto-reply emails
+   * Handle auto-reply emails (PRD: Auto-Reply Detection & Persona Suppression)
    */
   private async handleAutoReply(
     email: any,
@@ -401,40 +401,69 @@ export class ReplyProcessor {
     context: any
   ): Promise<ReplyAction[]> {
     const actions: ReplyAction[] = []
+    const now = new Date().toISOString()
 
     if (context.contactId) {
-      // Update contact with auto-reply information
+      // Get current contact to preserve existing tags
+      const { data: contact } = await this.supabase
+        .from('contacts')
+        .select('tags')
+        .eq('id', context.contactId)
+        .single()
+
+      // Determine auto-reply end date (default to 7 days if not extracted)
+      const autoReplyUntil = classification.autoReplyInfo?.autoReplyUntil
+        ? classification.autoReplyInfo.autoReplyUntil.toISOString()
+        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+      // Update contact with auto-reply status
+      // Note: We DON'T use tags for temporary state - auto_reply_until is the source of truth
       const updateData: any = {
-        last_contacted_at: new Date().toISOString()
+        last_contacted_at: now,
+        auto_reply_until: autoReplyUntil,
+        updated_at: now
       }
 
-      if (classification.autoReplyInfo?.autoReplyUntil) {
-        updateData.auto_reply_until = classification.autoReplyInfo.autoReplyUntil.toISOString()
-      }
-
-      await this.supabase
+      const { error: updateError } = await this.supabase
         .from('contacts')
         .update(updateData)
         .eq('id', context.contactId)
 
+      if (updateError) {
+        console.error('❌ Failed to update contact auto-reply status:', updateError)
+      } else {
+        console.log(`📧 Auto-reply recorded for contact ${context.contactId} until ${autoReplyUntil}`)
+      }
+
       actions.push({
         action: 'contact_auto_reply_recorded',
-        timestamp: new Date().toISOString(),
-        details: { 
-          autoReplyUntil: classification.autoReplyInfo?.autoReplyUntil,
-          subtype: classification.subtype
+        timestamp: now,
+        details: {
+          contactId: context.contactId,
+          autoReplyUntil,
+          subtype: classification.subtype,
+          returnDateExtracted: !!classification.autoReplyInfo?.autoReplyUntil,
+          email: email.from_address
         }
       })
 
       // Temporarily pause campaigns for this contact if they're away for a while
-      if (classification.autoReplyInfo?.autoReplyUntil && context.campaignId) {
-        const awayDuration = classification.autoReplyInfo.autoReplyUntil.getTime() - Date.now()
+      if (context.campaignId) {
+        const autoReplyDate = new Date(autoReplyUntil)
+        const awayDuration = autoReplyDate.getTime() - Date.now()
+
         if (awayDuration > 7 * 24 * 60 * 60 * 1000) { // More than a week
           await this.pauseCampaignForContact(context.campaignId, context.contactId)
+          console.log(`⏸️  Paused campaign ${context.campaignId} for contact ${context.contactId} (away >7 days)`)
+
           actions.push({
             action: 'campaign_paused_extended_absence',
-            timestamp: new Date().toISOString(),
-            details: { campaignId: context.campaignId, awayUntil: classification.autoReplyInfo.autoReplyUntil }
+            timestamp: now,
+            details: {
+              campaignId: context.campaignId,
+              awayUntil: autoReplyUntil,
+              awayDurationDays: Math.ceil(awayDuration / (24 * 60 * 60 * 1000))
+            }
           })
         }
       }
@@ -517,12 +546,21 @@ export class ReplyProcessor {
 
   /**
    * Check if mailbox has assigned agent and draft autonomous reply
+   * PRD: Auto-Reply Detection & AI Persona Suppression
    */
   private async checkAndDraftAutonomousReply(
     email: any,
     classification: EmailClassificationResult,
     context: any
   ): Promise<ReplyAction | null> {
+    // 🚫 CRITICAL: Suppress AI persona for auto-reply emails (PRD Requirement)
+    // AI should NEVER respond to out-of-office or automated messages
+    if (classification.type === 'auto_reply') {
+      console.log(`🚫 AI persona reply suppressed for auto-reply from ${email.from_address}`)
+      console.log(`   Subtype: ${classification.subtype}, Confidence: ${classification.confidence}`)
+      return null
+    }
+
     const accountId = email.email_account_id
 
     if (!accountId) {

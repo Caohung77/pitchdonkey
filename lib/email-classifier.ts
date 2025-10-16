@@ -217,17 +217,33 @@ export class EmailClassifier {
     // Auto-reply patterns (out of office, etc.)
     const autoReplyPatterns = [
       /out of office/i,
+      /out-of-office/i,
+      /ooo/i,  // Common abbreviation
       /vacation/i,
       /away from office/i,
       /automatic.*reply/i,
       /auto.*reply/i,
+      /auto-reply/i,
+      /automated.*response/i,
       /currently.*away/i,
+      /currently.*unavailable/i,
       /temporarily.*unavailable/i,
+      /limited access to email/i,
+      /limited email access/i,
+      /vacation mode/i,
       /on holiday/i,
       /on leave/i,
+      /on vacation/i,
+      /on annual leave/i,
       /not.*available/i,
+      /not in the office/i,
       /will.*return/i,
-      /back.*on/i
+      /will be back/i,
+      /back.*on/i,
+      /return(ing)?.*on/i,
+      /thank you for your (email|message).*automated/i,
+      /this (is|message) (is )?an automated response/i,
+      /i am (currently )?(away|unavailable|out of office)/i
     ]
 
     // Subject auto-reply patterns
@@ -269,15 +285,10 @@ export class EmailClassifier {
       confidence += 0.5
     }
 
-    // Look for return dates
-    const dateMatches = content.match(/(?:return|back|available).*?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i)
-    if (dateMatches) {
+    // Look for return dates using enhanced extraction
+    autoReplyUntil = this.extractReturnDate(content)
+    if (autoReplyUntil) {
       confidence += 0.2
-      try {
-        autoReplyUntil = new Date(dateMatches[1])
-      } catch (e) {
-        // Invalid date format, ignore
-      }
     }
 
     // Look for forwarding information
@@ -496,6 +507,66 @@ export class EmailClassifier {
     }
     
     return 'unknown'
+  }
+
+  /**
+   * Extract return date from auto-reply content
+   * Handles multiple date formats and natural language patterns
+   */
+  private extractReturnDate(text: string): Date | null {
+    // Date patterns to match various formats
+    const patterns = [
+      // "return on October 28", "back on October 28th"
+      /(?:return(?:ing)?|back|available)\s+(?:on|by|after)?\s*([A-Z][a-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)/i,
+      // "until October 28" or "until November 5th"
+      /until\s+([A-Z][a-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)/i,
+      // "away until October 28"
+      /away\s+until\s+([A-Z][a-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)/i,
+      // MM/DD/YYYY or DD/MM/YYYY
+      /(?:return(?:ing)?|back|available|until).*?(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+      // YYYY-MM-DD (ISO format)
+      /(?:return(?:ing)?|back|available|until).*?(\d{4}-\d{1,2}-\d{1,2})/i,
+      // "October 28" or "Oct 28" without year
+      /(?:return(?:ing)?|back|available)\s+(?:on|by)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2}(?:st|nd|rd|th)?)/i,
+    ]
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern)
+      if (match) {
+        try {
+          let dateStr = match[1]
+
+          // If no year is specified, assume current or next year
+          if (!/\d{4}/.test(dateStr)) {
+            const currentYear = new Date().getFullYear()
+            dateStr = `${dateStr}, ${currentYear}`
+          }
+
+          const parsed = new Date(dateStr)
+
+          // Only return if date is valid and in the future
+          if (!isNaN(parsed.getTime()) && parsed > new Date()) {
+            console.log(`📅 Extracted return date: ${parsed.toISOString()} from "${match[0]}"`)
+            return parsed
+          }
+
+          // If parsed date is in the past but matches the pattern, try next year
+          if (!isNaN(parsed.getTime()) && parsed <= new Date()) {
+            const nextYear = new Date(parsed)
+            nextYear.setFullYear(nextYear.getFullYear() + 1)
+            if (nextYear > new Date()) {
+              console.log(`📅 Extracted return date (next year): ${nextYear.toISOString()}`)
+              return nextYear
+            }
+          }
+        } catch (e) {
+          // Continue to next pattern if parsing fails
+          continue
+        }
+      }
+    }
+
+    return null
   }
 
   /**
