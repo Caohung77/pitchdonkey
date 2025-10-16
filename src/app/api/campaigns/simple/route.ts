@@ -201,10 +201,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     console.log('✅ No time period conflicts found, proceeding with campaign creation')
 
-    // Validate daily limit (allowed: 5,10,15,20,30,50 to match UI options)
-    const allowedDaily = new Set([5,10,15,20,30,50])
-    const finalDailyLimit = allowedDaily.has(Number(daily_send_limit)) ? Number(daily_send_limit) : 50
-
+    // Note: finalDailyLimit already calculated above in overlap validation (line 94)
     // CRITICAL FIX: Create send_settings object with proper batch_size configuration
     // This is what the campaign processor reads to determine batch size
     const sendSettings = {
