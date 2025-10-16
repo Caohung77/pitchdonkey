@@ -7,7 +7,7 @@ import { EngagementTimeline, type EngagementEvent } from '../EngagementTimeline'
 import type { ContactEngagementStatus } from '@/lib/contact-engagement'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Award, TrendingUp, Activity, AlertCircle } from 'lucide-react'
+import { Award, Activity, AlertCircle, Ban } from 'lucide-react'
 
 interface EngagementTabProps {
   contact: Contact
@@ -22,6 +22,12 @@ export function EngagementTab({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Manual "Do Not Contact" flagging state
+  const [flagging, setFlagging] = useState(false)
+  const [flagReason, setFlagReason] = useState<'unsubscribe' | 'bounce' | 'complaint'>('unsubscribe')
+  const [flagError, setFlagError] = useState<string | null>(null)
+  const [flagSuccess, setFlagSuccess] = useState<string | null>(null)
+
   useEffect(() => {
     const fetchEngagementEvents = async () => {
       if (!contact.id) {
@@ -33,11 +39,20 @@ export function EngagementTab({
       setError(null)
 
       try {
-        const response = await fetch(`/api/contacts/${contact.id}/engagement`)
+        const response = await fetch(`/api/contacts/${contact.id}/engagement`, {
+          credentials: 'same-origin'
+        })
         if (!response.ok) {
+          // Gracefully handle unauthorized (401) without showing error banner
+          if (response.status === 401) {
+            setEngagementEvents([])
+            // keep error null to avoid noisy banner
+            setError(null)
+            return
+          }
           throw new Error(`Failed to load engagement events (${response.status})`)
         }
-
+ 
         const json = await response.json()
         if (json.success && Array.isArray(json.events)) {
           setEngagementEvents(json.events)
@@ -56,19 +71,32 @@ export function EngagementTab({
     fetchEngagementEvents()
   }, [contact.id])
 
-  const recalculateEngagement = async () => {
+  // Removed manual engagement recalculation action.
+  // Engagement data is refreshed automatically when loading the tab
+  // and after flagging a contact as "Do Not Contact".
+
+  const flagDoNotContact = async () => {
     try {
-      setLoading(true)
-      const response = await fetch(`/api/contacts/recalculate-engagement`, {
+      if (!contact.id) return
+
+      // Simple confirmation to prevent accidental flags
+      const confirmed = typeof window !== 'undefined'
+        ? window.confirm('Flag this contact as "Do Not Contact"? They will be excluded from future campaigns.')
+        : true
+      if (!confirmed) return
+
+      setFlagError(null)
+      setFlagSuccess(null)
+      setFlagging(true)
+
+      const response = await fetch(`/api/contacts/${contact.id}/flag-status`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ contact_ids: [contact.id] })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: flagReason })
       })
 
       if (!response.ok) {
-        throw new Error('Failed to recalculate engagement')
+        throw new Error('Failed to flag contact')
       }
 
       // Refresh contact data
@@ -89,11 +117,13 @@ export function EngagementTab({
           setEngagementEvents(eventsResult.events)
         }
       }
+
+      setFlagSuccess('Contact flagged as "Do Not Contact"')
     } catch (error) {
-      console.error('Error recalculating engagement:', error)
-      setError('Failed to recalculate engagement')
+      console.error('Error flagging contact:', error)
+      setFlagError(error instanceof Error ? error.message : 'Failed to flag contact')
     } finally {
-      setLoading(false)
+      setFlagging(false)
     }
   }
 
@@ -110,24 +140,63 @@ export function EngagementTab({
             Track email interactions and engagement patterns
           </p>
         </div>
-        <Button
-          onClick={recalculateEngagement}
-          disabled={loading}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <TrendingUp className="h-4 w-4" />
-          {loading ? 'Recalculating...' : 'Refresh Data'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {(((contact as any).engagement_status || 'not_contacted') as ContactEngagementStatus) !== 'bad' && (
+            <>
+              <select
+                value={flagReason}
+                onChange={(e) => setFlagReason(e.target.value as 'unsubscribe' | 'bounce' | 'complaint')}
+                className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white"
+                aria-label="Flag reason"
+                title="Select reason for Do Not Contact"
+              >
+                <option value="unsubscribe">Unsubscribe</option>
+                <option value="bounce">Bounce</option>
+                <option value="complaint">Complaint</option>
+              </select>
+
+              <Button
+                onClick={flagDoNotContact}
+                disabled={flagging}
+                variant="destructive"
+                className="flex items-center gap-2"
+                title="Flag this contact as Do Not Contact"
+              >
+                <Ban className="h-4 w-4" />
+                {flagging ? 'Flagging...' : 'Flag as Do Not Contact'}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-red-600" />
-            <span className="text-red-800 font-medium">Error</span>
+            <span className="text-red-800 font-medium">Engagement Data Error</span>
           </div>
           <p className="text-red-700 mt-1">{error}</p>
+        </div>
+      )}
+
+      {/* Feedback messages for manual flagging */}
+      {flagSuccess && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-green-800 font-medium">Success</span>
+          </div>
+          <p className="text-green-700 mt-1">{flagSuccess}</p>
+        </div>
+      )}
+
+      {flagError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <span className="text-red-800 font-medium">Flagging Error</span>
+          </div>
+          <p className="text-red-700 mt-1">{flagError}</p>
         </div>
       )}
 
@@ -139,7 +208,8 @@ export function EngagementTab({
 
           <EngagementBreakdown
             status={((contact as any).engagement_status || 'not_contacted') as ContactEngagementStatus}
-            score={(contact as any).engagement_score || 0}
+            // Clamp negative display scores to 0 for UI consistency
+            score={Math.max(0, (contact as any).engagement_score || 0)}
             openCount={(contact as any).engagement_open_count || 0}
             clickCount={(contact as any).engagement_click_count || 0}
             replyCount={(contact as any).engagement_reply_count || 0}
@@ -338,7 +408,11 @@ export function EngagementTab({
 
           <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-orange-600">
-              {(contact as any).engagement_score !== undefined ? Math.min(Math.round((contact as any).engagement_score * 100), 100) : 0}%
+              {(() => {
+                const score = (contact as any).engagement_score
+                const pct = score !== undefined ? Math.max(0, Math.min(Math.round(score * 100), 100)) : 0
+                return pct
+              })()}%
             </div>
             <div className="text-xs text-gray-500 mt-1">Score</div>
           </div>

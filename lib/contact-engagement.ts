@@ -7,6 +7,8 @@ const SCORE_LIMITS = {
   open: { increment: 5, cap: 15 },
   click: { increment: 20, cap: 60 },
   reply: { increment: 50, cap: undefined as number | undefined },
+  bounce: { penalty: -50 }, // Penalty for bounces
+  complaint: { penalty: -100 }, // Severe penalty for complaints
 }
 
 const DECAY_WINDOW_DAYS = 30
@@ -104,7 +106,11 @@ export async function recalculateContactEngagement(
   const clickScore = Math.min(clickCount * SCORE_LIMITS.click.increment, SCORE_LIMITS.click.cap)
   const replyScore = replyCount * SCORE_LIMITS.reply.increment
 
-  let score = openScore + clickScore + replyScore
+  // Apply penalties for negative engagement
+  const bounceScore = bounceCount * SCORE_LIMITS.bounce.penalty
+  const complaintScore = complaintCount * SCORE_LIMITS.complaint.penalty
+
+  let score = openScore + clickScore + replyScore + bounceScore + complaintScore
 
   if (score > 0 && lastPositiveAt) {
     const diffMs = now.getTime() - lastPositiveAt.getTime()

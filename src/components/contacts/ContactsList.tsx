@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, AlertCircle } from 'lucide-react'
+import { Users, AlertCircle, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ContactCard } from './ContactCard'
 import { ContactSelectionDrawer } from './ContactSelectionDrawer'
 import { BulkEnrichmentModal } from './BulkEnrichmentModal'
@@ -76,9 +78,12 @@ export function ContactsList({
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false)
   const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false)
   const [isBulkListModalOpen, setIsBulkListModalOpen] = useState(false)
-  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+  const [currentJobId, setCurrentJobId] = useState<string | { jobId: string; totalContacts: number; contactIds: string[] } | { job_id: string; summary: { eligible_contacts: number; total_requested: number } } | null>(null)
 
-  const { showToast } = useToast()
+  // Select-all across filtered results loading
+  const [isSelectingAllFiltered, setIsSelectingAllFiltered] = useState(false)
+
+  const { addToast } = useToast()
 
   // Contact action handlers
   const handleView = (contact: Contact) => {
@@ -106,9 +111,9 @@ export function ContactsList({
         throw new Error('Failed to delete contact')
       }
 
-      showToast({
+      addToast({
         title: 'Contact deleted',
-        description: 'Contact has been successfully deleted.',
+        message: 'Contact has been successfully deleted.',
         type: 'success'
       })
 
@@ -120,9 +125,9 @@ export function ContactsList({
 
     } catch (error) {
       console.error('Error deleting contact:', error)
-      showToast({
+      addToast({
         title: 'Error',
-        description: 'Failed to delete contact. Please try again.',
+        message: 'Failed to delete contact. Please try again.',
         type: 'error'
       })
     } finally {
@@ -144,10 +149,16 @@ export function ContactsList({
   }
 
   const handleSelectAll = () => {
-    if (selectedContacts.length === state.contacts.length) {
-      setSelectedContacts([])
+    // Toggle select/deselect for the current page (up to 50)
+    const pageIds = state.contacts.map(c => c.id)
+    const allOnPageSelected = pageIds.every(id => selectedContacts.includes(id))
+
+    if (allOnPageSelected) {
+      // Deselect only current page contacts, preserve selections from other pages
+      setSelectedContacts(prev => prev.filter(id => !pageIds.includes(id)))
     } else {
-      setSelectedContacts(state.contacts.map(c => c.id))
+      // Select all on current page (merge with already selected from other pages)
+      setSelectedContacts(prev => Array.from(new Set([...prev, ...pageIds])))
     }
   }
 
@@ -185,6 +196,80 @@ export function ContactsList({
 
   const handlePageChange = (page: number) => {
     fetchContacts(page)
+  }
+
+  // Select all across filtered results (all pages)
+  const handleSelectAllFiltered = async () => {
+    if (overrideContacts && overrideContacts.length > 0) {
+      setSelectedContacts(overrideContacts.map(c => c.id))
+      return
+    }
+
+    try {
+      setIsSelectingAllFiltered(true)
+
+      const totalToFetch = state.pagination.total || 0
+      if (totalToFetch === 0) {
+        setSelectedContacts([])
+        return
+      }
+
+      const collectedIds: string[] = []
+      const pageLimit = 1000 // fetch in large chunks to reduce requests
+      let page = 1
+
+      while (collectedIds.length < totalToFetch) {
+        const params = new URLSearchParams({
+          page: page.toString(),
+          limit: pageLimit.toString()
+        })
+
+        // Maintain same filters as current view
+        if (searchTerm) params.append('search', searchTerm)
+        if (enrichmentFilter) params.append('enrichment', enrichmentFilter)
+        if (engagementFilter) params.append('engagementStatus', engagementFilter)
+        if (scoreRange) {
+          params.append('minScore', scoreRange[0].toString())
+          params.append('maxScore', scoreRange[1].toString())
+        }
+        if (sortBy) params.append('sortBy', sortBy)
+        if (sortOrder) params.append('sortOrder', sortOrder)
+
+        const resp = await fetch(`/api/contacts?${params}`)
+        if (!resp.ok) {
+          throw new Error(`Failed to fetch contacts for select-all: ${resp.status} ${resp.statusText}`)
+        }
+
+        const data = await resp.json()
+        const contactsChunk: Contact[] = data?.data?.contacts || []
+        const idsChunk = contactsChunk.map(c => c.id)
+
+        collectedIds.push(...idsChunk)
+
+        // If we got fewer than limit, we've reached the end
+        if (contactsChunk.length < pageLimit) {
+          break
+        }
+
+        page += 1
+      }
+
+      setSelectedContacts(Array.from(new Set(collectedIds)))
+      addToast({
+        title: 'Selected All Filtered',
+        message: `Selected ${collectedIds.length} contact${collectedIds.length === 1 ? '' : 's'} across all filtered results.`,
+        type: 'success'
+      })
+    } catch (error) {
+      console.error('Select-all filtered error:', error)
+      addToast({
+        title: 'Error',
+        message: 'Failed to select all filtered contacts. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setIsSelectingAllFiltered(false)
+    }
   }
 
   // Fetch contacts from API
@@ -328,6 +413,50 @@ export function ContactsList({
     <>
       {/* Main content container with bottom padding for drawer */}
       <div className={selectedContacts.length > 0 ? "pb-32" : ""}>
+        {/* Top selection controls */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                checked={state.contacts.length > 0 && state.contacts.every(c => selectedContacts.includes(c.id))}
+                onCheckedChange={() => handleSelectAll()}
+              />
+              <span className="text-sm text-gray-600">
+                Select all ({state.contacts.length})
+              </span>
+            </div>
+
+            {state.pagination.total > state.contacts.length && (
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAllFiltered}
+                  disabled={isSelectingAllFiltered}
+                  title="Select all contacts across all filtered results"
+                >
+                  {isSelectingAllFiltered ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Selecting...
+                    </>
+                  ) : (
+                    <>
+                      Select all filtered ({state.pagination.total})
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Selected count indicator */}
+          <div className="text-sm text-gray-600">
+            {Math.min(state.pagination.page * state.pagination.limit, state.pagination.total)} of{' '}
+            {state.pagination.total} contacts
+          </div>
+        </div>
+
         {/* Contacts grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {state.contacts.map((contact) => (
@@ -358,7 +487,7 @@ export function ContactsList({
       {/* Modals */}
       {isEditModalOpen && editingContact && (
         <EditContactModal
-          contact={editingContact}
+          contact={editingContact as any}
           isOpen={isEditModalOpen}
           onClose={() => {
             setIsEditModalOpen(false)
@@ -374,7 +503,7 @@ export function ContactsList({
 
       {isTagModalOpen && tagContactId && (
         <TagManagementModal
-          contactId={tagContactId}
+          contact={state.contacts.find(c => c.id === tagContactId) || null}
           isOpen={isTagModalOpen}
           onClose={() => {
             setIsTagModalOpen(false)
@@ -389,8 +518,10 @@ export function ContactsList({
       )}
 
       <ConfirmationDialog
-        isOpen={!!contactToDelete}
-        onClose={() => setContactToDelete(null)}
+        open={!!contactToDelete}
+        onOpenChange={(open) => {
+          if (!open) setContactToDelete(null)
+        }}
         onConfirm={confirmDelete}
         title="Delete Contact"
         description="Are you sure you want to delete this contact? This action cannot be undone."

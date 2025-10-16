@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 import { AIPersonalizationService, PersonalizationRequest, PersonalizationResult } from './ai-providers'
 import { getOutreachAgent, type OutreachAgent } from './outreach-agents'
+import { createEmailNotificationService } from './email-notification-service'
 
 export type Supabase = SupabaseClient<Database>
 
@@ -102,6 +103,7 @@ export class OutreachAgentDraftService {
       agentName: agent.name,
       emailAccountId: request.emailAccountId,
       incomingEmailId: request.incomingEmailId,
+      incomingFrom: request.incomingFrom,
       threadId: request.threadId,
       contactId: request.contactId,
       messageRef: request.messageRef,
@@ -524,6 +526,7 @@ Do not include any commentary or meta-text. Only output the subject and body.`
       agentName?: string
       emailAccountId: string
       incomingEmailId: string
+      incomingFrom: string
       threadId: string
       contactId?: string
       messageRef?: string
@@ -571,8 +574,17 @@ Do not include any commentary or meta-text. Only output the subject and body.`
     }
 
     await this.createNotificationForReplyJob(userId, {
-      ...jobData,
-      replyJobId: data.id
+      replyJobId: data.id,
+      agentId: jobData.agentId,
+      agentName: jobData.agentName,
+      emailAccountId: jobData.emailAccountId,
+      incomingEmailId: jobData.incomingEmailId,
+      incomingFrom: jobData.incomingFrom,
+      draftSubject: jobData.draftSubject,
+      draftBody: jobData.draftBody,
+      scheduledAt: jobData.scheduledAt,
+      editableUntil: jobData.editableUntil,
+      status: jobData.status
     })
 
     return data.id
@@ -584,7 +596,11 @@ Do not include any commentary or meta-text. Only output the subject and body.`
       replyJobId: string
       agentId: string
       agentName?: string
+      emailAccountId: string
+      incomingEmailId: string
+      incomingFrom: string
       draftSubject: string
+      draftBody: string
       scheduledAt: Date
       editableUntil: Date
       status: 'scheduled' | 'needs_approval'
@@ -604,6 +620,7 @@ Do not include any commentary or meta-text. Only output the subject and body.`
           ? `Review "${jobData.draftSubject || 'Untitled reply'}" before ${new Date(editableUntilIso).toLocaleString()}.`
           : `"${jobData.draftSubject || 'Untitled reply'}" will send automatically at ${new Date(scheduledAtIso).toLocaleString()}.`
 
+      // Create in-app notification
       const notificationPayload = {
         user_id: userId,
         type: jobData.status === 'needs_approval' ? 'warning' : 'success',
@@ -627,8 +644,50 @@ Do not include any commentary or meta-text. Only output the subject and body.`
       if (error) {
         console.warn('⚠️ Failed to record notification for reply job:', error)
       }
+
+      // Send email notification
+      await this.sendEmailNotification(userId, jobData)
     } catch (error) {
       console.warn('⚠️ Unexpected error while creating reply notification:', error)
+    }
+  }
+
+  /**
+   * Send email notification for reply job
+   */
+  private async sendEmailNotification(
+    userId: string,
+    jobData: {
+      replyJobId: string
+      agentId: string
+      agentName?: string
+      emailAccountId: string
+      incomingEmailId: string
+      incomingFrom: string
+      draftSubject: string
+      draftBody: string
+      scheduledAt: Date
+      editableUntil: Date
+      status: 'scheduled' | 'needs_approval'
+    }
+  ): Promise<void> {
+    try {
+      const emailService = createEmailNotificationService(this.supabase)
+
+      await emailService.sendPersonaNotification({
+        userId,
+        personaId: jobData.agentId,
+        replyJobId: jobData.replyJobId,
+        recipientEmail: jobData.incomingFrom,
+        draftSubject: jobData.draftSubject,
+        draftBody: jobData.draftBody,
+        scheduledAt: jobData.scheduledAt,
+        editableUntil: jobData.editableUntil,
+        status: jobData.status
+      })
+    } catch (error) {
+      console.error('❌ Failed to send email notification:', error)
+      // Don't throw - we don't want to block reply job creation if email fails
     }
   }
 }

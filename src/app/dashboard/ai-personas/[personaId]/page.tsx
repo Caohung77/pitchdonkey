@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Switch } from '@/components/ui/switch'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { ApiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
@@ -267,6 +268,34 @@ export default function PersonaDetailPage() {
       .join('')
       .toUpperCase()
       .substring(0, 2)
+  }
+
+  async function handleToggleEmailNotifications(enabled: boolean) {
+    if (!persona) return
+
+    try {
+      const response = await ApiClient.patch(`/api/ai-personas/${personaId}`, {
+        settings: {
+          ...persona.settings,
+          email_notifications: enabled
+        }
+      })
+
+      if (response.success) {
+        toast.success(
+          enabled
+            ? 'Email notifications enabled'
+            : 'Email notifications disabled'
+        )
+        setPersona({
+          ...persona,
+          settings: { ...persona.settings, email_notifications: enabled }
+        })
+      }
+    } catch (error: any) {
+      toast.error('Failed to update notification settings')
+      console.error(error)
+    }
   }
 
   async function handleDeletePersona() {
@@ -792,6 +821,20 @@ export default function PersonaDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Email Notifications Toggle */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-medium">Email Notifications</p>
+                    <p className="text-sm text-muted-foreground">
+                      Receive email alerts when this persona drafts automated replies
+                    </p>
+                  </div>
+                  <Switch
+                    checked={persona.settings?.email_notifications !== false}
+                    onCheckedChange={handleToggleEmailNotifications}
+                  />
+                </div>
+
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
                     <p className="font-medium">Chat Enabled</p>

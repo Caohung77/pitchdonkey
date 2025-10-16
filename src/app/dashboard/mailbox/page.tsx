@@ -496,6 +496,7 @@ export default function MailboxPage() {
 
   const fetchEmailInsight = async (emailId: string, forceRegenerate = false) => {
     try {
+      console.log(`📡 Fetching email insight for ${emailId}, forceRegenerate: ${forceRegenerate}`)
       setGeneratingInsights(prev => ({ ...prev, [emailId]: true }))
 
       const response = await fetch('/api/mailbox/email-insights', {
@@ -524,6 +525,179 @@ export default function MailboxPage() {
       return null
     } finally {
       setGeneratingInsights(prev => ({ ...prev, [emailId]: false }))
+    }
+  }
+
+  // Helper to extract failed recipient from bounce emails
+  // Enhanced version matching server-side implementation
+  const extractFailedRecipient = (emailBody: string, emailSubject: string): string | null => {
+    console.log('🔍 Extracting failed recipient from bounce email...')
+
+    // Step 1: Check email headers for explicit failure information
+    const headerPatterns = [
+      /X-Failed-Recipients:\s*([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i,
+      /Original-Recipient:\s*(?:rfc822;)?\s*([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i,
+      /Final-Recipient:\s*(?:rfc822;)?\s*([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i,
+      /RCPT TO:\s*<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i,
+    ]
+
+    for (const pattern of headerPatterns) {
+      const match = emailBody.match(pattern)
+      if (match && match[1]) {
+        const email = match[1].trim()
+        console.log(`✅ Extracted from header: ${email}`)
+        return email
+      }
+    }
+
+    // Step 2: Enhanced body text patterns (English & German)
+    const bodyPatterns = [
+      // English patterns
+      /(?:could not be delivered to|delivery to the following recipient failed|undeliverable to|failed to deliver to|delivery has failed to)\s+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i,
+      /(?:message to the following address|the following recipient|recipient address|destination address)[:\s]+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i,
+      /(?:your message to|addressed to|sent to)[:\s]+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i,
+
+      // German patterns
+      /(?:konnte nicht zugestellt werden an|zustellung fehlgeschlagen an|empfänger|nicht zugestellt werden an)[:\s]+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i,
+      /(?:nachricht an folgende adresse|folgende empfänger|empfängeradresse)[:\s]+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i,
+      /(?:Die E-Mail an|wurde nicht zugestellt)[:\s]+([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i,
+
+      // Standalone email on a line (common in bounce messages)
+      /^[\s]*([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})[\s]*$/im,
+
+      // Generic patterns
+      /(?:recipient|empfänger)[:\s]+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i,
+      /(?:to|an)[:\s]+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?(?:\s|$)/i,
+      /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})\s+(?:because of|wegen|due to|auf grund)/i,
+
+      // Status notification formats
+      /Action:\s*failed.*?Recipient:\s*<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/is,
+      /Status:\s*5\.\d+\.\d+.*?(?:for|to)\s+<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/is,
+    ]
+
+    for (const pattern of bodyPatterns) {
+      const match = emailBody.match(pattern)
+      if (match && match[1]) {
+        const email = match[1].trim()
+        // Filter out system addresses
+        if (!email.includes('mailer-daemon') && !email.includes('postmaster') && !email.includes('no-reply')) {
+          console.log(`✅ Extracted from body: ${email}`)
+          return email
+        }
+      }
+    }
+
+    // Step 3: Check subject line with bounce keyword validation
+    const bounceKeywords = ['delivery', 'failed', 'bounce', 'undeliverable', 'zustellung', 'fehlgeschlagen']
+    const hasBounceKeyword = bounceKeywords.some(keyword =>
+      emailSubject.toLowerCase().includes(keyword)
+    )
+
+    if (hasBounceKeyword) {
+      const allEmails = emailSubject.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || []
+      for (const email of allEmails) {
+        const lowerEmail = email.toLowerCase()
+        if (!lowerEmail.includes('mailer-daemon') &&
+            !lowerEmail.includes('postmaster') &&
+            !lowerEmail.includes('no-reply') &&
+            !lowerEmail.includes('bounce')) {
+          console.log(`✅ Extracted from subject: ${email}`)
+          return email.trim()
+        }
+      }
+    }
+
+    console.warn('⚠️ Failed to extract recipient from bounce email')
+    return null
+  }
+
+  const handleFlagContact = async (senderEmail: string, intent: string) => {
+    try {
+      console.log(`🚩 Flagging contact: ${senderEmail} with intent: ${intent}`)
+
+      // For bounce/invalid_contact, extract the failed recipient from current email
+      let contactEmail = senderEmail
+      let extractionFailed = false
+
+      if (intent === 'invalid_contact' && selectedItem?.type === 'inbox') {
+        const email = selectedItem.email
+        const emailBody = email.text_content || email.html_content || ''
+        const emailSubject = email.subject || ''
+        const failedRecipient = extractFailedRecipient(emailBody, emailSubject)
+
+        if (failedRecipient) {
+          console.log(`📧 Extracted failed recipient from bounce: ${failedRecipient}`)
+          contactEmail = failedRecipient
+        } else {
+          console.warn(`⚠️ Could not extract failed recipient from bounce email`)
+          extractionFailed = true
+
+          // Show user-friendly prompt for manual email entry
+          const manualEmail = window.prompt(
+            'Could not automatically detect the bounced email address.\n\n' +
+            'Please enter the email address that bounced (the recipient that failed):',
+            ''
+          )
+
+          if (!manualEmail || !manualEmail.trim()) {
+            throw new Error('Email address is required to flag contact')
+          }
+
+          // Basic email validation
+          const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
+          if (!emailRegex.test(manualEmail.trim())) {
+            throw new Error('Invalid email address format')
+          }
+
+          contactEmail = manualEmail.trim()
+          console.log(`📧 Using manually entered email: ${contactEmail}`)
+        }
+      }
+
+      // Find contact by email using lookup endpoint
+      const response = await fetch(`/api/contacts/lookup?email=${encodeURIComponent(contactEmail)}`)
+      if (!response.ok) {
+        const errorMsg = extractionFailed
+          ? `Contact not found for: ${contactEmail}\n\nPlease verify the email address is correct and exists in your contacts.`
+          : `Failed to lookup contact for email: ${contactEmail}`
+        throw new Error(errorMsg)
+      }
+
+      const data = await response.json()
+      const contact = data?.contact
+
+      if (!contact || !data.exists) {
+        const errorMsg = extractionFailed
+          ? `Contact "${contactEmail}" not found in your database.\n\nOnly contacts that exist in your contact list can be flagged.`
+          : `Contact not found in database: ${contactEmail}`
+        throw new Error(errorMsg)
+      }
+
+      console.log(`✅ Found contact: ${contact.first_name} ${contact.last_name} (${contact.email})`)
+
+      // Determine reason based on intent
+      const reason = intent === 'unsubscribe' ? 'unsubscribe' :
+                     intent === 'negative_reply' ? 'complaint' :
+                     intent === 'invalid_contact' ? 'bounce' : 'unsubscribe'
+
+      // Call flag status API
+      const flagResponse = await fetch(`/api/contacts/${contact.id}/flag-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, senderEmail: contactEmail }),
+      })
+
+      if (!flagResponse.ok) {
+        throw new Error('Failed to flag contact')
+      }
+
+      const flagData = await flagResponse.json()
+      console.log('✅ Contact flagged successfully:', flagData)
+
+      return flagData
+    } catch (error) {
+      console.error('Error flagging contact:', error)
+      throw error
     }
   }
 
@@ -1626,8 +1800,9 @@ export default function MailboxPage() {
               <AISummaryCard
                 insight={emailInsights[email.id]}
                 loading={generatingInsights[email.id] || false}
-                onGenerate={() => fetchEmailInsight(email.id)}
-                onRegenerate={() => fetchEmailInsight(email.id)}
+                onGenerate={(forceRegenerate) => fetchEmailInsight(email.id, forceRegenerate)}
+                onRegenerate={() => fetchEmailInsight(email.id, true)}
+                onFlagContact={handleFlagContact}
               />
 
               {/* Email Content */}
