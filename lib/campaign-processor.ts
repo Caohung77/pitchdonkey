@@ -6,6 +6,7 @@
 import { CampaignExecutionEngine } from './campaign-execution'
 import { createServerSupabaseClient } from './supabase-server'
 import { EmailLinkRewriter } from './email-link-rewriter'
+import { generateVERPAddress } from './bounce-email-parser'
 
 export class CampaignProcessor {
   private static instance: CampaignProcessor | null = null
@@ -1195,8 +1196,18 @@ export class CampaignProcessor {
     campaignName?: string
   }): Promise<any> {
     console.log(`📧 Sending email to ${params.to} with subject: ${params.subject}`)
-    
+
     try {
+      // Generate VERP return-path for bounce tracking
+      let verpReturnPath: string | undefined
+      if (params.campaignId && params.to) {
+        // Use a bounce address for VERP (bounce@domain or the email account's domain)
+        const emailDomain = params.emailAccount.email.split('@')[1]
+        const bounceAddress = `bounce@${emailDomain}`
+        verpReturnPath = generateVERPAddress(bounceAddress, params.campaignId, params.to)
+        console.log(`📧 Using VERP return-path: ${verpReturnPath}`)
+      }
+
       if (params.emailAccount.provider === 'smtp') {
         // Use Nodemailer for SMTP providers
         const nodemailer = require('nodemailer')
@@ -1240,14 +1251,29 @@ export class CampaignProcessor {
           htmlContent = `${htmlContent}${trackingPixel}`
         }
 
-        const info = await transporter.sendMail({
+        const mailOptions: any = {
           from: `"${params.senderName}" <${params.emailAccount.email}>`,
           to: params.to,
           subject: params.subject,
           text: params.content.replace(/<[^>]*>/g, ''), // Strip HTML for text version
           html: htmlContent,
-          encoding: 'utf8' // Ensure proper UTF-8 encoding for umlauts
-        })
+          encoding: 'utf8', // Ensure proper UTF-8 encoding for umlauts
+          headers: {
+            'X-Campaign-ID': params.campaignId || '',
+            'X-Contact-ID': params.contactId || '',
+            'X-Tracking-ID': params.trackingId
+          }
+        }
+
+        // Add VERP return-path for bounce tracking
+        if (verpReturnPath) {
+          mailOptions.envelope = {
+            from: verpReturnPath,
+            to: params.to
+          }
+        }
+
+        const info = await transporter.sendMail(mailOptions)
 
         console.log(`✅ Email sent successfully via SMTP: ${info.messageId}`)
         

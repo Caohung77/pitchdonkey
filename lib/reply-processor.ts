@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from './supabase-server'
 import { emailClassifier, EmailClassificationResult } from './email-classifier'
 import { createDraftService } from './outreach-agent-draft'
+import { createBounceProcessor } from './bounce-processor'
 
 export interface ReplyProcessingResult {
   processed: number
@@ -290,7 +291,7 @@ export class ReplyProcessor {
   }
 
   /**
-   * Handle bounce emails
+   * Handle bounce emails using enhanced bounce processor
    */
   private async handleBounce(
     email: any,
@@ -298,77 +299,92 @@ export class ReplyProcessor {
     context: any
   ): Promise<ReplyAction[]> {
     const actions: ReplyAction[] = []
+    const now = new Date().toISOString()
 
-    if (context.contactId) {
-      // Update contact status based on bounce type
-      const bounceType = classification.bounceInfo?.bounceType
-      
-      if (bounceType === 'hard') {
-        // Hard bounce - mark email as invalid and heavily penalize engagement
-        const { data: contact } = await this.supabase
-          .from('contacts')
-          .select('engagement_score, engagement_bounce_count')
-          .eq('id', context.contactId)
-          .single()
+    console.log(`🔄 Processing bounce email ${email.id} with enhanced bounce processor`)
 
-        const currentScore = contact?.engagement_score || 0
-        const penaltyScore = Math.max(-100, currentScore - 50) // Reduce by 50 points, minimum -100
-        const bounceCount = (contact?.engagement_bounce_count || 0) + 1
+    try {
+      // Use the comprehensive bounce processor
+      const bounceProcessor = createBounceProcessor(this.supabase)
+      const result = await bounceProcessor.processIncomingEmail(email.id)
 
-        await this.supabase
-          .from('contacts')
-          .update({
-            engagement_status: 'bad', // Mark as bad status for visual indicators
-            engagement_score: penaltyScore,
-            engagement_bounce_count: bounceCount,
-            engagement_updated_at: new Date().toISOString()
-          })
-          .eq('id', context.contactId)
-
-        actions.push({
-          action: 'contact_marked_bounced',
-          timestamp: new Date().toISOString(),
-          details: {
-            bounceType: 'hard',
-            reason: classification.bounceInfo?.bounceReason,
-            scorePenalty: currentScore - penaltyScore
-          }
+      if (result.success && result.bounceDetected) {
+        console.log(`✅ Bounce processed successfully:`, {
+          contactId: result.contactId,
+          campaignId: result.campaignId,
+          bounceType: result.bounceType,
+          contactStatusUpdated: result.contactStatusUpdated,
+          engagementRecalculated: result.engagementRecalculated
         })
 
-        // Pause active campaigns for this contact
-        if (context.campaignId) {
-          await this.pauseCampaignForContact(context.campaignId, context.contactId)
+        // Record actions taken
+        if (result.contactStatusUpdated) {
           actions.push({
-            action: 'campaign_paused_for_contact',
-            timestamp: new Date().toISOString(),
-            details: { campaignId: context.campaignId }
+            action: result.bounceType === 'hard' ? 'contact_marked_bounced' : 'soft_bounce_logged',
+            timestamp: now,
+            details: {
+              bounceType: result.bounceType,
+              contactId: result.contactId,
+              campaignId: result.campaignId
+            }
           })
         }
-      } else {
-        // Soft bounce - apply smaller penalty, don't mark as bad yet
-        const { data: contact } = await this.supabase
-          .from('contacts')
-          .select('engagement_score')
-          .eq('id', context.contactId)
-          .single()
 
-        const currentScore = contact?.engagement_score || 0
-        const penaltyScore = Math.max(-50, currentScore - 10) // Reduce by 10 points, minimum -50
+        if (result.engagementRecalculated) {
+          actions.push({
+            action: 'engagement_recalculated',
+            timestamp: now,
+            details: {
+              contactId: result.contactId
+            }
+          })
+        }
 
+        // Pause campaigns for hard bounces
+        if (result.bounceType === 'hard' && result.contactId && result.campaignId) {
+          await this.pauseCampaignForContact(result.campaignId, result.contactId)
+          actions.push({
+            action: 'campaign_paused_for_contact',
+            timestamp: now,
+            details: { campaignId: result.campaignId }
+          })
+        }
+      } else if (!result.success) {
+        console.error(`❌ Bounce processing failed: ${result.error}`)
+        actions.push({
+          action: 'bounce_processing_failed',
+          timestamp: now,
+          details: { error: result.error }
+        })
+      }
+
+    } catch (error) {
+      console.error('❌ Error in enhanced bounce processing:', error)
+
+      // Fallback to basic bounce handling
+      actions.push({
+        action: 'bounce_processor_error',
+        timestamp: now,
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          fallbackApplied: true
+        }
+      })
+
+      // Basic fallback: mark contact as bounced if we have the context
+      if (context.contactId && classification.bounceInfo?.bounceType === 'hard') {
         await this.supabase
           .from('contacts')
           .update({
-            engagement_score: penaltyScore
+            engagement_status: 'bad',
+            engagement_updated_at: now
           })
           .eq('id', context.contactId)
 
         actions.push({
-          action: 'soft_bounce_logged',
-          timestamp: new Date().toISOString(),
-          details: {
-            reason: classification.bounceInfo?.bounceReason,
-            scorePenalty: currentScore - penaltyScore
-          }
+          action: 'contact_marked_bounced_fallback',
+          timestamp: now,
+          details: { contactId: context.contactId }
         })
       }
     }
@@ -579,29 +595,69 @@ export class ReplyProcessor {
     context: any
   ): Promise<ReplyAction[]> {
     const actions: ReplyAction[] = []
+    const now = new Date().toISOString()
 
     if (context.contactId) {
       // Mark contact as unsubscribed
       await this.supabase
         .from('contacts')
         .update({
-          email_status: 'unsubscribed',
-          unsubscribed_at: new Date().toISOString()
+          unsubscribed_at: now,
+          engagement_status: 'bad' // Immediately mark as bad
         })
         .eq('id', context.contactId)
 
       actions.push({
         action: 'contact_unsubscribed',
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         details: { method: 'email_reply' }
       })
+
+      // Update email_tracking if we can find the original email
+      if (context.originalMessageId || (context.campaignId && context.contactId)) {
+        const trackingUpdate: any = {
+          unsubscribed_at: now
+        }
+
+        let trackingQuery = this.supabase
+          .from('email_tracking')
+          .update(trackingUpdate)
+
+        if (context.originalMessageId) {
+          trackingQuery = trackingQuery.eq('message_id', context.originalMessageId)
+        } else {
+          trackingQuery = trackingQuery
+            .eq('campaign_id', context.campaignId)
+            .eq('contact_id', context.contactId)
+        }
+
+        await trackingQuery
+      }
+
+      // Trigger engagement recalculation
+      try {
+        const { recalculateContactEngagement } = await import('./contact-engagement')
+        const result = await recalculateContactEngagement(this.supabase, context.contactId)
+        console.log(`✅ Recalculated engagement after unsubscribe for contact ${context.contactId}:`, result)
+
+        actions.push({
+          action: 'engagement_recalculated',
+          timestamp: now,
+          details: {
+            status: result?.status,
+            score: result?.score
+          }
+        })
+      } catch (engagementError) {
+        console.error('❌ Failed to recalculate engagement after unsubscribe:', engagementError)
+      }
 
       // Stop all active campaigns for this contact
       if (context.campaignId) {
         await this.pauseCampaignForContact(context.campaignId, context.contactId)
         actions.push({
           action: 'all_campaigns_stopped',
-          timestamp: new Date().toISOString(),
+          timestamp: now,
           details: { contactId: context.contactId }
         })
       }
