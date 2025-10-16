@@ -93,17 +93,17 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const allowedDaily = new Set([5,10,15,20,30,50])
     const finalDailyLimit = allowedDaily.has(Number(daily_send_limit)) ? Number(daily_send_limit) : 50
     const totalContactsPreview = allContactIdsPreview.length
-    const totalBatches = Math.ceil(totalContactsPreview / finalDailyLimit)
-    const BATCH_INTERVAL_MINUTES = 20
+    const totalBatchesPreview = Math.ceil(totalContactsPreview / finalDailyLimit)
+    const batchIntervalMinutes = 20
 
     const newCampaignStart = send_immediately ? new Date() : new Date(scheduled_date)
-    const newCampaignEnd = new Date(newCampaignStart.getTime() + ((totalBatches - 1) * BATCH_INTERVAL_MINUTES * 60 * 1000))
+    const newCampaignEnd = new Date(newCampaignStart.getTime() + ((totalBatchesPreview - 1) * batchIntervalMinutes * 60 * 1000))
 
     console.log('📅 New campaign time period:', {
       start: newCampaignStart.toISOString(),
       end: newCampaignEnd.toISOString(),
-      duration_minutes: (totalBatches - 1) * BATCH_INTERVAL_MINUTES,
-      total_batches: totalBatches
+      duration_minutes: (totalBatchesPreview - 1) * batchIntervalMinutes,
+      total_batches: totalBatchesPreview
     })
 
     // Fetch existing campaigns with their batch schedules
