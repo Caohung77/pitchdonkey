@@ -42,7 +42,15 @@ interface AccountHealth {
     id: string
     email: string
     status: 'healthy' | 'warning' | 'error'
-    warmupStatus: 'completed' | 'in_progress' | 'pending'
+    warmupStatus: 'completed' | 'in_progress' | 'pending' | 'not_started' | 'stage_1' | 'stage_2' | 'stage_3'
+    warmupInfo?: {
+      enabled: boolean
+      stage: string
+      currentWeek: number
+      currentDailyLimit: number
+      maxWeeks: number
+      isComplete: boolean
+    } | null
     dailySent: number
     dailyLimit: number
     reputation: number
@@ -249,26 +257,61 @@ export default function DashboardPage() {
             <div className="space-y-3">
               <h4 className="font-medium">Email Accounts</h4>
               {accountHealth?.emailAccounts?.map((account) => (
-                <div key={account.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className={`h-2 w-2 rounded-full ${
-                      account.status === 'healthy' ? 'bg-green-500' :
-                      account.status === 'warning' ? 'bg-yellow-500' :
-                      'bg-red-500'
-                    }`} />
-                    <div>
-                      <p className="font-medium text-sm">{account.email}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {account.dailySent}/{account.dailyLimit} daily emails
-                      </p>
+                <div key={account.id} className="p-3 border rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`h-2 w-2 rounded-full ${
+                        account.status === 'healthy' ? 'bg-green-500' :
+                        account.status === 'warning' ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`} />
+                      <div>
+                        <p className="font-medium text-sm">{account.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {account.dailySent}/{account.dailyLimit} daily emails
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium">{account.reputation}%</span>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Badge variant="outline" className="text-xs">
-                      {account.warmupStatus}
-                    </Badge>
-                    <span className="text-sm font-medium">{account.reputation}%</span>
-                  </div>
+
+                  {/* Warmup Progress Indicator */}
+                  {account.warmupInfo && account.warmupInfo.enabled && (
+                    <div className="pt-2 border-t">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Warmup Progress
+                        </span>
+                        <span className="text-xs font-medium">
+                          Week {account.warmupInfo.currentWeek}/{account.warmupInfo.maxWeeks}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            account.warmupInfo.isComplete
+                              ? 'bg-green-500'
+                              : 'bg-blue-500'
+                          }`}
+                          style={{
+                            width: `${(account.warmupInfo.currentWeek / account.warmupInfo.maxWeeks) * 100}%`
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs text-muted-foreground">
+                          {account.warmupInfo.isComplete ? 'Completed' : `${account.warmupInfo.currentDailyLimit} emails/day`}
+                        </span>
+                        {!account.warmupInfo.isComplete && (
+                          <span className="text-xs text-blue-600 font-medium">
+                            {account.warmupInfo.maxWeeks - account.warmupInfo.currentWeek} weeks remaining
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )) || (
                 <div className="text-center py-8 text-muted-foreground">

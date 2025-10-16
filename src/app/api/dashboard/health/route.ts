@@ -54,24 +54,22 @@ export const GET = withAuth(async (request: NextRequest, user) => {
         reputation = Math.max(0, Math.min(100, Math.round(100 - (bounceRate * 50) + (deliveryRate * 10))))
       }
 
-      // Get daily limit from warmup plan if warmup is enabled
-      let dailyLimit = account.daily_limit || 50 // Default to 50 if not set
+      // Get daily limit from warmup if enabled, otherwise use account default
+      let dailyLimit = account.daily_send_limit || 50
+      let warmupInfo = null
 
-      if (account.warmup_enabled) {
-        // Fetch active warmup plan
-        const { data: warmupPlan } = await supabase
-          .from('warmup_plans')
-          .select('current_week, schedule')
-          .eq('email_account_id', account.id)
-          .eq('status', 'active')
-          .single()
+      if (account.warmup_enabled && account.warmup_current_daily_limit) {
+        // Use warmup daily limit instead of account default
+        dailyLimit = account.warmup_current_daily_limit
 
-        if (warmupPlan && warmupPlan.schedule) {
-          // Get current week's daily target from schedule
-          const currentWeekData = warmupPlan.schedule.find((s: any) => s.week === warmupPlan.current_week)
-          if (currentWeekData) {
-            dailyLimit = currentWeekData.daily_target
-          }
+        // Build warmup info object
+        warmupInfo = {
+          enabled: true,
+          stage: account.warmup_stage || 'not_started',
+          currentWeek: account.warmup_current_week || 1,
+          currentDailyLimit: account.warmup_current_daily_limit,
+          maxWeeks: 7, // Total warmup weeks
+          isComplete: account.warmup_stage === 'completed'
         }
       }
 
@@ -87,7 +85,8 @@ export const GET = withAuth(async (request: NextRequest, user) => {
         id: account.id,
         email: account.email,
         status,
-        warmupStatus: account.warmup_status,
+        warmupStatus: account.warmup_stage || 'not_started',
+        warmupInfo,
         dailySent,
         dailyLimit,
         reputation
@@ -134,8 +133,12 @@ export const GET = withAuth(async (request: NextRequest, user) => {
         }
       }
 
-      if (account.warmupStatus !== 'completed') {
-        recommendations.push(`Complete warmup process for ${account.email} to improve deliverability`)
+      // Add warmup-specific recommendations
+      if (account.warmupInfo && account.warmupInfo.enabled && !account.warmupInfo.isComplete) {
+        const weeksRemaining = account.warmupInfo.maxWeeks - account.warmupInfo.currentWeek
+        recommendations.push(`${account.email} is in warmup week ${account.warmupInfo.currentWeek}/${account.warmupInfo.maxWeeks} (${weeksRemaining} weeks remaining)`)
+      } else if (!account.warmupInfo && account.warmupStatus !== 'completed') {
+        recommendations.push(`Enable warmup for ${account.email} to build sender reputation gradually`)
       }
     })
 
