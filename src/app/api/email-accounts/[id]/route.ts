@@ -125,6 +125,19 @@ export const PUT = withAuth(async (
       }
       if (updateData.settings.warm_up_enabled !== undefined) {
         updateObject.warmup_enabled = updateData.settings.warm_up_enabled
+
+        // Initialize warmup when enabling it
+        if (updateData.settings.warm_up_enabled === true) {
+          updateObject.warmup_stage = 'active'
+          updateObject.warmup_current_week = 1
+          updateObject.warmup_current_daily_limit = 5 // Week 1 starts at 5 emails/day
+
+          // Reset counters
+          updateObject.current_daily_sent = 0
+        } else if (updateData.settings.warm_up_enabled === false) {
+          // When disabling warmup, reset to not_started
+          updateObject.warmup_stage = 'not_started'
+        }
       }
     }
 
