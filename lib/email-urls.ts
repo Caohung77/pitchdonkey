@@ -13,16 +13,18 @@ export function getBaseUrl(): string {
 
 /**
  * Get URL to edit a reply job draft
+ * Opens the scheduled replies page with edit query parameter
  */
 export function getReplyJobEditUrl(replyJobId: string): string {
-  return `${getBaseUrl()}/dashboard/reply-jobs/${replyJobId}/edit`
+  return `${getBaseUrl()}/dashboard/scheduled-replies?edit=${replyJobId}`
 }
 
 /**
  * Get URL to cancel a scheduled reply
+ * Opens the scheduled replies page with cancel query parameter
  */
 export function getReplyJobCancelUrl(replyJobId: string): string {
-  return `${getBaseUrl()}/dashboard/reply-jobs/${replyJobId}/cancel`
+  return `${getBaseUrl()}/dashboard/scheduled-replies?cancel=${replyJobId}`
 }
 
 /**

@@ -45,6 +45,35 @@ export default function ScheduledRepliesPage() {
     loadReplies()
   }, [statusFilter])
 
+  // Handle query parameters for edit/cancel actions from email links
+  useEffect(() => {
+    const handleQueryParams = async () => {
+      const params = new URLSearchParams(window.location.search)
+      const editId = params.get('edit')
+      const cancelId = params.get('cancel')
+
+      if (editId && replies.length > 0) {
+        const reply = replies.find(r => r.id === editId)
+        if (reply) {
+          setEditingReply(reply)
+          // Clean up URL
+          window.history.replaceState({}, '', '/dashboard/scheduled-replies')
+        }
+      }
+
+      if (cancelId && replies.length > 0) {
+        const reply = replies.find(r => r.id === cancelId)
+        if (reply) {
+          handleCancel(cancelId)
+          // Clean up URL
+          window.history.replaceState({}, '', '/dashboard/scheduled-replies')
+        }
+      }
+    }
+
+    handleQueryParams()
+  }, [replies])
+
   const loadReplies = async () => {
     try {
       setLoading(true)

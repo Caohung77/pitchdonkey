@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -31,15 +31,17 @@ export function EditReplyDialog({
   onOpenChange,
   onSave,
 }: EditReplyDialogProps) {
-  const [subject, setSubject] = useState(reply?.draft_subject || '')
-  const [body, setBody] = useState(reply?.draft_body || '')
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Update form when reply changes
-  if (reply && (subject !== reply.draft_subject || body !== reply.draft_body)) {
-    setSubject(reply.draft_subject)
-    setBody(reply.draft_body)
-  }
+  // Update form when reply changes - use useEffect instead of direct state update
+  useEffect(() => {
+    if (reply) {
+      setSubject(reply.draft_subject)
+      setBody(reply.draft_body)
+    }
+  }, [reply?.id]) // Only update when reply ID changes
 
   const handleSave = async () => {
     if (!reply) return
@@ -58,7 +60,10 @@ export function EditReplyDialog({
 
   if (!reply) return null
 
-  const editableUntil = new Date(reply.editable_until)
+  // Calculate editable_until from scheduled_at if missing
+  const editableUntil = reply.editable_until
+    ? new Date(reply.editable_until)
+    : new Date(new Date(reply.scheduled_at).getTime() - 2 * 60 * 1000)
   const timeRemaining = formatDistanceToNow(editableUntil, { addSuffix: true })
 
   return (

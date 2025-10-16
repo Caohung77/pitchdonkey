@@ -66,9 +66,14 @@ export function ScheduledReplyCard({
   const isPast = scheduledAt < new Date()
   const timeUntil = formatDistanceToNow(scheduledAt, { addSuffix: true })
 
-  // Editable check
-  const editableUntil = new Date(reply.editable_until)
-  const isEditable = new Date() < editableUntil &&
+  // Editable check - calculate from scheduled_at if editable_until is missing
+  const editableUntil = reply.editable_until
+    ? new Date(reply.editable_until)
+    : new Date(new Date(reply.scheduled_at).getTime() - 2 * 60 * 1000) // scheduled_at - 2 minutes
+
+  const now = new Date()
+  const isEditable = now < editableUntil &&
+    !isNaN(editableUntil.getTime()) &&
     ['scheduled', 'needs_approval', 'approved'].includes(reply.status)
 
   return (
@@ -85,6 +90,16 @@ export function ScheduledReplyCard({
                 <Shield className="h-3 w-3 mr-1" />
                 Risk: {(reply.risk_score * 100).toFixed(0)}%
               </Badge>
+              {isEditable && (
+                <Badge variant="outline" className="text-green-600">
+                  ✏️ Editable
+                </Badge>
+              )}
+              {!isEditable && ['scheduled', 'needs_approval', 'approved'].includes(reply.status) && (
+                <Badge variant="secondary">
+                  🔒 Locked
+                </Badge>
+              )}
               {reply.status === 'needs_approval' && (
                 <Badge variant="warning">Action Required</Badge>
               )}
@@ -162,14 +177,26 @@ export function ScheduledReplyCard({
         )}
 
         {/* Scheduled Time */}
-        <div className="flex items-center gap-2 text-sm">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <span className="text-muted-foreground">
-              {isPast ? 'Was scheduled' : 'Will send'}
-            </span>
-            <span className="font-medium ml-1">{timeUntil}</span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <span className="text-muted-foreground">
+                {isPast ? 'Was scheduled' : 'Will send'}
+              </span>
+              <span className="font-medium ml-1">{timeUntil}</span>
+            </div>
           </div>
+          {!isEditable && ['scheduled', 'needs_approval', 'approved'].includes(reply.status) && (
+            <div className="text-xs text-muted-foreground ml-6">
+              Edits locked {formatDistanceToNow(editableUntil, { addSuffix: true })} (2 min before send)
+            </div>
+          )}
+          {isEditable && (
+            <div className="text-xs text-green-600 ml-6">
+              Editable until {formatDistanceToNow(editableUntil, { addSuffix: true })}
+            </div>
+          )}
         </div>
 
         {/* Risk Flags */}
