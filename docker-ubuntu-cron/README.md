@@ -42,10 +42,14 @@ curl -X GET "https://your-app.vercel.app/api/cron/docker-test" \
 ## What It Does
 
 - Runs a lightweight Alpine Linux container
-- Sets up a cron job that runs every 5 minutes
-- Calls your Vercel API: `GET /api/cron/process-campaigns`
-- **NEW:** Processes both 'scheduled' AND 'sending' campaigns
+- Sets up 5 cron jobs:
+  1. **Campaign Processing** (every 5 min): Processes both 'scheduled' AND 'sending' campaigns
+  2. **Email Fetching** (every 5 min): Fetches incoming emails for autonomous replies
+  3. **Email Classification** (every 5 min): Classifies unclassified emails (fallback safety)
+  4. **Reply Sending** (every 5 min): Sends scheduled autonomous replies
+  5. **Daily Counter Reset** (midnight UTC): Resets email counters for warmup system ⭐ NEW
 - **FIXED:** No more stuck campaigns in 'sending' status
+- **CRITICAL:** Daily reset ensures warmup system works correctly
 - Automatically restarts if it crashes
 - Keeps running even after server reboots
 

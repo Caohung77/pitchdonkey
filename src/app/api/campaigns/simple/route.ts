@@ -67,51 +67,139 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (!from_email_account_id) {
       return NextResponse.json({ error: 'Email account is required' }, { status: 400 })
     }
-    // Check for existing active/scheduled campaigns per email account
-    console.log(`🔍 Checking for existing campaigns for email account: ${from_email_account_id}`)
 
-    const { data: existingActive, error: existingErr } = await supabase
+    // ============================================================================
+    // ENHANCED VALIDATION: Check for time period overlap with existing campaigns
+    // ============================================================================
+    console.log(`🔍 Checking for campaign time period conflicts for email account: ${from_email_account_id}`)
+
+    // Get all contact IDs FIRST to calculate new campaign duration
+    const { data: contactListsPreview, error: listsPreviewError } = await supabase
+      .from('contact_lists')
+      .select('contact_ids')
+      .in('id', contact_list_ids)
+      .eq('user_id', user.id)
+
+    if (listsPreviewError) {
+      console.error('❌ Error fetching contact lists for validation:', listsPreviewError)
+      return NextResponse.json({ error: 'Failed to validate campaign' }, { status: 500 })
+    }
+
+    // Calculate new campaign's time period
+    const allContactIdsPreview = contactListsPreview
+      .flatMap(list => list.contact_ids || [])
+      .filter((id, index, arr) => arr.indexOf(id) === index) // Remove duplicates
+
+    const allowedDaily = new Set([5,10,15,20,30,50])
+    const finalDailyLimit = allowedDaily.has(Number(daily_send_limit)) ? Number(daily_send_limit) : 50
+    const totalContactsPreview = allContactIdsPreview.length
+    const totalBatches = Math.ceil(totalContactsPreview / finalDailyLimit)
+    const BATCH_INTERVAL_MINUTES = 20
+
+    const newCampaignStart = send_immediately ? new Date() : new Date(scheduled_date)
+    const newCampaignEnd = new Date(newCampaignStart.getTime() + ((totalBatches - 1) * BATCH_INTERVAL_MINUTES * 60 * 1000))
+
+    console.log('📅 New campaign time period:', {
+      start: newCampaignStart.toISOString(),
+      end: newCampaignEnd.toISOString(),
+      duration_minutes: (totalBatches - 1) * BATCH_INTERVAL_MINUTES,
+      total_batches: totalBatches
+    })
+
+    // Fetch existing campaigns with their batch schedules
+    const { data: existingCampaigns, error: existingErr } = await supabase
       .from('campaigns')
-      .select('id, name, status, created_at, updated_at')
+      .select('id, name, status, scheduled_date, batch_schedule, created_at')
       .eq('user_id', user.id)
       .eq('from_email_account_id', from_email_account_id)
       .in('status', ['sending', 'scheduled'])
       .order('created_at', { ascending: false })
-      .limit(5) // Get more for debugging
-
-    console.log('🔍 Existing campaigns check result:', {
-      error: existingErr,
-      foundCampaigns: existingActive?.length || 0,
-      campaigns: existingActive?.map(c => ({
-        id: c.id,
-        name: c.name,
-        status: c.status,
-        created_at: c.created_at,
-        updated_at: c.updated_at
-      }))
-    })
 
     if (existingErr) {
       console.error('❌ Error checking existing campaigns:', existingErr)
       return NextResponse.json({ error: 'Failed to check email account availability' }, { status: 500 })
     }
 
-    if (existingActive && existingActive.length > 0) {
-      console.log(`❌ Found ${existingActive.length} active/scheduled campaigns for this email account`)
-      return NextResponse.json({
-        error: 'This email account already has a running or scheduled campaign',
-        details: {
-          conflictingCampaigns: existingActive.map(c => ({
+    console.log(`🔍 Found ${existingCampaigns?.length || 0} existing active/scheduled campaigns`)
+
+    // Check for time period overlap
+    if (existingCampaigns && existingCampaigns.length > 0) {
+      const conflicts = []
+
+      for (const existing of existingCampaigns) {
+        // Calculate existing campaign's time period from batch_schedule
+        let existingStart, existingEnd
+
+        if (existing.batch_schedule?.batches && existing.batch_schedule.batches.length > 0) {
+          // Use batch schedule if available
+          const batches = existing.batch_schedule.batches
+          existingStart = new Date(batches[0].scheduled_time)
+          existingEnd = new Date(batches[batches.length - 1].scheduled_time)
+        } else if (existing.scheduled_date) {
+          // Fallback: estimate based on scheduled_date (less accurate)
+          existingStart = new Date(existing.scheduled_date)
+          // Assume similar duration if batch_schedule not available
+          existingEnd = new Date(existingStart.getTime() + (2 * 60 * 60 * 1000)) // 2 hours default
+        } else {
+          // Skip if we can't determine time period
+          console.warn(`⚠️ Cannot determine time period for campaign ${existing.id}`)
+          continue
+        }
+
+        console.log(`  Campaign "${existing.name}":`, {
+          start: existingStart.toISOString(),
+          end: existingEnd.toISOString()
+        })
+
+        // Check for overlap: (StartA <= EndB) AND (EndA >= StartB)
+        const hasOverlap = (newCampaignStart <= existingEnd) && (newCampaignEnd >= existingStart)
+
+        if (hasOverlap) {
+          conflicts.push({
+            id: existing.id,
+            name: existing.name,
+            status: existing.status,
+            start: existingStart.toISOString(),
+            end: existingEnd.toISOString(),
+            created_at: existing.created_at
+          })
+          console.log(`    ❌ OVERLAP DETECTED with "${existing.name}"`)
+        } else {
+          console.log(`    ✅ No overlap with "${existing.name}"`)
+        }
+      }
+
+      if (conflicts.length > 0) {
+        console.log(`❌ Found ${conflicts.length} conflicting campaign(s)`)
+
+        // Structure the error data to include everything needed by the UI
+        const errorData = {
+          type: 'CAMPAIGN_OVERLAP',
+          message: `This email account already has campaign(s) scheduled during this time period. Please choose a different time or email account.`,
+          conflicts: conflicts.map(c => ({
             id: c.id,
             name: c.name,
             status: c.status,
+            scheduledStart: c.start,
+            scheduledEnd: c.end,
             created_at: c.created_at
-          }))
+          })),
+          newCampaignPeriod: {
+            start: newCampaignStart.toISOString(),
+            end: newCampaignEnd.toISOString()
+          }
         }
-      }, { status: 409 })
+
+        // Return error with full details embedded in the error field as JSON
+        // This allows the UI to parse and display the conflict information
+        return NextResponse.json({
+          error: JSON.stringify(errorData),
+          message: errorData.message
+        }, { status: 409 })
+      }
     }
 
-    console.log('✅ No conflicting campaigns found, proceeding with campaign creation')
+    console.log('✅ No time period conflicts found, proceeding with campaign creation')
 
     // Validate daily limit (allowed: 5,10,15,20,30,50 to match UI options)
     const allowedDaily = new Set([5,10,15,20,30,50])

@@ -92,6 +92,20 @@ export default function SimpleCampaignPage() {
   const [templates, setTemplates] = useState<any[]>([])
   const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
   const [warmupStatus, setWarmupStatus] = useState<any>(null)
+  const [conflictError, setConflictError] = useState<{
+    message: string
+    conflicts: Array<{
+      id: string
+      name: string
+      status: string
+      scheduledStart: string
+      scheduledEnd: string
+    }>
+    newCampaignPeriod: {
+      start: string
+      end: string
+    }
+  } | null>(null)
   
   // Debug personalized emails changes
   useEffect(() => {
@@ -599,6 +613,33 @@ export default function SimpleCampaignPage() {
         campaignData,
         payload  // Now accessible since it's defined outside the try block
       })
+
+      // Check if this is a conflict error by trying to parse the error message
+      try {
+        // The error message might contain JSON error data from the API
+        const errorMessage = error.message || ''
+
+        // Try to find JSON in the error message (it might be wrapped in other text)
+        const jsonMatch = errorMessage.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const errorData = JSON.parse(jsonMatch[0])
+
+          // Check if this is a campaign overlap error
+          if (errorData.type === 'CAMPAIGN_OVERLAP' && errorData.conflicts) {
+            console.log('🔍 Parsed conflict error:', errorData)
+            setConflictError({
+              message: errorData.message,
+              conflicts: errorData.conflicts,
+              newCampaignPeriod: errorData.newCampaignPeriod
+            })
+            return // Don't show generic alert
+          }
+        }
+      } catch (parseError) {
+        // If parsing fails, fall through to generic error handling
+        console.warn('Could not parse error as conflict:', parseError)
+      }
+
       alert(`Failed to launch campaign: ${error.message || 'Please try again.'}`)
     } finally {
       console.log('🔄 Resetting loading state')
@@ -1270,6 +1311,75 @@ export default function SimpleCampaignPage() {
           {renderStepContent()}
         </CardContent>
       </Card>
+
+      {/* Conflict Error Dialog */}
+      {conflictError && (
+        <Card className="mb-6 border-red-500 bg-red-50">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+                <div>
+                  <CardTitle className="text-red-900">Campaign Schedule Conflict</CardTitle>
+                  <CardDescription className="text-red-700 mt-1">
+                    {conflictError.message}
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConflictError(null)}
+                className="text-red-600 hover:text-red-800"
+              >
+                ✕
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-white rounded-lg p-4 border border-red-200">
+              <h4 className="font-semibold text-sm text-red-900 mb-3">Conflicting Campaigns:</h4>
+              {conflictError.conflicts.map((conflict) => (
+                <div key={conflict.id} className="mb-3 pb-3 border-b border-red-100 last:border-0 last:mb-0 last:pb-0">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{conflict.name}</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Status: <Badge variant={conflict.status === 'sending' ? 'default' : 'secondary'}>
+                          {conflict.status}
+                        </Badge>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-600">
+                    <p>
+                      <Clock className="inline h-3 w-3 mr-1" />
+                      {new Date(conflict.scheduledStart).toLocaleString()} → {new Date(conflict.scheduledEnd).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <h4 className="font-semibold text-sm text-blue-900 mb-2">Your Campaign Period:</h4>
+              <p className="text-xs text-blue-700">
+                <Clock className="inline h-3 w-3 mr-1" />
+                {new Date(conflictError.newCampaignPeriod.start).toLocaleString()} → {new Date(conflictError.newCampaignPeriod.end).toLocaleString()}
+              </p>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-sm text-amber-900 font-medium mb-2">💡 How to resolve:</p>
+              <ul className="text-xs text-amber-800 space-y-1 ml-4 list-disc">
+                <li>Schedule your campaign for a different time (after the conflicting campaign ends)</li>
+                <li>Use a different email account for this campaign</li>
+                <li>Pause or cancel the conflicting campaign if it's no longer needed</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Navigation */}
       <div className="flex items-center justify-between">

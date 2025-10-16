@@ -23,7 +23,10 @@ services:
           echo '*/5 * * * * echo \"[classify-emails] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 60 -X POST \"$${VERCEL_APP_URL}/api/cron/classify-emails\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[classify-emails] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"' &&
           echo '' &&
           echo '# Send scheduled autonomous replies every 5 minutes' &&
-          echo '*/5 * * * * echo \"[send-replies] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 25 -X POST \"$${VERCEL_APP_URL}/api/cron/process-reply-jobs\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[send-replies] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"'
+          echo '*/5 * * * * echo \"[send-replies] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 25 -X POST \"$${VERCEL_APP_URL}/api/cron/process-reply-jobs\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[send-replies] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"' &&
+          echo '' &&
+          echo '# Reset daily email counters at midnight UTC (CRITICAL for warmup system)' &&
+          echo '0 0 * * * echo \"[daily-reset] Running at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\" && curl -sS -m 25 -X GET \"$${VERCEL_APP_URL}/api/cron/reset-daily-counters\" -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[daily-reset] Request failed at \\$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"'
         ) > /tmp/crontab &&
         crontab /tmp/crontab &&
         echo 'Cron jobs installed!' &&
@@ -31,6 +34,7 @@ services:
         echo '  - Email fetching: every 5 minutes' &&
         echo '  - Email classification (fallback): every 5 minutes' &&
         echo '  - Reply sending: every 5 minutes' &&
+        echo '  - Daily counter reset: midnight UTC (00:00)' &&
         echo 'Container starting... Check logs with: docker logs pitchdonkey-cron' &&
         crond -f -l 2
       "
