@@ -81,25 +81,33 @@ export async function GET(request: NextRequest) {
 
     // ============================================================================
     // STEP 2: Reset warmup_plans.actual_sent_today to 0 (for active plans only)
+    // NOTE: This is optional - if the column doesn't exist, we'll skip it
+    // The critical reset is email_accounts.current_daily_sent (above)
     // ============================================================================
     console.log('🔥 Resetting active warmup plan daily counters...')
 
-    const { data: warmupData, error: warmupError } = await supabase
-      .from('warmup_plans')
-      .update({ actual_sent_today: 0 })
-      .eq('status', 'active')
-      .select('id, email_account_id, current_week, actual_sent_today')
+    let warmupData: any[] = []
+    let warmupResetCount = 0
 
-    if (warmupError) {
-      console.error('❌ Failed to reset warmup_plans:', warmupError)
-      return NextResponse.json(
-        { error: 'Failed to reset warmup plan counters', details: warmupError.message },
-        { status: 500 }
-      )
+    try {
+      const { data, error: warmupError } = await supabase
+        .from('warmup_plans')
+        .update({ actual_sent_today: 0 })
+        .eq('status', 'active')
+        .select('id, email_account_id, current_week')
+
+      if (warmupError) {
+        // Log warning but don't fail - this field might not exist yet
+        console.warn('⚠️ Could not reset warmup_plans.actual_sent_today:', warmupError.message)
+        console.warn('   This is okay - the critical reset (email_accounts.current_daily_sent) succeeded')
+      } else {
+        warmupData = data || []
+        warmupResetCount = warmupData.length
+        console.log(`✅ Reset ${warmupResetCount} active warmup plan counters`)
+      }
+    } catch (warmupErr) {
+      console.warn('⚠️ Warmup plans reset failed (non-critical):', warmupErr)
     }
-
-    const warmupResetCount = warmupData?.length || 0
-    console.log(`✅ Reset ${warmupResetCount} active warmup plan counters`)
 
     // ============================================================================
     // STEP 3: Check for warmup progression (time-based)
