@@ -26,19 +26,8 @@ export const GET = withAuth(async (request: NextRequest, user) => {
 
     // Calculate account health for each email account
     const accountHealthPromises = activeEmailAccounts?.map(async (account) => {
-      // Get today's email count for this account
-      const { data: todayEmails, error: emailError } = await supabase
-        .from('email_tracking')
-        .select('id')
-        .eq('email_account_id', account.id)
-        .gte('sent_at', `${today}T00:00:00.000Z`)
-        .lt('sent_at', `${today}T23:59:59.999Z`)
-
-      if (emailError) {
-        console.error('Error fetching daily emails:', emailError)
-      }
-
-      const dailySent = todayEmails?.length || 0
+      // Use current_daily_sent from email_accounts (updated by campaign processor)
+      const dailySent = account.current_daily_sent || 0
 
       // Get recent bounce/spam rates for reputation calculation
       const { data: recentEmails, error: recentError } = await supabase
@@ -52,23 +41,45 @@ export const GET = withAuth(async (request: NextRequest, user) => {
         console.error('Error fetching recent emails:', recentError)
       }
 
-      // Calculate reputation score
+      // Calculate reputation score (0-100)
       const totalRecent = recentEmails?.length || 0
       const bounced = recentEmails?.filter(e => e.status === 'bounced').length || 0
       const delivered = recentEmails?.filter(e => e.status === 'delivered').length || 0
-      
+
       let reputation = 100
       if (totalRecent > 0) {
         const bounceRate = bounced / totalRecent
         const deliveryRate = delivered / totalRecent
-        reputation = Math.max(0, Math.round(100 - (bounceRate * 50) + (deliveryRate * 10)))
+        // Start at 100, penalize for bounces, reward for deliveries, but cap at 100
+        reputation = Math.max(0, Math.min(100, Math.round(100 - (bounceRate * 50) + (deliveryRate * 10))))
+      }
+
+      // Get daily limit from warmup plan if warmup is enabled
+      let dailyLimit = account.daily_limit || 50 // Default to 50 if not set
+
+      if (account.warmup_enabled) {
+        // Fetch active warmup plan
+        const { data: warmupPlan } = await supabase
+          .from('warmup_plans')
+          .select('current_week, schedule')
+          .eq('email_account_id', account.id)
+          .eq('status', 'active')
+          .single()
+
+        if (warmupPlan && warmupPlan.schedule) {
+          // Get current week's daily target from schedule
+          const currentWeekData = warmupPlan.schedule.find((s: any) => s.week === warmupPlan.current_week)
+          if (currentWeekData) {
+            dailyLimit = currentWeekData.daily_target
+          }
+        }
       }
 
       // Determine account status
       let status: 'healthy' | 'warning' | 'error' = 'healthy'
       if (reputation < 70 || bounced > 5) {
         status = 'error'
-      } else if (reputation < 85 || dailySent > account.daily_limit * 0.9) {
+      } else if (reputation < 85 || dailySent > dailyLimit * 0.9) {
         status = 'warning'
       }
 
@@ -78,7 +89,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
         status,
         warmupStatus: account.warmup_status,
         dailySent,
-        dailyLimit: account.daily_limit,
+        dailyLimit,
         reputation
       }
     }) || []
