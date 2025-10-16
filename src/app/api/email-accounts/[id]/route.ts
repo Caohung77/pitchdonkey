@@ -128,7 +128,7 @@ export const PUT = withAuth(async (
 
         // Initialize warmup when enabling it
         if (updateData.settings.warm_up_enabled === true) {
-          updateObject.warmup_stage = 'active'
+          updateObject.warmup_stage = 'stage_1' // Valid stages: not_started, stage_1, stage_2, stage_3, completed
           updateObject.warmup_current_week = 1
           updateObject.warmup_current_daily_limit = 5 // Week 1 starts at 5 emails/day
 
