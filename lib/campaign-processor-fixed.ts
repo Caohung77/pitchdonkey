@@ -5,6 +5,7 @@
 
 import { CampaignExecutionEngine } from './campaign-execution'
 import { createServerSupabaseClient } from './supabase-server'
+import { advanceSequenceForCampaign } from './sequence-automation'
 
 export class FixedCampaignProcessor {
   private static instance: FixedCampaignProcessor | null = null
@@ -143,6 +144,12 @@ export class FixedCampaignProcessor {
               })
               .eq('id', campaign.id)
             console.log(`✅ Marked ${campaign.name} as completed (${sentEmails} sent, ${failedEmails} failed)`)
+
+            try {
+              await advanceSequenceForCampaign(supabase, campaign.id)
+            } catch (automationError) {
+              console.error('⚠️ Sequence automation failed during campaign completion', automationError)
+            }
           }
         } else {
           console.log(`🔄 Will process ${campaign.name} (${processedCount}/${totalContacts} processed) - Provider: ${campaign.email_accounts.provider}`)

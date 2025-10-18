@@ -22,9 +22,11 @@ export interface ReplyAction {
  */
 export class ReplyProcessor {
   private supabase: any
+  private campaignSequenceCache: Map<string, string | null>
 
   constructor() {
     this.supabase = createServerSupabaseClient()
+    this.campaignSequenceCache = new Map()
   }
 
   /**
@@ -155,6 +157,7 @@ export class ReplyProcessor {
 
   /**
    * Find the original campaign/contact context for this email
+   * Supports multiple reply detection methods and German reply prefixes
    */
   private async findEmailContext(email: any): Promise<{
     campaignId?: string
@@ -163,7 +166,7 @@ export class ReplyProcessor {
   }> {
     const context: any = {}
 
-    // If this email has an in-reply-to header, try to find the original email
+    // Method 1: If this email has an in-reply-to header, try to find the original email
     if (email.in_reply_to) {
       // Search in email_tracking table for the original email
       const { data: originalEmail } = await this.supabase
@@ -176,10 +179,53 @@ export class ReplyProcessor {
         context.campaignId = originalEmail.campaign_id
         context.contactId = originalEmail.contact_id
         context.originalMessageId = originalEmail.message_id
+        console.log(`🔗 Found context via in-reply-to: campaign=${context.campaignId}, contact=${context.contactId}`)
       }
     }
 
-    // If no direct reply match, try to find by email address
+    // Method 2: Check email subject for reply indicators (RE:, AW:, etc.)
+    // and try to match with recent campaign emails
+    if (!context.campaignId && email.subject) {
+      const subject = email.subject.toLowerCase()
+      // Support multiple reply prefixes: RE: (English), AW: (German), Re: (French/Italian), etc.
+      const replyPrefixes = /^(re:|aw:|antw:|sv:|vá:|r:|ref:)\s*/i
+
+      if (replyPrefixes.test(subject)) {
+        // Extract original subject by removing reply prefix
+        const originalSubject = email.subject.replace(replyPrefixes, '').trim()
+
+        console.log(`📧 Detected reply email. Original subject: "${originalSubject}"`)
+
+        // Try to find matching email by subject and sender
+        const { data: contact } = await this.supabase
+          .from('contacts')
+          .select('id')
+          .eq('email', email.from_address)
+          .single()
+
+        if (contact) {
+          context.contactId = contact.id
+
+          // Find most recent campaign email to this contact with matching subject
+          const { data: tracking } = await this.supabase
+            .from('email_tracking')
+            .select('campaign_id, message_id')
+            .eq('contact_id', contact.id)
+            .ilike('subject_line', `%${originalSubject}%`)
+            .order('sent_at', { ascending: false })
+            .limit(1)
+            .single()
+
+          if (tracking) {
+            context.campaignId = tracking.campaign_id
+            context.originalMessageId = tracking.message_id
+            console.log(`🔗 Found context via subject match: campaign=${context.campaignId}`)
+          }
+        }
+      }
+    }
+
+    // Method 3: If still no match, try to find by email address only
     if (!context.contactId) {
       const { data: contact } = await this.supabase
         .from('contacts')
@@ -189,6 +235,24 @@ export class ReplyProcessor {
 
       if (contact) {
         context.contactId = contact.id
+        console.log(`🔗 Found contact by email address: ${contact.id}`)
+
+        // If we have a contact but no campaign, try to find the most recent campaign
+        if (!context.campaignId) {
+          const { data: tracking } = await this.supabase
+            .from('email_tracking')
+            .select('campaign_id, message_id')
+            .eq('contact_id', contact.id)
+            .order('sent_at', { ascending: false })
+            .limit(1)
+            .single()
+
+          if (tracking) {
+            context.campaignId = tracking.campaign_id
+            context.originalMessageId = tracking.message_id
+            console.log(`🔗 Found most recent campaign for contact: ${context.campaignId}`)
+          }
+        }
       }
     }
 
@@ -343,6 +407,10 @@ export class ReplyProcessor {
         // Pause campaigns for hard bounces
         if (result.bounceType === 'hard' && result.contactId && result.campaignId) {
           await this.pauseCampaignForContact(result.campaignId, result.contactId)
+          await this.updateSequenceEnrollmentStatus(result.contactId, result.campaignId, {
+            status: 'stopped',
+            error_reason: `Hard bounce detected (${result.bounceType})`
+          })
           actions.push({
             action: 'campaign_paused_for_contact',
             timestamp: now,
@@ -452,6 +520,11 @@ export class ReplyProcessor {
         const autoReplyDate = new Date(autoReplyUntil)
         const awayDuration = autoReplyDate.getTime() - Date.now()
 
+        await this.updateSequenceEnrollmentStatus(context.contactId, context.campaignId, {
+          status: 'paused',
+          error_reason: `Auto-reply active until ${autoReplyUntil}`
+        })
+
         if (awayDuration > 7 * 24 * 60 * 60 * 1000) { // More than a week
           await this.pauseCampaignForContact(context.campaignId, context.contactId)
           console.log(`⏸️  Paused campaign ${context.campaignId} for contact ${context.contactId} (away >7 days)`)
@@ -481,13 +554,14 @@ export class ReplyProcessor {
     context: any
   ): Promise<ReplyAction[]> {
     const actions: ReplyAction[] = []
+    const now = new Date().toISOString()
 
     if (context.contactId) {
       // Update contact engagement
       await this.supabase
         .from('contacts')
         .update({
-          last_replied_at: new Date().toISOString(),
+          last_replied_at: now,
           engagement_score: this.supabase.rpc('increment_engagement_score', {
             contact_id: context.contactId,
             increment: classification.sentiment === 'positive' ? 2 : 1
@@ -497,20 +571,55 @@ export class ReplyProcessor {
 
       actions.push({
         action: 'contact_engagement_updated',
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         details: {
           sentiment: classification.sentiment,
           intent: classification.intent
         }
       })
 
+      // Update campaign statistics if this reply is linked to a campaign
+      if (context.campaignId) {
+        await this.updateCampaignReplyStatistics(context.campaignId)
+        console.log(`✅ Updated campaign ${context.campaignId} reply statistics`)
+
+        actions.push({
+          action: 'campaign_reply_stats_updated',
+          timestamp: now,
+          details: { campaignId: context.campaignId }
+        })
+      }
+
+      // Update email_tracking to mark original email as replied
+      if (context.originalMessageId || (context.campaignId && context.contactId)) {
+        await this.updateEmailTrackingForReply(context, now)
+
+        actions.push({
+          action: 'email_tracking_updated',
+          timestamp: now,
+          details: {
+            messageId: context.originalMessageId,
+            status: 'replied'
+          }
+        })
+      }
+
       // If positive reply, pause campaign to allow for manual follow-up
       if (classification.sentiment === 'positive' && context.campaignId) {
         await this.pauseCampaignForContact(context.campaignId, context.contactId)
+        await this.updateSequenceEnrollmentStatus(context.contactId, context.campaignId, {
+          status: 'completed',
+          error_reason: 'Positive reply received'
+        })
         actions.push({
           action: 'campaign_paused_positive_reply',
           timestamp: new Date().toISOString(),
           details: { campaignId: context.campaignId }
+        })
+      } else if (context.campaignId) {
+        await this.updateSequenceEnrollmentStatus(context.contactId, context.campaignId, {
+          status: 'completed',
+          error_reason: 'Reply received'
         })
       }
 
@@ -693,6 +802,10 @@ export class ReplyProcessor {
       // Stop all active campaigns for this contact
       if (context.campaignId) {
         await this.pauseCampaignForContact(context.campaignId, context.contactId)
+        await this.updateSequenceEnrollmentStatus(context.contactId, context.campaignId, {
+          status: 'stopped',
+          error_reason: 'Contact unsubscribed via reply'
+        })
         actions.push({
           action: 'all_campaigns_stopped',
           timestamp: now,
@@ -725,6 +838,63 @@ export class ReplyProcessor {
   }
 
   /**
+   * Update campaign reply statistics
+   */
+  private async updateCampaignReplyStatistics(campaignId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('campaigns')
+      .update({
+        emails_replied: this.supabase.raw('COALESCE(emails_replied, 0) + 1'),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', campaignId)
+
+    if (error) {
+      console.error('❌ Failed to update campaign reply statistics:', error)
+      throw new Error(`Failed to update campaign reply statistics: ${error.message}`)
+    }
+  }
+
+  /**
+   * Update email_tracking table to mark email as replied
+   */
+  private async updateEmailTrackingForReply(context: any, timestamp: string): Promise<void> {
+    const updates: any = {
+      replied_at: timestamp,
+      status: 'replied',
+      updated_at: timestamp
+    }
+
+    let query = this.supabase
+      .from('email_tracking')
+      .update(updates)
+
+    // Try to match by message_id first
+    if (context.originalMessageId) {
+      query = query.eq('message_id', context.originalMessageId)
+    } else if (context.campaignId && context.contactId) {
+      // Fallback to campaign_id + contact_id match
+      query = query
+        .eq('campaign_id', context.campaignId)
+        .eq('contact_id', context.contactId)
+        .order('sent_at', { ascending: false })
+        .limit(1)
+    } else {
+      console.warn('⚠️ Cannot update email_tracking: insufficient context')
+      return
+    }
+
+    const { error } = await query
+
+    if (error) {
+      console.error('❌ Failed to update email_tracking for reply:', error)
+      // Don't throw - this is a non-critical update
+    } else {
+      console.log(`✅ Updated email_tracking: marked as replied`)
+    }
+  }
+
+  /**
    * Pause campaign for a specific contact
    */
   private async pauseCampaignForContact(campaignId: string, contactId: string): Promise<void> {
@@ -741,6 +911,64 @@ export class ReplyProcessor {
     if (error) {
       console.error('❌ Error pausing campaign for contact:', error)
     }
+  }
+
+  private async updateSequenceEnrollmentStatus(
+    contactId: string,
+    campaignId: string,
+    updates: { status?: 'paused' | 'stopped' | 'completed'; error_reason?: string | null }
+  ): Promise<void> {
+    if (!contactId || !campaignId) return
+
+    const sequenceId = await this.getSequenceIdForCampaign(campaignId)
+    if (!sequenceId) return
+
+    const timestamp = new Date().toISOString()
+    const status = updates.status || 'in_progress'
+
+    const payload: any = {
+      sequence_id: sequenceId,
+      contact_id: contactId,
+      current_campaign_id: status === 'completed' || status === 'stopped' ? null : campaignId,
+      current_link_id: status === 'completed' || status === 'stopped' ? null : undefined,
+      status,
+      error_reason: updates.error_reason ?? null,
+      last_transition_at: timestamp,
+      updated_at: timestamp,
+    }
+
+    if (status === 'completed') {
+      payload.completed_at = timestamp
+    }
+
+    const { error } = await this.supabase
+      .from('sequence_enrollments')
+      .upsert(payload, { onConflict: 'sequence_id,contact_id' })
+
+    if (error) {
+      console.error('❌ Failed to update sequence enrollment status:', error)
+    }
+  }
+
+  private async getSequenceIdForCampaign(campaignId: string): Promise<string | null> {
+    if (this.campaignSequenceCache.has(campaignId)) {
+      return this.campaignSequenceCache.get(campaignId) || null
+    }
+
+    const { data, error } = await this.supabase
+      .from('campaigns')
+      .select('sequence_id')
+      .eq('id', campaignId)
+      .single()
+
+    if (error) {
+      console.error('❌ Failed to load campaign sequence info:', error)
+      this.campaignSequenceCache.set(campaignId, null)
+      return null
+    }
+
+    this.campaignSequenceCache.set(campaignId, data?.sequence_id ?? null)
+    return data?.sequence_id ?? null
   }
 
   /**

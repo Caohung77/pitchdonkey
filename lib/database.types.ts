@@ -2286,6 +2286,9 @@ export type Database = {
           delay_hours: number
           delivery_window: Json | null
           engagement_required: boolean
+          filter_auto_reply: boolean
+          filter_bounced: boolean
+          filter_unsubscribed: boolean
           id: string
           metadata: Json
           min_clicks: number
@@ -2303,6 +2306,9 @@ export type Database = {
           delay_hours?: number
           delivery_window?: Json | null
           engagement_required?: boolean
+          filter_auto_reply?: boolean
+          filter_bounced?: boolean
+          filter_unsubscribed?: boolean
           id?: string
           metadata?: Json
           min_clicks?: number
@@ -2320,6 +2326,9 @@ export type Database = {
           delay_hours?: number
           delivery_window?: Json | null
           engagement_required?: boolean
+          filter_auto_reply?: boolean
+          filter_bounced?: boolean
+          filter_unsubscribed?: boolean
           id?: string
           metadata?: Json
           min_clicks?: number

@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   emails_clicked INTEGER DEFAULT 0,
   emails_replied INTEGER DEFAULT 0,
   emails_bounced INTEGER DEFAULT 0,
+  auto_reply_until TIMESTAMP WITH TIME ZONE,
   
   -- Timestamps
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

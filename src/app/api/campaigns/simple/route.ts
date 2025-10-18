@@ -303,21 +303,21 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Calculate batch schedule with 20-minute intervals
     const batchSize = finalDailyLimit
     const totalContacts = allContactIds.length
-    const totalBatches = Math.ceil(totalContacts / batchSize)
+    const computedTotalBatches = Math.ceil(totalContacts / batchSize)
     const startTime = new Date(scheduled_date || new Date())
     const BATCH_INTERVAL_MINUTES = 20
 
     console.log(`📅 Calculating batch schedule:`, {
       totalContacts,
       batchSize,
-      totalBatches,
+      totalBatches: computedTotalBatches,
       startTime: startTime.toISOString(),
       intervalMinutes: BATCH_INTERVAL_MINUTES
     })
 
     // Create batch schedule with contact assignments
     const batches = []
-    for (let i = 0; i < totalBatches; i++) {
+    for (let i = 0; i < computedTotalBatches; i++) {
       const batchStartIndex = i * batchSize
       const batchEndIndex = Math.min((i + 1) * batchSize, totalContacts)
       const batchContactIds = allContactIds.slice(batchStartIndex, batchEndIndex)
@@ -338,12 +338,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       batches,
       batch_size: batchSize,
       batch_interval_minutes: BATCH_INTERVAL_MINUTES,
-      total_batches: totalBatches,
+      total_batches: computedTotalBatches,
       total_contacts: totalContacts,
       estimated_completion: batches[batches.length - 1]?.scheduled_time
     }
 
-    console.log(`✅ Batch schedule created: ${totalBatches} batches over ${(totalBatches - 1) * BATCH_INTERVAL_MINUTES} minutes`)
+    console.log(`✅ Batch schedule created: ${computedTotalBatches} batches over ${(computedTotalBatches - 1) * BATCH_INTERVAL_MINUTES} minutes`)
     console.log(`📊 Estimated completion: ${batchSchedule.estimated_completion}`)
 
     // Update campaign with batch schedule and set next_batch_send_time to first batch

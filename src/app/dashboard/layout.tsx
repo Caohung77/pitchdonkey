@@ -28,7 +28,8 @@ import {
   Inbox,
   Bot,
   ShieldCheck,
-  MessageCircle
+  MessageCircle,
+  Kanban
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -57,6 +58,7 @@ const getNavigation = (userEmail?: string) => {
     { name: 'Mailbox', href: '/dashboard/mailbox', icon: Inbox },
     { name: 'Scheduled Replies', href: '/dashboard/scheduled-replies', icon: Bot },
     { name: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
+    { name: 'Sequence Campaigns', href: '/dashboard/sequence-campaigns', icon: Kanban },
     { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
     { name: 'Email Accounts', href: '/dashboard/email-accounts', icon: Mail },
     { name: 'AI Personas', href: '/dashboard/ai-personas', icon: Bot },

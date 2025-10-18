@@ -1695,13 +1695,13 @@ export default function MailboxPage() {
 
       return (
         <div className="flex h-full flex-col bg-slate-50">
-          <div className="border-b border-slate-200 bg-white px-6 py-6 shadow-sm">
+          <div className="border-b border-slate-200 bg-white px-4 sm:px-6 py-6 shadow-sm">
             <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-4">
                 <div className="flex items-start gap-4">
-                  <div className="min-w-0 space-y-1">
+                  <div className="min-w-0 space-y-1 flex-1">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.28rem] text-blue-500">Incoming Message</p>
-                    <h2 className="text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
+                    <h2 className="text-xl sm:text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
                     <p className="text-sm text-slate-600">From {fromName}</p>
                     {email.to_address && (
                       <p className="text-xs text-slate-500">To {email.to_address}</p>
@@ -1709,7 +1709,7 @@ export default function MailboxPage() {
                     <p className="text-xs text-slate-400">Received {receivedAt}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 sm:self-start">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <MailboxToolbar
                     showReply={false}
                     showForward={false}
@@ -1726,7 +1726,7 @@ export default function MailboxPage() {
                       onClick={handleCreateContactFromEmail}
                       disabled={creatingContact}
                       className={clsx(
-                        'rounded-full border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100',
+                        'rounded-full border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 text-xs sm:text-sm whitespace-nowrap',
                         creatingContact && 'opacity-70 cursor-not-allowed'
                       )}
                     >
@@ -1737,7 +1737,7 @@ export default function MailboxPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      className="rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 text-xs sm:text-sm whitespace-nowrap"
                       asChild
                     >
                       <Link href={`/dashboard/contacts/${contact.id}`}>
@@ -1750,7 +1750,7 @@ export default function MailboxPage() {
                     onClick={handleAutoReplyDraft}
                     disabled={autoReplyLoading || !assignedAgentId}
                     className={clsx(
-                      'rounded-full px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-500 shadow-sm hover:from-purple-600 hover:to-pink-600',
+                      'rounded-full px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-500 shadow-sm hover:from-purple-600 hover:to-pink-600 whitespace-nowrap',
                       (autoReplyLoading || !assignedAgentId) && 'opacity-60 cursor-not-allowed'
                     )}
                   >
@@ -1760,7 +1760,7 @@ export default function MailboxPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
+                      className="rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 text-xs sm:text-sm whitespace-nowrap ml-auto"
                       onClick={() => {
                         setSelectedItem(null)
                       }}
@@ -1794,7 +1794,7 @@ export default function MailboxPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto px-6 py-8">
+          <div className="flex-1 overflow-auto px-4 sm:px-6 py-8">
             <div className="mx-auto max-w-3xl space-y-6">
               {/* AI Summary Card */}
               <AISummaryCard
@@ -1806,14 +1806,14 @@ export default function MailboxPage() {
               />
 
               {/* Email Content */}
-              <article className="rounded-3xl bg-white px-6 py-8 shadow-sm ring-1 ring-slate-100">
+              <article className="rounded-3xl bg-white px-4 sm:px-6 py-8 shadow-sm ring-1 ring-slate-100">
                 {email.html_content ? (
                   <div
-                    className="prose prose-lg max-w-none prose-headings:text-slate-900 prose-p:text-slate-600 prose-a:text-blue-600"
+                    className="prose prose-sm sm:prose-lg max-w-none prose-headings:text-slate-900 prose-p:text-slate-600 prose-a:text-blue-600"
                     dangerouslySetInnerHTML={{ __html: email.html_content }}
                   />
                 ) : (
-                  <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-slate-600">
+                  <pre className="whitespace-pre-wrap font-sans text-sm sm:text-[15px] leading-relaxed text-slate-600">
                     {email.text_content || 'No content available'}
                   </pre>
                 )}
@@ -1830,28 +1830,42 @@ export default function MailboxPage() {
 
     return (
         <div className="flex h-full flex-col bg-slate-50">
-          <div className="border-b border-slate-200 bg-white px-6 py-6 shadow-sm">
+          <div className="border-b border-slate-200 bg-white px-4 sm:px-6 py-6 shadow-sm">
             <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-4">
                 <div className="flex items-start gap-4">
-                  <div className="min-w-0 space-y-1">
+                  <div className="min-w-0 space-y-1 flex-1">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.28rem] text-sky-500">Sent Email</p>
-                    <h2 className="text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
+                    <h2 className="text-xl sm:text-2xl font-semibold leading-tight text-slate-900">{email.subject || '(No subject)'}</h2>
                   <p className="text-sm text-slate-600">From {email.email_accounts?.email || 'Unknown account'}</p>
                   <p className="text-xs text-slate-500">To {toDisplay}</p>
                   <p className="text-xs text-slate-400">{sentAt ? `Sent ${sentAt}` : 'Queued to send soon'}</p>
                 </div>
               </div>
-              <MailboxToolbar
-                onReply={() => beginCompose('reply')}
-                onForward={() => beginCompose('forward')}
-                onNewEmail={() => beginCompose('new')}
-                onDelete={() => {}}
-                isInboxEmail={false}
-                className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <MailboxToolbar
+                  onReply={() => beginCompose('reply')}
+                  onForward={() => beginCompose('forward')}
+                  onNewEmail={() => beginCompose('new')}
+                  onDelete={() => {}}
+                  isInboxEmail={false}
+                  className="bg-white/70 backdrop-blur border border-slate-200 shadow-sm shrink-0"
+                />
+                <DialogClose asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 text-xs sm:text-sm whitespace-nowrap ml-auto"
+                    onClick={() => {
+                      setSelectedItem(null)
+                    }}
+                  >
+                    Close
+                  </Button>
+                </DialogClose>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 mt-4">
               <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-600">
                 Status: {email.send_status}
               </span>
@@ -1869,8 +1883,8 @@ export default function MailboxPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto px-6 py-8">
-          <article className="mx-auto max-w-3xl rounded-3xl bg-white px-6 py-8 shadow-sm ring-1 ring-slate-100">
+        <div className="flex-1 overflow-auto px-4 sm:px-6 py-8">
+          <article className="mx-auto max-w-3xl rounded-3xl bg-white px-4 sm:px-6 py-8 shadow-sm ring-1 ring-slate-100">
             <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-slate-600">
               {email.content || 'No content available'}
             </pre>
@@ -2562,7 +2576,7 @@ export default function MailboxPage() {
           }
         }}
       >
-        <DialogContent hideCloseButton className="w-full max-w-4xl rounded-3xl p-0">
+        <DialogContent hideCloseButton className="w-full max-w-[95vw] sm:max-w-5xl lg:max-w-6xl rounded-3xl p-0">
           <DialogTitle className="sr-only">
             {selectedItem
               ? selectedItem.email.subject ||

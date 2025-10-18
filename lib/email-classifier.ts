@@ -99,17 +99,18 @@ export class EmailClassifier {
       /server too busy/i
     ]
 
-    // Bounce sender patterns
+    // Bounce sender patterns (HIGH CONFIDENCE)
     const bounceSenderPatterns = [
       /mailer-daemon/i,
       /postmaster/i,
       /noreply/i,
       /no-reply/i,
       /bounce/i,
-      /delivery.*status.*notification/i
+      /delivery.*status.*notification/i,
+      /mail.*delivery.*subsystem/i  // Added for Google's bounce emails
     ]
 
-    // Subject bounce patterns
+    // Subject bounce patterns (ENHANCED)
     const bounceSubjectPatterns = [
       /undelivered mail/i,
       /delivery.*fail/i,
@@ -117,7 +118,9 @@ export class EmailClassifier {
       /mail delivery fail/i,
       /bounce/i,
       /message not delivered/i,
-      /delivery status notification/i
+      /delivery status notification/i,  // Google uses this exact format
+      /returned mail/i,  // Common bounce subject
+      /undeliverable/i    // Additional bounce indicator
     ]
 
     let confidence = 0
@@ -125,14 +128,16 @@ export class EmailClassifier {
     let bounceCode = ''
     let bounceReason = ''
 
-    // Check sender
+    // Check sender (INCREASED WEIGHT for daemon addresses)
     if (bounceSenderPatterns.some(pattern => pattern.test(fromAddress))) {
-      confidence += 0.4
+      confidence += 0.5  // Increased from 0.4 to 0.5 for stronger sender signal
+      console.log(`📧 Bounce sender pattern matched: ${fromAddress}`)
     }
 
-    // Check subject
+    // Check subject (INCREASED WEIGHT for delivery failure subjects)
     if (bounceSubjectPatterns.some(pattern => pattern.test(subject))) {
-      confidence += 0.3
+      confidence += 0.4  // Increased from 0.3 to 0.4 for stronger subject signal
+      console.log(`📧 Bounce subject pattern matched: ${subject}`)
     }
 
     // Check content for bounce patterns

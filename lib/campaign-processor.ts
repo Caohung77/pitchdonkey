@@ -7,6 +7,7 @@ import { CampaignExecutionEngine } from './campaign-execution'
 import { createServerSupabaseClient } from './supabase-server'
 import { EmailLinkRewriter } from './email-link-rewriter'
 import { generateVERPAddress } from './bounce-email-parser'
+import { advanceSequenceForCampaign } from './sequence-automation'
 
 export class CampaignProcessor {
   private static instance: CampaignProcessor | null = null
@@ -146,6 +147,12 @@ export class CampaignProcessor {
                     })
                     .eq('id', campaign.id)
                   console.log(`🎉 Marked ${campaign.name} as completed in database`)
+
+                  try {
+                    await advanceSequenceForCampaign(supabase, campaign.id)
+                  } catch (automationError) {
+                    console.error('⚠️ Sequence automation failed during campaign completion', automationError)
+                  }
                 }
               } else {
                 // Some batches are not sent yet - don't mark as completed
@@ -188,6 +195,12 @@ export class CampaignProcessor {
                 })
                 .eq('id', campaign.id)
               console.log(`✅ Marked ${campaign.name} as completed`)
+
+              try {
+                await advanceSequenceForCampaign(supabase, campaign.id)
+              } catch (automationError) {
+                console.error('⚠️ Sequence automation failed during campaign completion', automationError)
+              }
             }
           } else {
             console.log(`🔄 Will process ${campaign.name} (${processedCount}/${totalContacts} processed)`)
@@ -822,13 +835,10 @@ export class CampaignProcessor {
 
             try {
               // Update email_accounts counters (both daily and lifetime)
-              await supabase
-                .from('email_accounts')
-                .update({
-                  current_daily_sent: supabase.raw('COALESCE(current_daily_sent, 0) + 1'),
-                  total_emails_sent: supabase.raw('COALESCE(total_emails_sent, 0) + 1')
-                })
-                .eq('id', emailAccount.id)
+              // Use PostgreSQL function for atomic increment
+              await supabase.rpc('increment_email_counters', {
+                account_id: emailAccount.id
+              })
 
               console.log(`📊 Updated email account counters for ${emailAccount.email}`)
 
@@ -836,16 +846,11 @@ export class CampaignProcessor {
               // CONTACT ENGAGEMENT: Update status immediately after sending
               // ============================================================================
               try {
-                // Update contact engagement status to 'pending' since we just sent an email
-                // Also increment sent_count
-                await supabase
-                  .from('contacts')
-                  .update({
-                    engagement_status: 'pending',
-                    engagement_sent_count: supabase.raw('COALESCE(engagement_sent_count, 0) + 1'),
-                    updated_at: nowIso
-                  })
-                  .eq('id', contact.id)
+                // Update contact engagement status to 'pending' and increment sent_count
+                // Use PostgreSQL function for atomic increment
+                await supabase.rpc('increment_contact_sent_count', {
+                  p_contact_id: contact.id
+                })
 
                 console.log(`✅ Updated contact ${contact.email} engagement status to 'pending'`)
               } catch (contactUpdateError) {
@@ -855,13 +860,10 @@ export class CampaignProcessor {
 
               // If warmup is active, update warmup plan counters
               if (warmupPlan) {
-                await supabase
-                  .from('warmup_plans')
-                  .update({
-                    actual_sent_today: supabase.raw('COALESCE(actual_sent_today, 0) + 1'),
-                    total_sent: supabase.raw('COALESCE(total_sent, 0) + 1')
-                  })
-                  .eq('id', warmupPlan.id)
+                // Use PostgreSQL function for atomic increment
+                await supabase.rpc('increment_warmup_counters', {
+                  p_warmup_plan_id: warmupPlan.id
+                })
 
                 console.log(`🔥 Updated warmup plan counters (Plan: ${warmupPlan.id})`)
 

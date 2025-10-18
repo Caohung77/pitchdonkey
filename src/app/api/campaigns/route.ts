@@ -34,6 +34,8 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
         email_subject,
         html_content,
         from_email_account_id,
+        sequence_id,
+        sequence_position,
         first_batch_sent_at,
         next_batch_send_time,
         current_batch_number,
@@ -329,19 +331,21 @@ export const GET = withAuth(async (request: NextRequest, { user, supabase }) => 
           updated_at: campaign.updated_at || campaign.created_at,
           // Contact list information
           list_names: listNames,
-          contact_list_ids: campaign.contact_list_ids,
-          // Email account information
-          from_email_account_id: campaign.from_email_account_id,
-          // Add proper date field mapping for frontend
-          created_at: campaign.created_at,
-          start_date: campaign.start_date,
-          end_date: campaign.end_date,
-          scheduled_date: campaign.scheduled_date,
-          // Batch scheduling fields
-          first_batch_sent_at: campaign.first_batch_sent_at,
-          next_batch_send_time: campaign.next_batch_send_time,
-          current_batch_number: campaign.current_batch_number
-        }
+        contact_list_ids: campaign.contact_list_ids,
+        // Email account information
+        from_email_account_id: campaign.from_email_account_id,
+        // Add proper date field mapping for frontend
+        created_at: campaign.created_at,
+        start_date: campaign.start_date,
+        end_date: campaign.end_date,
+        scheduled_date: campaign.scheduled_date,
+        sequence_id: campaign.sequence_id,
+        sequence_position: campaign.sequence_position,
+        // Batch scheduling fields
+        first_batch_sent_at: campaign.first_batch_sent_at,
+        next_batch_send_time: campaign.next_batch_send_time,
+        current_batch_number: campaign.current_batch_number
+      }
       })
     )
 
